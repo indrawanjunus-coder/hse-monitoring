@@ -94,3 +94,38 @@ Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHea
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+### `artifacts/hse-mobile` (`@workspace/hse-mobile`)
+
+Expo React Native mobile app for HSE monitoring. Uses Expo Router with file-based routing.
+
+**Features:**
+- JWT auth (hse_ prefix + base64 JSON), login with NIK + password (SHA-256 + salt "hse_salt_2024")
+- Dashboard: monthly incident bar chart, open/closed status chart, risk matrix, category trend
+- Schedules: weekly inspection list with status filter (pending/completed), filterable by supervisor
+- Incidents: list with status filter (open/in_progress/closed), new incident form, detail view with status update
+- Inspection: template-driven form with Yes/No and text questions, mandatory validation, progress bar
+- Master Data (admin only): Users, Categories, Groups, Templates, Plants, Actions with CRUD modals
+
+**Screens:**
+- `app/login.tsx` — login screen
+- `app/(tabs)/index.tsx` — dashboard
+- `app/(tabs)/schedules.tsx` — inspection schedules
+- `app/(tabs)/incidents.tsx` — incident list
+- `app/(tabs)/profile.tsx` — user profile + navigation
+- `app/inspection/[id].tsx` — fill out inspection template
+- `app/incident/new.tsx` — report new incident
+- `app/incident/[id].tsx` — incident detail + status update
+- `app/master/index.tsx` — master data menu
+- `app/master/{users,categories,groups,plants,actions,templates}.tsx` — CRUD screens
+
+**Key files:**
+- `context/AuthContext.tsx` — JWT auth state, login/logout
+- `hooks/useApi.ts` — typed API client (get/post/put/del)
+- `constants/colors.ts` — design token colors
+- `components/{RiskBadge,StatusBadge,ErrorBoundary}.tsx` — shared components
+
+**Auth credentials:**
+- Admin: NIK ADM001 / password admin123
+- Supervisor: NIK SUP001 / password user123
+- Employee: NIK EMP001 / password user123

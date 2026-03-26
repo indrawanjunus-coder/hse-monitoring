@@ -1,22 +1,45 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: HSE Mobile Application API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: users
+    description: User management
+  - name: categories
+    description: Category management
+  - name: groups
+    description: Group management
+  - name: plants
+    description: Plant management
+  - name: actions
+    description: Master actions
+  - name: templates
+    description: Inspection templates
+  - name: questions
+    description: Template questions
+  - name: schedules
+    description: Weekly inspection schedules
+  - name: inspections
+    description: Inspection submissions
+  - name: incidents
+    description: Hazard incidents
+  - name: dashboard
+    description: Dashboard data
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,7 +47,942 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users:
+    get:
+      operationId: getUsers
+      tags: [users]
+      summary: List all users
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create a user
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/{id}:
+    get:
+      operationId: getUserById
+      tags: [users]
+      summary: Get user by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: User
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserRequest"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+    delete:
+      operationId: deleteUser
+      tags: [users]
+      summary: Delete a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /categories:
+    get:
+      operationId: getCategories
+      tags: [categories]
+      summary: List all categories
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+    post:
+      operationId: createCategory
+      tags: [categories]
+      summary: Create a category
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+
+  /categories/{id}:
+    put:
+      operationId: updateCategory
+      tags: [categories]
+      summary: Update category
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCategoryRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Category"
+    delete:
+      operationId: deleteCategory
+      tags: [categories]
+      summary: Delete category
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /groups:
+    get:
+      operationId: getGroups
+      tags: [groups]
+      summary: List all groups
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Group"
+    post:
+      operationId: createGroup
+      tags: [groups]
+      summary: Create a group
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroupRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+
+  /groups/{id}:
+    get:
+      operationId: getGroupById
+      tags: [groups]
+      summary: Get group
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Group
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+    put:
+      operationId: updateGroup
+      tags: [groups]
+      summary: Update group
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroupRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Group"
+    delete:
+      operationId: deleteGroup
+      tags: [groups]
+      summary: Delete group
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /plants:
+    get:
+      operationId: getPlants
+      tags: [plants]
+      summary: List all plants
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of plants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Plant"
+    post:
+      operationId: createPlant
+      tags: [plants]
+      summary: Create a plant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlantRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plant"
+
+  /plants/{id}:
+    put:
+      operationId: updatePlant
+      tags: [plants]
+      summary: Update plant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePlantRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plant"
+    delete:
+      operationId: deletePlant
+      tags: [plants]
+      summary: Delete plant
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /actions:
+    get:
+      operationId: getActions
+      tags: [actions]
+      summary: List master actions
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of actions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Action"
+    post:
+      operationId: createAction
+      tags: [actions]
+      summary: Create action
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateActionRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Action"
+
+  /actions/{id}:
+    put:
+      operationId: updateAction
+      tags: [actions]
+      summary: Update action
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateActionRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Action"
+    delete:
+      operationId: deleteAction
+      tags: [actions]
+      summary: Delete action
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /templates:
+    get:
+      operationId: getTemplates
+      tags: [templates]
+      summary: List templates
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Template"
+    post:
+      operationId: createTemplate
+      tags: [templates]
+      summary: Create template
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTemplateRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+
+  /templates/{id}:
+    get:
+      operationId: getTemplateById
+      tags: [templates]
+      summary: Get template with questions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Template with questions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateWithQuestions"
+    put:
+      operationId: updateTemplate
+      tags: [templates]
+      summary: Update template
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTemplateRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Template"
+    delete:
+      operationId: deleteTemplate
+      tags: [templates]
+      summary: Delete template
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /questions:
+    get:
+      operationId: getQuestions
+      tags: [questions]
+      summary: List questions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: templateId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of questions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Question"
+    post:
+      operationId: createQuestion
+      tags: [questions]
+      summary: Create question
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuestionRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Question"
+
+  /questions/{id}:
+    put:
+      operationId: updateQuestion
+      tags: [questions]
+      summary: Update question
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuestionRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Question"
+    delete:
+      operationId: deleteQuestion
+      tags: [questions]
+      summary: Delete question
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /schedules:
+    get:
+      operationId: getSchedules
+      tags: [schedules]
+      summary: List inspection schedules
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: supervisorId
+          in: query
+          schema:
+            type: integer
+        - name: week
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Schedule"
+    post:
+      operationId: createSchedule
+      tags: [schedules]
+      summary: Create schedule
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScheduleRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+
+  /schedules/{id}:
+    put:
+      operationId: updateSchedule
+      tags: [schedules]
+      summary: Update schedule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScheduleRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Schedule"
+    delete:
+      operationId: deleteSchedule
+      tags: [schedules]
+      summary: Delete schedule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /inspections:
+    get:
+      operationId: getInspections
+      tags: [inspections]
+      summary: List inspections
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scheduleId
+          in: query
+          schema:
+            type: integer
+        - name: supervisorId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of inspections
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Inspection"
+    post:
+      operationId: createInspection
+      tags: [inspections]
+      summary: Submit inspection
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInspectionRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Inspection"
+
+  /inspections/{id}:
+    get:
+      operationId: getInspectionById
+      tags: [inspections]
+      summary: Get inspection detail
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Inspection detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InspectionDetail"
+
+  /incidents:
+    get:
+      operationId: getIncidents
+      tags: [incidents]
+      summary: List incidents
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+        - name: plantId
+          in: query
+          schema:
+            type: integer
+        - name: categoryId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of incidents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Incident"
+    post:
+      operationId: createIncident
+      tags: [incidents]
+      summary: Create incident report
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIncidentRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Incident"
+
+  /incidents/{id}:
+    get:
+      operationId: getIncidentById
+      tags: [incidents]
+      summary: Get incident
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Incident
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Incident"
+    put:
+      operationId: updateIncident
+      tags: [incidents]
+      summary: Update incident status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateIncidentRequest"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Incident"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: Get dashboard summary
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: integer
+        - name: year
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
@@ -34,3 +992,806 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        error:
+          type: string
+      required:
+        - message
+
+    LoginRequest:
+      type: object
+      properties:
+        nik:
+          type: string
+        password:
+          type: string
+      required:
+        - nik
+        - password
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+      required:
+        - token
+        - user
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        nik:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, supervisor, employee]
+        departmentId:
+          type: integer
+        departmentName:
+          type: string
+        isHead:
+          type: boolean
+        groupIds:
+          type: array
+          items:
+            type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - nik
+        - name
+        - email
+        - role
+        - isHead
+        - groupIds
+        - createdAt
+
+    CreateUserRequest:
+      type: object
+      properties:
+        nik:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [admin, supervisor, employee]
+        departmentId:
+          type: integer
+        isHead:
+          type: boolean
+        groupIds:
+          type: array
+          items:
+            type: integer
+      required:
+        - nik
+        - name
+        - email
+        - password
+        - role
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [admin, supervisor, employee]
+        departmentId:
+          type: integer
+        isHead:
+          type: boolean
+        groupIds:
+          type: array
+          items:
+            type: integer
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        riskLevel:
+          type: string
+          enum: [low, medium, high]
+        picGroupId:
+          type: integer
+        picGroupName:
+          type: string
+        color:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - riskLevel
+        - createdAt
+
+    CreateCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        riskLevel:
+          type: string
+          enum: [low, medium, high]
+        picGroupId:
+          type: integer
+        color:
+          type: string
+      required:
+        - name
+        - riskLevel
+
+    Group:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupMember"
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - members
+        - createdAt
+
+    GroupMember:
+      type: object
+      properties:
+        userId:
+          type: integer
+        name:
+          type: string
+        email:
+          type: string
+        nik:
+          type: string
+      required:
+        - userId
+        - name
+        - email
+        - nik
+
+    CreateGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        memberIds:
+          type: array
+          items:
+            type: integer
+      required:
+        - name
+
+    Plant:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - code
+        - createdAt
+
+    CreatePlantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+      required:
+        - name
+        - code
+
+    Action:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - createdAt
+
+    CreateActionRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+      required:
+        - name
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        questionCount:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - questionCount
+        - createdAt
+
+    TemplateWithQuestions:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/Question"
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - questions
+        - createdAt
+
+    CreateTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+      required:
+        - name
+
+    Question:
+      type: object
+      properties:
+        id:
+          type: integer
+        templateId:
+          type: integer
+        text:
+          type: string
+        answerType:
+          type: string
+          enum: [yes_no, text]
+        isMandatory:
+          type: boolean
+        requiresPhoto:
+          type: boolean
+        categoryId:
+          type: integer
+        categoryName:
+          type: string
+        orderIndex:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - templateId
+        - text
+        - answerType
+        - isMandatory
+        - requiresPhoto
+        - orderIndex
+        - createdAt
+
+    CreateQuestionRequest:
+      type: object
+      properties:
+        templateId:
+          type: integer
+        text:
+          type: string
+        answerType:
+          type: string
+          enum: [yes_no, text]
+        isMandatory:
+          type: boolean
+        requiresPhoto:
+          type: boolean
+        categoryId:
+          type: integer
+        orderIndex:
+          type: integer
+      required:
+        - templateId
+        - text
+        - answerType
+        - isMandatory
+        - requiresPhoto
+        - orderIndex
+
+    Schedule:
+      type: object
+      properties:
+        id:
+          type: integer
+        supervisorId:
+          type: integer
+        supervisorName:
+          type: string
+        templateId:
+          type: integer
+        templateName:
+          type: string
+        plantId:
+          type: integer
+        plantName:
+          type: string
+        weekStart:
+          type: string
+        weekEnd:
+          type: string
+        status:
+          type: string
+          enum: [pending, completed]
+        inspectionId:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - supervisorId
+        - supervisorName
+        - templateId
+        - templateName
+        - plantId
+        - plantName
+        - weekStart
+        - weekEnd
+        - status
+        - createdAt
+
+    CreateScheduleRequest:
+      type: object
+      properties:
+        supervisorId:
+          type: integer
+        templateId:
+          type: integer
+        plantId:
+          type: integer
+        weekStart:
+          type: string
+        weekEnd:
+          type: string
+      required:
+        - supervisorId
+        - templateId
+        - plantId
+        - weekStart
+        - weekEnd
+
+    UpdateScheduleRequest:
+      type: object
+      properties:
+        supervisorId:
+          type: integer
+        templateId:
+          type: integer
+        plantId:
+          type: integer
+        weekStart:
+          type: string
+        weekEnd:
+          type: string
+        status:
+          type: string
+          enum: [pending, completed]
+
+    Inspection:
+      type: object
+      properties:
+        id:
+          type: integer
+        scheduleId:
+          type: integer
+        supervisorId:
+          type: integer
+        supervisorName:
+          type: string
+        plantId:
+          type: integer
+        plantName:
+          type: string
+        templateId:
+          type: integer
+        templateName:
+          type: string
+        inspectedAt:
+          type: string
+        totalQuestions:
+          type: integer
+        answeredQuestions:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - scheduleId
+        - supervisorId
+        - supervisorName
+        - templateId
+        - templateName
+        - inspectedAt
+        - totalQuestions
+        - answeredQuestions
+        - createdAt
+
+    InspectionDetail:
+      type: object
+      properties:
+        id:
+          type: integer
+        scheduleId:
+          type: integer
+        supervisorId:
+          type: integer
+        supervisorName:
+          type: string
+        plantId:
+          type: integer
+        plantName:
+          type: string
+        templateId:
+          type: integer
+        templateName:
+          type: string
+        inspectedAt:
+          type: string
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/InspectionAnswer"
+        createdAt:
+          type: string
+      required:
+        - id
+        - scheduleId
+        - supervisorId
+        - supervisorName
+        - templateId
+        - templateName
+        - inspectedAt
+        - answers
+        - createdAt
+
+    InspectionAnswer:
+      type: object
+      properties:
+        id:
+          type: integer
+        questionId:
+          type: integer
+        questionText:
+          type: string
+        answerType:
+          type: string
+        answerYesNo:
+          type: boolean
+        answerText:
+          type: string
+        photoUrl:
+          type: string
+        categoryId:
+          type: integer
+        categoryName:
+          type: string
+      required:
+        - id
+        - questionId
+        - questionText
+        - answerType
+
+    CreateInspectionRequest:
+      type: object
+      properties:
+        scheduleId:
+          type: integer
+        supervisorId:
+          type: integer
+        plantId:
+          type: integer
+        templateId:
+          type: integer
+        inspectedAt:
+          type: string
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreateAnswerRequest"
+      required:
+        - scheduleId
+        - supervisorId
+        - templateId
+        - inspectedAt
+        - answers
+
+    CreateAnswerRequest:
+      type: object
+      properties:
+        questionId:
+          type: integer
+        answerYesNo:
+          type: boolean
+        answerText:
+          type: string
+        photoUrl:
+          type: string
+      required:
+        - questionId
+
+    Incident:
+      type: object
+      properties:
+        id:
+          type: integer
+        reporterId:
+          type: integer
+        reporterName:
+          type: string
+        plantId:
+          type: integer
+        plantName:
+          type: string
+        categoryId:
+          type: integer
+        categoryName:
+          type: string
+        categoryRiskLevel:
+          type: string
+          enum: [low, medium, high]
+        incidentDate:
+          type: string
+        reportedDate:
+          type: string
+        detail:
+          type: string
+        actionId:
+          type: integer
+        actionName:
+          type: string
+        needsFurtherAction:
+          type: boolean
+        status:
+          type: string
+          enum: [open, in_progress, closed]
+        closedAt:
+          type: string
+        picGroupId:
+          type: integer
+        picGroupName:
+          type: string
+        createdAt:
+          type: string
+      required:
+        - id
+        - reporterId
+        - reporterName
+        - plantId
+        - plantName
+        - categoryId
+        - categoryName
+        - categoryRiskLevel
+        - incidentDate
+        - reportedDate
+        - detail
+        - needsFurtherAction
+        - status
+        - createdAt
+
+    CreateIncidentRequest:
+      type: object
+      properties:
+        reporterId:
+          type: integer
+        plantId:
+          type: integer
+        categoryId:
+          type: integer
+        incidentDate:
+          type: string
+        detail:
+          type: string
+        actionId:
+          type: integer
+        needsFurtherAction:
+          type: boolean
+      required:
+        - reporterId
+        - plantId
+        - categoryId
+        - incidentDate
+        - detail
+        - needsFurtherAction
+
+    UpdateIncidentRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [open, in_progress, closed]
+        actionId:
+          type: integer
+        needsFurtherAction:
+          type: boolean
+        detail:
+          type: string
+
+    DashboardSummary:
+      type: object
+      properties:
+        month:
+          type: integer
+        year:
+          type: integer
+        totalIncidents:
+          type: integer
+        openIncidents:
+          type: integer
+        closedIncidents:
+          type: integer
+        dailyIncidents:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyCount"
+        dailyStatus:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyStatusCount"
+        riskMatrix:
+          type: array
+          items:
+            $ref: "#/components/schemas/RiskMatrixItem"
+        categoryTrend:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoryTrendItem"
+      required:
+        - month
+        - year
+        - totalIncidents
+        - openIncidents
+        - closedIncidents
+        - dailyIncidents
+        - dailyStatus
+        - riskMatrix
+        - categoryTrend
+
+    DailyCount:
+      type: object
+      properties:
+        date:
+          type: string
+        count:
+          type: integer
+      required:
+        - date
+        - count
+
+    DailyStatusCount:
+      type: object
+      properties:
+        date:
+          type: string
+        open:
+          type: integer
+        closed:
+          type: integer
+      required:
+        - date
+        - open
+        - closed
+
+    RiskMatrixItem:
+      type: object
+      properties:
+        categoryId:
+          type: integer
+        categoryName:
+          type: string
+        high:
+          type: integer
+        medium:
+          type: integer
+        low:
+          type: integer
+        total:
+          type: integer
+      required:
+        - categoryId
+        - categoryName
+        - high
+        - medium
+        - low
+        - total
+
+    CategoryTrendItem:
+      type: object
+      properties:
+        date:
+          type: string
+        categoryId:
+          type: integer
+        categoryName:
+          type: string
+        count:
+          type: integer
+      required:
+        - date
+        - categoryId
+        - categoryName
+        - count
