@@ -6,12 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend,
 } from "recharts";
-import { TrendingUp, Printer, FileBarChart, ChevronLeft, ChevronRight } from "lucide-react";
+import { TrendingUp, Printer, FileBarChart, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 
 interface MonthlyData {
   period: { from: string; to: string };
@@ -31,12 +31,7 @@ interface MonthlyData {
 }
 
 const COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#14B8A6", "#F97316"];
-const STATUS_STYLES: Record<string, string> = {
-  open: "bg-red-100 text-red-700 border-red-200",
-  in_progress: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  closed: "bg-green-100 text-green-700 border-green-200",
-};
-const STATUS_LABELS: Record<string, string> = { open: "Open", in_progress: "Proses", closed: "Selesai" };
+const STATUS_LABELS: Record<string, string> = { open: "Open", in_progress: "Dalam Proses", closed: "Selesai" };
 
 function SummaryCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color: string }) {
   return (
@@ -63,8 +58,6 @@ export default function MonthlyReportPage() {
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
   const [applied, setApplied] = useState({ from: defaultFrom, to: defaultTo });
-  const [incPage, setIncPage] = useState(1);
-  const [incPageSize, setIncPageSize] = useState(20);
 
   const { data, isLoading } = useQuery<MonthlyData>({
     queryKey: ["reports", "monthly", applied.from, applied.to],
@@ -84,23 +77,36 @@ export default function MonthlyReportPage() {
       .map(([name, count], i) => ({ name, count, color: COLORS[i % COLORS.length]! }));
   }, [data?.incidents]);
 
-  const totalInc = data?.incidents.length ?? 0;
-  const incTotalPages = Math.max(1, Math.ceil(totalInc / incPageSize));
-  const paginatedIncidents = (data?.incidents ?? []).slice((incPage - 1) * incPageSize, incPage * incPageSize);
-
   const categoryChartData = (data?.byCategory ?? []).map((c, i) => ({
-    name: c.categoryName,
-    total: c.total,
-    closed: c.closed,
-    open: c.open,
+    name: c.categoryName, total: c.total, closed: c.closed, open: c.open,
     color: COLORS[i % COLORS.length]!,
   }));
 
   const timeBucketPie = (data?.timeBuckets ?? []).map((b, i) => ({
-    name: b.label,
-    value: b.count,
-    fill: COLORS[i % COLORS.length]!,
+    name: b.label, value: b.count, pct: b.pct, fill: COLORS[i % COLORS.length]!,
   }));
+
+  const exportExcel = () => {
+    if (!data?.incidents) return;
+    const rows = data.incidents.map(inc => ({
+      "Tgl Kejadian": inc.incidentDate,
+      "Kategori": inc.categoryName,
+      "Plant": inc.plantName,
+      "Pelapor": inc.reporterName,
+      "Group PIC": inc.assignedGroupName ?? "—",
+      "Tindakan": inc.actionName ?? "—",
+      "Status": STATUS_LABELS[inc.status] ?? inc.status,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Incident");
+    const colWidths = [
+      { wch: 14 }, { wch: 20 }, { wch: 18 }, { wch: 20 },
+      { wch: 20 }, { wch: 22 }, { wch: 14 },
+    ];
+    ws["!cols"] = colWidths;
+    XLSX.writeFile(wb, `incident_${applied.from}_sd_${applied.to}.xlsx`);
+  };
 
   return (
     <div className="p-6">
@@ -108,9 +114,16 @@ export default function MonthlyReportPage() {
         title="Laporan Bulanan"
         subtitle="Analisis incident per periode waktu"
         action={
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer className="w-4 h-4 mr-2" />Cetak
-          </Button>
+          <div className="flex gap-2">
+            {data && (
+              <Button variant="outline" onClick={exportExcel} className="text-green-700 border-green-300 hover:bg-green-50">
+                <Download className="w-4 h-4 mr-2" />Export Excel
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => window.print()}>
+              <Printer className="w-4 h-4 mr-2" />Cetak
+            </Button>
+          </div>
         }
       />
 
@@ -126,7 +139,7 @@ export default function MonthlyReportPage() {
               <Label className="text-xs">Sampai Tanggal</Label>
               <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="h-8 text-sm w-36" />
             </div>
-            <Button size="sm" onClick={() => { setApplied({ from, to }); setIncPage(1); }}>
+            <Button size="sm" onClick={() => setApplied({ from, to })}>
               <FileBarChart className="w-4 h-4 mr-1.5" />Buat Laporan
             </Button>
           </div>
@@ -140,7 +153,7 @@ export default function MonthlyReportPage() {
         <>
           {/* Print header */}
           <div className="hidden print:block text-center mb-6">
-            <h1 className="text-xl font-bold">Laporan HSE — Hazard & Incident</h1>
+            <h1 className="text-xl font-bold">Laporan HSE — Hazard &amp; Incident</h1>
             <p className="text-sm text-gray-500">Periode: {applied.from} s/d {applied.to}</p>
             <p className="text-sm text-gray-400">Dicetak pada {new Date().toLocaleDateString("id-ID", { dateStyle: "full" })}</p>
           </div>
@@ -182,9 +195,9 @@ export default function MonthlyReportPage() {
                 <CardTitle className="text-base">Distribusi Waktu Tindak Lanjut</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={240}>
+                <ResponsiveContainer width="100%" height={200}>
                   <PieChart>
-                    <Pie data={timeBucketPie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label={({ name, pct }: { name: string; pct: number }) => `${name}: ${pct ?? ""}%`}>
+                    <Pie data={timeBucketPie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}>
                       {timeBucketPie.map((e, i) => <Cell key={i} fill={e.fill} />)}
                     </Pie>
                     <Tooltip formatter={(v: number, name: string) => [`${v} incident`, name]} />
@@ -213,11 +226,11 @@ export default function MonthlyReportPage() {
                 <CardTitle className="text-base">Distribusi Tindakan Penanganan</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={actionChartData} barSize={36} layout="vertical">
+                <ResponsiveContainer width="100%" height={Math.max(180, actionChartData.length * 40)}>
+                  <BarChart data={actionChartData} barSize={28} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" width={160} tick={{ fontSize: 11 }} />
                     <Tooltip formatter={(v: number) => [`${v} incident`, "Jumlah"]} />
                     <Bar dataKey="count" name="Jumlah" radius={[0, 3, 3, 0]}>
                       {actionChartData.map((d, i) => <Cell key={i} fill={d.color} />)}
@@ -228,8 +241,8 @@ export default function MonthlyReportPage() {
             </Card>
           )}
 
-          {/* By category table */}
-          <Card className="mb-6">
+          {/* Rekapitulasi per Kategori */}
+          <Card>
             <CardHeader>
               <CardTitle className="text-base">Rekapitulasi per Kategori</CardTitle>
             </CardHeader>
@@ -263,75 +276,6 @@ export default function MonthlyReportPage() {
                   )}
                 </tbody>
               </table>
-            </CardContent>
-          </Card>
-
-          {/* Incident list */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center justify-between">
-                <span>Daftar Incident ({totalInc})</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[800px]">
-                  <thead className="border-b">
-                    <tr>
-                      <th className="text-left py-2 px-3 font-medium text-gray-600">#</th>
-                      <th className="text-left py-2 px-3 font-medium text-gray-600">Tgl Kejadian</th>
-                      <th className="text-left py-2 px-3 font-medium text-gray-600">Kategori</th>
-                      <th className="text-left py-2 px-3 font-medium text-gray-600">Plant</th>
-                      <th className="text-left py-2 px-3 font-medium text-gray-600">Pelapor</th>
-                      <th className="text-left py-2 px-3 font-medium text-gray-600">Group PIC</th>
-                      <th className="text-left py-2 px-3 font-medium text-gray-600">Tindakan</th>
-                      <th className="text-left py-2 px-3 font-medium text-gray-600">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedIncidents.map((inc, i) => (
-                      <tr key={inc.id} className={`border-b ${i % 2 === 0 ? "bg-gray-50" : ""}`}>
-                        <td className="py-2 px-3 text-gray-400 font-mono">#{inc.id}</td>
-                        <td className="py-2 px-3">{inc.incidentDate}</td>
-                        <td className="py-2 px-3">{inc.categoryName}</td>
-                        <td className="py-2 px-3">{inc.plantName}</td>
-                        <td className="py-2 px-3">{inc.reporterName}</td>
-                        <td className="py-2 px-3">{inc.assignedGroupName ?? "—"}</td>
-                        <td className="py-2 px-3">{inc.actionName ?? "—"}</td>
-                        <td className="py-2 px-3">
-                          <span className={`inline-flex text-xs px-2 py-0.5 rounded-full border font-medium ${STATUS_STYLES[inc.status] ?? "bg-gray-100 text-gray-600"}`}>
-                            {STATUS_LABELS[inc.status] ?? inc.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                    {totalInc === 0 && (
-                      <tr><td colSpan={8} className="text-center py-4 text-gray-400">Tidak ada incident dalam periode ini</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              {totalInc > 0 && (
-                <div className="flex items-center justify-between pt-4 mt-2 border-t text-sm text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <span>Tampilkan</span>
-                    {[20, 50].map(n => (
-                      <Button key={n} size="sm" variant={incPageSize === n ? "default" : "outline"} className="h-7 px-2 text-xs"
-                        onClick={() => { setIncPageSize(n); setIncPage(1); }}>{n}</Button>
-                    ))}
-                    <span>per halaman · {totalInc} total</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" disabled={incPage === 1} onClick={() => setIncPage(p => p - 1)}>
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </Button>
-                    <span className="px-2">{incPage} / {incTotalPages}</span>
-                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" disabled={incPage >= incTotalPages} onClick={() => setIncPage(p => p + 1)}>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              )}
             </CardContent>
           </Card>
         </>
