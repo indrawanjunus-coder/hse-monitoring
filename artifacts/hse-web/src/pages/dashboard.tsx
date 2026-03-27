@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import { AlertTriangle, CheckCircle, Clock, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import { RiskBadge } from "@/components/badges";
 
 interface DashboardSummary {
@@ -42,6 +43,12 @@ export default function DashboardPage() {
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
+  const [, navigate] = useLocation();
+
+  const goToIncidents = (categoryName: string, risk: "high" | "medium" | "low" | "all") => {
+    const params = new URLSearchParams({ category: categoryName, risk });
+    navigate(`/incidents?${params.toString()}`);
+  };
 
   const { data, isLoading } = useQuery<DashboardSummary>({
     queryKey: ["dashboard", month, year],
@@ -171,10 +178,38 @@ export default function DashboardPage() {
                 ) : data?.riskMatrix.map((r) => (
                   <tr key={r.categoryId} className="border-b last:border-0 hover:bg-gray-50">
                     <td className="py-2 font-medium">{r.categoryName}</td>
-                    <td className="text-center py-2 text-red-600 font-bold">{r.high}</td>
-                    <td className="text-center py-2 text-amber-600 font-bold">{r.medium}</td>
-                    <td className="text-center py-2 text-green-600 font-bold">{r.low}</td>
-                    <td className="text-center py-2 font-bold">{r.total}</td>
+                    <td className="text-center py-2">
+                      {r.high > 0 ? (
+                        <button onClick={() => goToIncidents(r.categoryName, "high")}
+                          className="text-red-600 font-bold hover:underline hover:text-red-700 cursor-pointer px-1 rounded hover:bg-red-50">
+                          {r.high}
+                        </button>
+                      ) : <span className="text-gray-300 font-bold">0</span>}
+                    </td>
+                    <td className="text-center py-2">
+                      {r.medium > 0 ? (
+                        <button onClick={() => goToIncidents(r.categoryName, "medium")}
+                          className="text-amber-600 font-bold hover:underline hover:text-amber-700 cursor-pointer px-1 rounded hover:bg-amber-50">
+                          {r.medium}
+                        </button>
+                      ) : <span className="text-gray-300 font-bold">0</span>}
+                    </td>
+                    <td className="text-center py-2">
+                      {r.low > 0 ? (
+                        <button onClick={() => goToIncidents(r.categoryName, "low")}
+                          className="text-green-600 font-bold hover:underline hover:text-green-700 cursor-pointer px-1 rounded hover:bg-green-50">
+                          {r.low}
+                        </button>
+                      ) : <span className="text-gray-300 font-bold">0</span>}
+                    </td>
+                    <td className="text-center py-2">
+                      {r.total > 0 ? (
+                        <button onClick={() => goToIncidents(r.categoryName, "all")}
+                          className="text-gray-800 font-bold hover:underline hover:text-gray-900 cursor-pointer px-1 rounded hover:bg-gray-100">
+                          {r.total}
+                        </button>
+                      ) : <span className="text-gray-300 font-bold">0</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

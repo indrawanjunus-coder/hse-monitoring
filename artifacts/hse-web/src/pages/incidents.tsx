@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useSearch } from "wouter";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
 import { Button } from "@/components/ui/button";
@@ -293,14 +294,37 @@ export default function IncidentsPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const search = useSearch();
+
   const [newOpen, setNewOpen] = useState(false);
   const [detailIncident, setDetailIncident] = useState<Incident | null>(null);
   const [filterStatus, setFilterStatus] = useState<"all" | "open" | "in_progress" | "closed">("open");
   const [sortMode, setSortMode] = useState<SortMode>("reportedDate");
   const [dateFrom, setDateFrom] = useState(twoMonthsAgo());
   const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
+  const [filterCategory, setFilterCategory] = useState<string>("");
+  const [filterRisk, setFilterRisk] = useState<"" | "high" | "medium" | "low">("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const cat = params.get("category");
+    const risk = params.get("risk");
+    if (cat) {
+      setFilterCategory(cat);
+      setFilterStatus("all");
+      setDateFrom("");
+      setDateTo("");
+    }
+    if (risk && risk !== "all") {
+      setFilterRisk(risk as "high" | "medium" | "low");
+    } else {
+      setFilterRisk("");
+    }
+    if (cat || risk) setPage(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const { data: incidents = [], isLoading } = useQuery<Incident[]>({
     queryKey: ["incidents"],
@@ -334,6 +358,8 @@ export default function IncidentsPage() {
       if (filterStatus !== "all" && i.status !== filterStatus) return false;
       if (dateFrom && i.reportedDate < dateFrom) return false;
       if (dateTo && i.reportedDate > dateTo) return false;
+      if (filterCategory && i.categoryName !== filterCategory) return false;
+      if (filterRisk && i.categoryRiskLevel !== filterRisk) return false;
       return true;
     });
     if (sortMode === "reportedDate") {
@@ -342,7 +368,16 @@ export default function IncidentsPage() {
       list = [...list].sort((a, b) => agingDays(a.reportedDate) > agingDays(b.reportedDate) ? -1 : 1);
     }
     return list;
-  }, [incidents, filterStatus, sortMode, dateFrom, dateTo]);
+  }, [incidents, filterStatus, sortMode, dateFrom, dateTo, filterCategory, filterRisk]);
+
+  const clearDashboardFilter = () => {
+    setFilterCategory("");
+    setFilterRisk("");
+    setFilterStatus("open");
+    setDateFrom(twoMonthsAgo());
+    setDateTo(new Date().toISOString().slice(0, 10));
+    setPage(1);
+  };
 
   const start = (page - 1) * pageSize;
   const paginated = filtered.slice(start, start + pageSize);
@@ -360,6 +395,31 @@ export default function IncidentsPage() {
           </Button>
         }
       />
+
+      {/* Active dashboard filter banner */}
+      {(filterCategory || filterRisk) && (
+        <div className="mb-3 flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm">
+          <span className="text-blue-700 font-medium">Filter dari Dashboard:</span>
+          {filterCategory && (
+            <span className="bg-blue-100 text-blue-800 border border-blue-300 px-2 py-0.5 rounded-md text-xs font-semibold">
+              Kategori: {filterCategory}
+            </span>
+          )}
+          {filterRisk && (
+            <span className={`px-2 py-0.5 rounded-md text-xs font-semibold border ${
+              filterRisk === "high" ? "bg-red-100 text-red-700 border-red-300" :
+              filterRisk === "medium" ? "bg-amber-100 text-amber-700 border-amber-300" :
+              "bg-green-100 text-green-700 border-green-300"
+            }`}>
+              Risk: {filterRisk === "high" ? "High" : filterRisk === "medium" ? "Medium" : "Low"}
+            </span>
+          )}
+          <button onClick={clearDashboardFilter}
+            className="ml-auto text-xs text-blue-600 hover:text-blue-800 underline">
+            Hapus Filter
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-white border rounded-lg p-3 mb-4 flex flex-wrap items-end gap-3">
