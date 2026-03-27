@@ -3,9 +3,8 @@ import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Shield } from "lucide-react";
+import { Shield, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const { login, isLoading } = useAuth();
@@ -24,60 +23,96 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-indigo-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-white/10 rounded-2xl mb-4">
-            <Shield className="w-8 h-8 text-white" />
+    <div className="min-h-screen flex">
+      {/* Left panel — brand */}
+      <div className="hidden lg:flex lg:w-1/2 bg-slate-900 flex-col justify-between p-12">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
+            <Shield className="w-5 h-5 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white">HSE Monitor</h1>
-          <p className="text-blue-200 mt-2">Health, Safety & Environment</p>
+          <span className="text-white font-bold text-lg tracking-tight">HSE Monitor</span>
         </div>
 
-        <Card className="shadow-2xl">
-          <CardHeader>
-            <CardTitle className="text-xl">Masuk ke Sistem</CardTitle>
-            <CardDescription>Masukkan NIK dan password Anda</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="nik">NIK</Label>
-                <Input
-                  id="nik"
-                  value={nik}
-                  onChange={(e) => setNik(e.target.value)}
-                  placeholder="Masukkan NIK Anda"
-                  required
-                  autoFocus
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Masukkan password"
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Memuat..." : "Masuk"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+        <div>
+          <h2 className="text-3xl font-bold text-white leading-snug mb-4">
+            Sistem Manajemen<br />
+            Kesehatan, Keselamatan<br />
+            & Lingkungan
+          </h2>
+          <p className="text-slate-400 text-sm leading-relaxed">
+            Platform terpadu untuk pemantauan jadwal inspeksi, pelaporan
+            hazard & insiden, serta pengelolaan data master HSE perusahaan.
+          </p>
+        </div>
 
-        <p className="text-center text-blue-300 text-sm mt-6">
-          HSE Monitor v1.0 · PT Demo Indonesia
-        </p>
+        <div className="flex items-center gap-4">
+          <div className="h-px flex-1 bg-slate-700" />
+          <span className="text-slate-500 text-xs">PT Demo Indonesia · v1.0</span>
+          <div className="h-px flex-1 bg-slate-700" />
+        </div>
+      </div>
+
+      {/* Right panel — form */}
+      <div className="flex-1 flex items-center justify-center p-6 bg-gray-50">
+        <div className="w-full max-w-sm">
+          {/* Mobile logo */}
+          <div className="flex items-center gap-3 mb-8 lg:hidden">
+            <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
+              <Shield className="w-5 h-5 text-white" />
+            </div>
+            <span className="font-bold text-gray-900 text-lg">HSE Monitor</span>
+          </div>
+
+          <h1 className="text-2xl font-bold text-gray-900 mb-1">Masuk ke Sistem</h1>
+          <p className="text-sm text-gray-500 mb-7">Gunakan NIK dan password akun Anda</p>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <Alert variant="destructive" className="py-3">
+                <AlertCircle className="w-4 h-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="nik" className="text-sm font-medium text-gray-700">NIK</Label>
+              <Input
+                id="nik"
+                value={nik}
+                onChange={(e) => setNik(e.target.value)}
+                placeholder="Masukkan NIK Anda"
+                required
+                autoFocus
+                className="h-10 bg-white"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-sm font-medium text-gray-700">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Masukkan password"
+                required
+                className="h-10 bg-white"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+              disabled={isLoading}
+            >
+              {isLoading ? "Memverifikasi..." : "Masuk"}
+            </Button>
+          </form>
+
+          <p className="text-xs text-gray-400 text-center mt-8">
+            © 2026 PT Demo Indonesia. Hak cipta dilindungi.
+          </p>
+        </div>
       </div>
     </div>
   );
