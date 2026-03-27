@@ -89,4 +89,24 @@ router.delete("/:id", async (req, res) => {
   res.status(204).end();
 });
 
+router.post("/:id/change-password", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { currentPassword, newPassword } = req.body;
+  const authUser = (req as unknown as { user: { id: number; role: string } }).user;
+  if (!newPassword || newPassword.length < 6) {
+    res.status(400).json({ message: "Password baru minimal 6 karakter" }); return;
+  }
+  const [u] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!u) { res.status(404).json({ message: "User tidak ditemukan" }); return; }
+  if (authUser.role !== "admin") {
+    if (authUser.id !== id) { res.status(403).json({ message: "Forbidden" }); return; }
+    if (!currentPassword) { res.status(400).json({ message: "Password saat ini diperlukan" }); return; }
+    const expectedHash = await hashPassword(currentPassword);
+    if (u.passwordHash !== expectedHash) { res.status(400).json({ message: "Password saat ini tidak sesuai" }); return; }
+  }
+  const passwordHash = await hashPassword(newPassword);
+  await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, id));
+  res.json({ message: "Password berhasil diubah" });
+});
+
 export default router;

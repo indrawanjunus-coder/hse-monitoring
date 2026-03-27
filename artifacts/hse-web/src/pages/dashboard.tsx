@@ -1,0 +1,219 @@
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { api } from "@/lib/api";
+import { PageHeader } from "@/components/layout";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from "recharts";
+import { AlertTriangle, CheckCircle, Clock, TrendingUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { RiskBadge } from "@/components/badges";
+
+interface DashboardSummary {
+  totalIncidents: number;
+  openIncidents: number;
+  closedIncidents: number;
+  dailyIncidents: { date: string; count: number }[];
+  dailyStatus: { date: string; open: number; closed: number }[];
+  riskMatrix: { categoryId: number; categoryName: string; high: number; medium: number; low: number; total: number }[];
+  categoryTrend: { date: string; categoryId: number; categoryName: string; count: number }[];
+}
+
+const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+function StatCard({ title, value, icon, color }: { title: string; value: number; icon: React.ReactNode; color: string }) {
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-500">{title}</p>
+            <p className={`text-3xl font-bold mt-1 ${color}`}>{value}</p>
+          </div>
+          <div className={`p-3 rounded-xl bg-gray-50 ${color}`}>{icon}</div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function DashboardPage() {
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+
+  const { data, isLoading } = useQuery<DashboardSummary>({
+    queryKey: ["dashboard", month, year],
+    queryFn: () => api.get(`/dashboard/summary?month=${month}&year=${year}`),
+  });
+
+  const prevMonth = () => {
+    if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1);
+  };
+
+  const dailyData = data?.dailyIncidents.map(d => ({
+    day: d.date.split("-")[2],
+    Incident: d.count,
+  }));
+
+  const statusData = data?.dailyStatus.filter(d => d.open + d.closed > 0).map(d => ({
+    day: d.date.split("-")[2],
+    Open: d.open,
+    Selesai: d.closed,
+  }));
+
+  const categoryTotalMap = (data?.categoryTrend ?? []).reduce<Record<string, number>>((acc, item) => {
+    acc[item.categoryName] = (acc[item.categoryName] ?? 0) + item.count;
+    return acc;
+  }, {});
+  const categoryData = Object.entries(categoryTotalMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+
+  return (
+    <div className="p-6">
+      <PageHeader
+        title="Dashboard HSE"
+        subtitle="Monitor kesehatan, keselamatan, dan lingkungan"
+        action={
+          <div className="flex items-center gap-2 bg-white border rounded-lg px-2 py-1">
+            <Button variant="ghost" size="sm" onClick={prevMonth}><ChevronLeft className="w-4 h-4" /></Button>
+            <span className="font-medium text-sm min-w-36 text-center">{MONTHS[month - 1]} {year}</span>
+            <Button variant="ghost" size="sm" onClick={nextMonth}><ChevronRight className="w-4 h-4" /></Button>
+          </div>
+        }
+      />
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <StatCard
+          title="Total Incident"
+          value={data?.totalIncidents ?? 0}
+          icon={<AlertTriangle className="w-6 h-6" />}
+          color="text-blue-600"
+        />
+        <StatCard
+          title="Open"
+          value={data?.openIncidents ?? 0}
+          icon={<Clock className="w-6 h-6" />}
+          color="text-red-600"
+        />
+        <StatCard
+          title="Selesai"
+          value={data?.closedIncidents ?? 0}
+          icon={<CheckCircle className="w-6 h-6" />}
+          color="text-green-600"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <Card>
+          <CardHeader><CardTitle className="text-base">Incident Harian</CardTitle></CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-48 flex items-center justify-center text-gray-400">Memuat...</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={dailyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="Incident" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Open vs Selesai per Hari</CardTitle></CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-48 flex items-center justify-center text-gray-400">Memuat...</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={statusData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="Open" fill="#EF4444" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Selesai" fill="#10B981" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <Card>
+          <CardHeader><CardTitle className="text-base">Risk Matrix per Kategori</CardTitle></CardHeader>
+          <CardContent>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2 font-medium text-gray-600">Kategori</th>
+                  <th className="text-center py-2 font-medium text-red-600">High</th>
+                  <th className="text-center py-2 font-medium text-amber-600">Med</th>
+                  <th className="text-center py-2 font-medium text-green-600">Low</th>
+                  <th className="text-center py-2 font-medium text-gray-600">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoading ? (
+                  <tr><td colSpan={5} className="text-center py-8 text-gray-400">Memuat...</td></tr>
+                ) : data?.riskMatrix.length === 0 ? (
+                  <tr><td colSpan={5} className="text-center py-8 text-gray-400">Tidak ada data</td></tr>
+                ) : data?.riskMatrix.map((r) => (
+                  <tr key={r.categoryId} className="border-b last:border-0 hover:bg-gray-50">
+                    <td className="py-2 font-medium">{r.categoryName}</td>
+                    <td className="text-center py-2 text-red-600 font-bold">{r.high}</td>
+                    <td className="text-center py-2 text-amber-600 font-bold">{r.medium}</td>
+                    <td className="text-center py-2 text-green-600 font-bold">{r.low}</td>
+                    <td className="text-center py-2 font-bold">{r.total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Incident per Kategori</CardTitle></CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-48 flex items-center justify-center text-gray-400">Memuat...</div>
+            ) : categoryData.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-gray-400">Tidak ada data</div>
+            ) : (
+              <div className="space-y-3">
+                {categoryData.map((item) => {
+                  const maxCount = Math.max(...categoryData.map(d => d.count));
+                  const pct = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
+                  return (
+                    <div key={item.name}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="font-medium text-gray-700">{item.name}</span>
+                        <span className="font-bold text-blue-600">{item.count}</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
