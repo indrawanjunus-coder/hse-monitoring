@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RiskBadge, StatusBadge } from "@/components/badges";
-import { Plus, AlertTriangle, MapPin, User, Calendar, ChevronDown } from "lucide-react";
+import { Plus, AlertTriangle, MapPin, User, Calendar, ChevronDown, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 
@@ -20,19 +20,53 @@ interface Incident {
   reporterName: string;
   plantName: string;
   categoryName: string;
-  categoryRiskLevel: "high" | "medium" | "low";
+  categoryRiskLevel?: "high" | "medium" | "low";
   incidentDate: string;
   reportedDate: string;
   detail: string;
-  actionName?: string;
+  actionId?: number | null;
+  actionName?: string | null;
+  followupNote?: string | null;
   needsFurtherAction: boolean;
   status: "open" | "in_progress" | "closed";
-  closedAt?: string;
-  picGroupName?: string;
+  closedAt?: string | null;
+  assignedGroupName?: string | null;
 }
 interface Plant { id: number; name: string }
-interface Category { id: number; name: string; riskLevel: string }
+interface Category { id: number; name: string; riskLevel?: string }
 interface Action { id: number; name: string }
+
+const PAGE_SIZE_OPTIONS = [20, 50];
+
+function Pagination({ page, total, pageSize, onPage, onPageSize }: {
+  page: number; total: number; pageSize: number;
+  onPage: (p: number) => void; onPageSize: (n: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  return (
+    <div className="flex items-center justify-between pt-4 mt-2 border-t text-sm text-gray-600">
+      <div className="flex items-center gap-2">
+        <span>Tampilkan</span>
+        {PAGE_SIZE_OPTIONS.map(n => (
+          <Button key={n} size="sm" variant={pageSize === n ? "default" : "outline"} className="h-7 px-2 text-xs"
+            onClick={() => { onPageSize(n); onPage(1); }}>
+            {n}
+          </Button>
+        ))}
+        <span>per halaman · {total} total</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <Button size="sm" variant="outline" className="h-7 w-7 p-0" disabled={page === 1} onClick={() => onPage(page - 1)}>
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </Button>
+        <span className="px-2">{page} / {totalPages}</span>
+        <Button size="sm" variant="outline" className="h-7 w-7 p-0" disabled={page >= totalPages} onClick={() => onPage(page + 1)}>
+          <ChevronRight className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function IncidentForm({ onSave, onCancel, plants, categories, actions, reporterId }: {
   onSave: (data: Record<string, unknown>) => Promise<void>;
@@ -130,16 +164,35 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, reporterI
   );
 }
 
-function IncidentDetail({ incident, onClose, onUpdateStatus }: {
-  incident: Incident; onClose: () => void; onUpdateStatus: (status: string) => void;
+function IncidentDetail({ incident, onClose, onUpdate, actions }: {
+  incident: Incident; onClose: () => void;
+  onUpdate: (data: Record<string, unknown>) => Promise<void>;
+  actions: Action[];
 }) {
   const { user } = useAuth();
   const canUpdate = user?.role === "admin" || user?.role === "supervisor";
+  const [actionId, setActionId] = useState(String(incident.actionId ?? "none"));
+  const [followupNote, setFollowupNote] = useState(incident.followupNote ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const handleResolve = async (status: string) => {
+    setSaving(true);
+    try {
+      await onUpdate({
+        status,
+        actionId: actionId !== "none" ? parseInt(actionId) : null,
+        followupNote: followupNote.trim() || null,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">
         <StatusBadge status={incident.status} />
-        <RiskBadge level={incident.categoryRiskLevel} />
+        {incident.categoryRiskLevel && <RiskBadge level={incident.categoryRiskLevel} />}
       </div>
       <div className="bg-gray-50 rounded-lg p-4">
         <p className="text-sm font-medium text-gray-500 mb-1">Detail Kejadian</p>
@@ -153,23 +206,69 @@ function IncidentDetail({ incident, onClose, onUpdateStatus }: {
         <div><span className="text-gray-500">Pelapor:</span> <span className="font-medium">{incident.reporterName}</span></div>
         {incident.actionName && <div><span className="text-gray-500">Tindakan:</span> <span className="font-medium">{incident.actionName}</span></div>}
         {incident.closedAt && <div><span className="text-gray-500">Ditutup:</span> <span className="font-medium">{incident.closedAt}</span></div>}
+        {incident.assignedGroupName && (
+          <div className="col-span-2">
+            <span className="text-gray-500 flex items-center gap-1">
+              <Users className="w-3 h-3" />Group PIC:
+            </span>
+            <span className="font-medium text-blue-700 ml-1">{incident.assignedGroupName}</span>
+          </div>
+        )}
       </div>
+
       {incident.needsFurtherAction && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-          ⚠️ Perlu tindak lanjut {incident.picGroupName ? `· PIC: ${incident.picGroupName}` : ""}
+          ⚠️ Perlu tindak lanjut{incident.assignedGroupName ? ` · PIC: ${incident.assignedGroupName}` : ""}
         </div>
       )}
+
+      {incident.followupNote && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+          <p className="font-medium text-blue-800 mb-1">Catatan Followup</p>
+          <p className="text-blue-700">{incident.followupNote}</p>
+        </div>
+      )}
+
       {canUpdate && incident.status !== "closed" && (
-        <DialogFooter className="flex gap-2">
-          <Button variant="outline" onClick={onClose}>Tutup</Button>
-          {incident.status === "open" && (
-            <Button variant="outline" className="text-amber-600 border-amber-300" onClick={() => onUpdateStatus("in_progress")}>
-              Tandai Proses
+        <div className="space-y-3 border-t pt-3">
+          <p className="text-sm font-medium text-gray-700">Resolusi Incident</p>
+          <div className="space-y-2">
+            <Label>Tindakan Penanganan</Label>
+            <Select value={actionId} onValueChange={setActionId}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Pilih tindakan...</SelectItem>
+                {actions.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Catatan Tindak Lanjut</Label>
+            <Textarea
+              value={followupNote}
+              onChange={e => setFollowupNote(e.target.value)}
+              placeholder="Deskripsikan tindakan yang sudah/akan dilakukan..."
+              rows={3}
+            />
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>Tutup</Button>
+            {incident.status === "open" && (
+              <Button variant="outline" className="text-amber-600 border-amber-300"
+                disabled={saving} onClick={() => handleResolve("in_progress")}>
+                Tandai Proses
+              </Button>
+            )}
+            <Button className="bg-green-600 hover:bg-green-700"
+              disabled={saving} onClick={() => handleResolve("closed")}>
+              Tutup Incident
             </Button>
-          )}
-          <Button variant="default" className="bg-green-600 hover:bg-green-700" onClick={() => onUpdateStatus("closed")}>
-            Tutup Incident
-          </Button>
+          </DialogFooter>
+        </div>
+      )}
+      {(!canUpdate || incident.status === "closed") && (
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Tutup</Button>
         </DialogFooter>
       )}
     </div>
@@ -183,14 +282,12 @@ export default function IncidentsPage() {
   const [newOpen, setNewOpen] = useState(false);
   const [detailIncident, setDetailIncident] = useState<Incident | null>(null);
   const [filterStatus, setFilterStatus] = useState<"all" | "open" | "in_progress" | "closed">("all");
-
-  const now = new Date();
-  const [month] = useState(now.getMonth() + 1);
-  const [year] = useState(now.getFullYear());
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const { data: incidents = [], isLoading } = useQuery<Incident[]>({
     queryKey: ["incidents"],
-    queryFn: () => api.get(`/incidents?month=${month}&year=${year}`),
+    queryFn: () => api.get("/incidents"),
   });
   const { data: plants = [] } = useQuery<Plant[]>({ queryKey: ["plants"], queryFn: () => api.get("/plants") });
   const { data: categories = [] } = useQuery<Category[]>({ queryKey: ["categories"], queryFn: () => api.get("/categories") });
@@ -206,23 +303,27 @@ export default function IncidentsPage() {
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
-  const updateStatus = async (id: number, status: string) => {
-    await api.put(`/incidents/${id}`, { status });
+  const updateIncident = async (id: number, data: Record<string, unknown>) => {
+    await api.put(`/incidents/${id}`, data);
     queryClient.invalidateQueries({ queryKey: ["incidents"] });
     setDetailIncident(null);
-    toast({ title: `Incident ${status === "closed" ? "ditutup" : "diproses"}` });
+    if (data.status === "closed") toast({ title: "Incident ditutup" });
+    else if (data.status === "in_progress") toast({ title: "Incident ditandai proses" });
+    else toast({ title: "Incident diperbarui" });
   };
 
   const filtered = incidents.filter(i => filterStatus === "all" || i.status === filterStatus);
+  const start = (page - 1) * pageSize;
+  const paginated = filtered.slice(start, start + pageSize);
 
   return (
     <div className="p-6">
       <PageHeader
         title="Hazard & Incident"
-        subtitle="Laporan temuan hazard dan incident"
+        subtitle={`${filtered.length} laporan ditemukan`}
         action={
           <Button onClick={() => setNewOpen(true)} className="bg-red-600 hover:bg-red-700">
-            <Plus className="w-4 h-4 mr-2" /> Laporkan Incident
+            <Plus className="w-4 h-4 mr-2" />Laporkan Incident
           </Button>
         }
       />
@@ -233,7 +334,7 @@ export default function IncidentsPage() {
             key={f}
             variant={filterStatus === f ? "default" : "outline"}
             size="sm"
-            onClick={() => setFilterStatus(f)}
+            onClick={() => { setFilterStatus(f); setPage(1); }}
           >
             {f === "all" ? "Semua" : f === "open" ? "Open" : f === "in_progress" ? "Proses" : "Selesai"}
           </Button>
@@ -248,41 +349,55 @@ export default function IncidentsPage() {
           <p className="text-gray-500">Tidak ada incident{filterStatus !== "all" ? " dengan status ini" : ""}</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {filtered.map(inc => (
-            <Card
-              key={inc.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => setDetailIncident(inc)}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <StatusBadge status={inc.status} />
-                      <RiskBadge level={inc.categoryRiskLevel} />
-                      <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-medium">
-                        {inc.categoryName}
-                      </span>
-                      {inc.needsFurtherAction && (
-                        <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md font-medium">
-                          ⚠ Tindak Lanjut
+        <>
+          <div className="space-y-3">
+            {paginated.map(inc => (
+              <Card
+                key={inc.id}
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => setDetailIncident(inc)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <StatusBadge status={inc.status} />
+                        {inc.categoryRiskLevel && <RiskBadge level={inc.categoryRiskLevel} />}
+                        <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-medium">
+                          {inc.categoryName}
                         </span>
-                      )}
+                        {inc.needsFurtherAction && (
+                          <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md font-medium">
+                            ⚠ Tindak Lanjut
+                          </span>
+                        )}
+                        {inc.assignedGroupName && (
+                          <span className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1 font-medium">
+                            <Users className="w-3 h-3" />{inc.assignedGroupName}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-gray-900 font-medium line-clamp-2 mb-2">{inc.detail}</p>
+                      <div className="flex items-center gap-4 text-xs text-gray-500">
+                        <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{inc.plantName}</span>
+                        <span className="flex items-center gap-1"><User className="w-3 h-3" />{inc.reporterName}</span>
+                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{inc.incidentDate}</span>
+                      </div>
                     </div>
-                    <p className="text-gray-900 font-medium line-clamp-2 mb-2">{inc.detail}</p>
-                    <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{inc.plantName}</span>
-                      <span className="flex items-center gap-1"><User className="w-3 h-3" />{inc.reporterName}</span>
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{inc.incidentDate}</span>
-                    </div>
+                    <ChevronDown className="w-4 h-4 text-gray-400 rotate-[-90deg] flex-shrink-0 mt-1" />
                   </div>
-                  <ChevronDown className="w-4 h-4 text-gray-400 rotate-[-90deg] flex-shrink-0 mt-1" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <Pagination
+            page={page}
+            total={filtered.length}
+            pageSize={pageSize}
+            onPage={setPage}
+            onPageSize={setPageSize}
+          />
+        </>
       )}
 
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
@@ -302,13 +417,14 @@ export default function IncidentsPage() {
       </Dialog>
 
       <Dialog open={!!detailIncident} onOpenChange={(open) => !open && setDetailIncident(null)}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Detail Incident #{detailIncident?.id}</DialogTitle></DialogHeader>
           {detailIncident && (
             <IncidentDetail
               incident={detailIncident}
+              actions={actions}
               onClose={() => setDetailIncident(null)}
-              onUpdateStatus={(status) => updateStatus(detailIncident.id, status)}
+              onUpdate={(data) => updateIncident(detailIncident.id, data)}
             />
           )}
         </DialogContent>

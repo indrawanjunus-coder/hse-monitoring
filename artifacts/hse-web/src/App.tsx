@@ -11,6 +11,8 @@ import ProfilePage from "@/pages/profile";
 import MyInspectionsPage from "@/pages/my-inspections";
 import HistoryPage from "@/pages/history";
 import FollowupReportPage from "@/pages/reports/followup-report";
+import MonthlyReportPage from "@/pages/reports/monthly-report";
+import SmtpSettingsPage from "@/pages/settings/smtp";
 import UsersPage from "@/pages/master/users";
 import CategoriesPage from "@/pages/master/categories";
 import GroupsPage from "@/pages/master/groups";
@@ -39,6 +41,8 @@ function AppRoutes() {
           <Route path="/schedules" component={SchedulesPage} />
           <Route path="/incidents" component={IncidentsPage} />
           <Route path="/reports/followup" component={FollowupReportPage} />
+          <Route path="/reports/monthly" component={MonthlyReportPage} />
+          <Route path="/settings/smtp" component={SmtpSettingsPage} />
           <Route path="/profile" component={ProfilePage} />
           <Route path="/master/users" component={UsersPage} />
           <Route path="/master/categories" component={CategoriesPage} />

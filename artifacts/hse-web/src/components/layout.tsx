@@ -19,6 +19,8 @@ import {
   ClipboardList,
   ClipboardCheck,
   BarChart2,
+  FileBarChart,
+  Mail,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
@@ -46,9 +48,16 @@ const navItems: NavItem[] = [
     children: [
       { label: "Daftar H&I", href: "/incidents", icon: <AlertTriangle className="w-4 h-4" /> },
       { label: "Laporan Followup", href: "/reports/followup", icon: <BarChart2 className="w-4 h-4" /> },
+      { label: "Laporan Bulanan", href: "/reports/monthly", icon: <FileBarChart className="w-4 h-4" /> },
     ],
   },
   { label: "Profil", href: "/profile", icon: <UserCircle className="w-4 h-4" /> },
+  {
+    label: "Pengaturan", href: "/settings", icon: <Mail className="w-4 h-4" />, adminOnly: true,
+    children: [
+      { label: "Email (SMTP)", href: "/settings/smtp", icon: <Mail className="w-4 h-4" /> },
+    ],
+  },
   {
     label: "Master Data", href: "/master", icon: <Settings className="w-4 h-4" />, adminOnly: true,
     children: [

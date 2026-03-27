@@ -7,5 +7,8 @@ export * from "./actions";
 export * from "./templates";
 export * from "./questions";
 export * from "./schedules";
+export * from "./schedule-groups";
+export * from "./schedule-users";
 export * from "./inspections";
 export * from "./incidents";
+export * from "./smtp-settings";

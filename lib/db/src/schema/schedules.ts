@@ -8,6 +8,7 @@ import { groupsTable } from "./groups";
 
 export const schedulesTable = pgTable("schedules", {
   id: serial("id").primaryKey(),
+  title: text("title"),
   supervisorId: integer("supervisor_id").references(() => usersTable.id),
   groupId: integer("group_id").references(() => groupsTable.id),
   templateId: integer("template_id").notNull().references(() => templatesTable.id),

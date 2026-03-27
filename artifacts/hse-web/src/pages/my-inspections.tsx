@@ -13,9 +13,12 @@ import { ClipboardList, CheckCircle, Clock, AlertTriangle, Play } from "lucide-r
 import { useToast } from "@/hooks/use-toast";
 
 interface Schedule {
-  id: number; title: string; frequency: string; status: string;
+  id: number; title?: string; frequency: string; status: string;
   templateId: number; templateName?: string; plantId?: number; plantName?: string;
   supervisorId?: number; supervisorName?: string; dueDate?: string;
+  groupId?: number; groupName?: string;
+  userIds?: number[]; groupIds?: number[];
+  groups?: { id: number; name: string }[];
 }
 interface Question {
   id: number; text: string; answerType: "yes_no" | "text";
@@ -168,10 +171,18 @@ export default function MyInspectionsPage() {
     queryFn: () => api.get("/schedules"),
   });
 
-  // Filter to schedules that belong to this user (supervisor) or are active/pending
-  const mySchedules = schedules.filter(s =>
-    s.supervisorId === user?.id || (!s.supervisorId)
-  );
+  // Filter to schedules that belong to this user via userIds array, supervisorId, or all if no user assignment
+  const mySchedules = schedules.filter(s => {
+    if (!user) return false;
+    // Admin/supervisor can see all
+    if (user.role === "admin") return true;
+    // Check junction-based user assignment
+    if (s.userIds && s.userIds.length > 0) return s.userIds.includes(user.id);
+    // Fall back to legacy supervisorId
+    if (s.supervisorId) return s.supervisorId === user.id;
+    // If no specific assignment, show to all
+    return true;
+  });
   const pending = mySchedules.filter(s => s.status === "active" || s.status === "pending" || !s.status);
   const completed = mySchedules.filter(s => s.status === "completed");
 

@@ -5,6 +5,7 @@ import { usersTable } from "./users";
 import { plantsTable } from "./plants";
 import { categoriesTable } from "./categories";
 import { actionsTable } from "./actions";
+import { groupsTable } from "./groups";
 
 export const incidentsTable = pgTable("incidents", {
   id: serial("id").primaryKey(),
@@ -17,6 +18,8 @@ export const incidentsTable = pgTable("incidents", {
   actionId: integer("action_id").references(() => actionsTable.id),
   needsFurtherAction: boolean("needs_further_action").notNull().default(false),
   status: text("status", { enum: ["open", "in_progress", "closed"] }).notNull().default("open"),
+  assignedGroupId: integer("assigned_group_id").references(() => groupsTable.id),
+  followupNote: text("followup_note"),
   closedAt: text("closed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

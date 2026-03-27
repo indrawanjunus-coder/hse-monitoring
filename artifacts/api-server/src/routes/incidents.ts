@@ -1,84 +1,128 @@
 import { Router } from "express";
-import { db, incidentsTable, usersTable, plantsTable, categoriesTable, actionsTable, groupsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import {
+  db, incidentsTable, usersTable, plantsTable, categoriesTable, actionsTable, groupsTable,
+  groupMembersTable,
+} from "@workspace/db";
+import { eq, desc } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
+import { sendEmail, incidentEmailHtml } from "../lib/email";
 
 const router = Router();
 router.use(authMiddleware);
 
-async function formatIncident(i: typeof incidentsTable.$inferSelect) {
-  const [reporter] = await db.select().from(usersTable).where(eq(usersTable.id, i.reporterId));
-  const [plant] = await db.select().from(plantsTable).where(eq(plantsTable.id, i.plantId));
-  const [category] = await db.select().from(categoriesTable).where(eq(categoriesTable.id, i.categoryId));
-  const [action] = i.actionId ? await db.select().from(actionsTable).where(eq(actionsTable.id, i.actionId)) : [undefined];
-  let picGroupName: string | undefined;
-  if (category?.picGroupId) {
-    const [group] = await db.select().from(groupsTable).where(eq(groupsTable.id, category.picGroupId));
-    picGroupName = group?.name;
-  }
+async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
+  const [reporter] = await db.select().from(usersTable).where(eq(usersTable.id, inc.reporterId));
+  const [plant] = await db.select().from(plantsTable).where(eq(plantsTable.id, inc.plantId));
+  const [cat] = await db.select().from(categoriesTable).where(eq(categoriesTable.id, inc.categoryId));
+  const [action] = inc.actionId ? await db.select().from(actionsTable).where(eq(actionsTable.id, inc.actionId)) : [undefined];
+  const [assignedGroup] = inc.assignedGroupId ? await db.select().from(groupsTable).where(eq(groupsTable.id, inc.assignedGroupId)) : [undefined];
+
   return {
-    id: i.id, reporterId: i.reporterId, reporterName: reporter?.name ?? "",
-    plantId: i.plantId, plantName: plant?.name ?? "",
-    categoryId: i.categoryId, categoryName: category?.name ?? "",
-    categoryRiskLevel: category?.riskLevel ?? "low",
-    incidentDate: i.incidentDate, reportedDate: i.reportedDate,
-    detail: i.detail, actionId: i.actionId, actionName: action?.name,
-    needsFurtherAction: i.needsFurtherAction, status: i.status, closedAt: i.closedAt,
-    picGroupId: category?.picGroupId, picGroupName,
-    createdAt: i.createdAt.toISOString(),
+    ...inc,
+    reporterName: reporter?.name ?? "",
+    plantName: plant?.name ?? "",
+    categoryName: cat?.name ?? "",
+    actionName: action?.name ?? null,
+    assignedGroupName: assignedGroup?.name ?? null,
+    createdAt: inc.createdAt.toISOString(),
   };
 }
 
-router.get("/", async (req, res) => {
-  const month = req.query.month ? parseInt(req.query.month as string) : undefined;
-  const year = req.query.year ? parseInt(req.query.year as string) : undefined;
-  const plantId = req.query.plantId ? parseInt(req.query.plantId as string) : undefined;
-  const categoryId = req.query.categoryId ? parseInt(req.query.categoryId as string) : undefined;
-  const status = req.query.status as string | undefined;
-
-  let incidents = await db.select().from(incidentsTable);
-  if (month && year) {
-    const prefix = `${year}-${String(month).padStart(2, "0")}`;
-    incidents = incidents.filter(i => i.incidentDate.startsWith(prefix));
-  }
-  if (plantId) incidents = incidents.filter(i => i.plantId === plantId);
-  if (categoryId) incidents = incidents.filter(i => i.categoryId === categoryId);
-  if (status) incidents = incidents.filter(i => i.status === status);
-
+router.get("/", async (_req, res) => {
+  const incidents = await db.select().from(incidentsTable).orderBy(desc(incidentsTable.createdAt));
   const result = await Promise.all(incidents.map(formatIncident));
   res.json(result);
 });
 
 router.get("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const incidents = await db.select().from(incidentsTable).where(eq(incidentsTable.id, id));
-  if (!incidents[0]) { res.status(404).json({ message: "Not found" }); return; }
-  res.json(await formatIncident(incidents[0]));
+  const [inc] = await db.select().from(incidentsTable).where(eq(incidentsTable.id, id));
+  if (!inc) { res.status(404).json({ message: "Not found" }); return; }
+  res.json(await formatIncident(inc));
 });
 
 router.post("/", async (req, res) => {
-  const { reporterId, plantId, categoryId, incidentDate, detail, actionId, needsFurtherAction } = req.body;
-  const today = new Date().toISOString().split("T")[0]!;
-  const [i] = await db.insert(incidentsTable).values({
-    reporterId, plantId, categoryId, incidentDate, reportedDate: today,
-    detail, actionId, needsFurtherAction,
+  const user = (req as typeof req & { user: { id: number } }).user;
+  const { plantId, categoryId, incidentDate, reportedDate, detail, actionId, needsFurtherAction } = req.body;
+  const reporterId = req.body.reporterId ?? user.id;
+
+  const [cat] = await db.select().from(categoriesTable).where(eq(categoriesTable.id, categoryId));
+  const assignedGroupId = cat?.picGroupId ?? null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const [inc] = await db.insert(incidentsTable).values({
+    reporterId,
+    plantId,
+    categoryId,
+    incidentDate: incidentDate ?? today,
+    reportedDate: reportedDate ?? today,
+    detail,
+    actionId: actionId && actionId !== "none" ? parseInt(String(actionId)) : null,
+    needsFurtherAction: needsFurtherAction ?? false,
+    status: "open",
+    assignedGroupId,
   }).returning();
-  if (!i) { res.status(500).json({ message: "Failed" }); return; }
-  res.status(201).json(await formatIncident(i));
+
+  if (!inc) { res.status(500).json({ message: "Failed" }); return; }
+
+  const formatted = await formatIncident(inc);
+
+  if (assignedGroupId) {
+    try {
+      const members = await db.select({ email: usersTable.email })
+        .from(groupMembersTable)
+        .innerJoin(usersTable, eq(groupMembersTable.userId, usersTable.id))
+        .where(eq(groupMembersTable.groupId, assignedGroupId));
+      const emails = members.map(m => m.email).filter(Boolean) as string[];
+      if (emails.length) {
+        sendEmail(
+          emails,
+          `[HSE] Incident Baru #${inc.id} - ${formatted.categoryName}`,
+          incidentEmailHtml({
+            id: inc.id, detail: inc.detail,
+            categoryName: formatted.categoryName,
+            plantName: formatted.plantName,
+            incidentDate: inc.incidentDate,
+            reporterName: formatted.reporterName,
+            assignedGroupName: formatted.assignedGroupName ?? undefined,
+          })
+        ).catch(() => {});
+      }
+    } catch { /* ignore email errors */ }
+  }
+
+  res.status(201).json(formatted);
 });
 
 router.put("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { status, actionId, needsFurtherAction, detail } = req.body;
-  const updateData: Record<string, unknown> = {};
-  if (status !== undefined) updateData.status = status;
-  if (actionId !== undefined) updateData.actionId = actionId;
-  if (needsFurtherAction !== undefined) updateData.needsFurtherAction = needsFurtherAction;
-  if (detail !== undefined) updateData.detail = detail;
-  if (status === "closed") updateData.closedAt = new Date().toISOString().split("T")[0];
-  const [i] = await db.update(incidentsTable).set(updateData).where(eq(incidentsTable.id, id)).returning();
-  if (!i) { res.status(404).json({ message: "Not found" }); return; }
-  res.json(await formatIncident(i));
+  const { status, actionId, followupNote, needsFurtherAction, plantId, categoryId, incidentDate, reportedDate, detail } = req.body;
+  const updates: Record<string, unknown> = {};
+  if (status !== undefined) {
+    updates.status = status;
+    if (status === "closed") updates.closedAt = new Date().toISOString().slice(0, 10);
+  }
+  if (actionId !== undefined) updates.actionId = (actionId && actionId !== "none") ? parseInt(String(actionId)) : null;
+  if (followupNote !== undefined) updates.followupNote = followupNote;
+  if (needsFurtherAction !== undefined) updates.needsFurtherAction = needsFurtherAction;
+  if (plantId !== undefined) updates.plantId = plantId;
+  if (categoryId !== undefined) {
+    updates.categoryId = categoryId;
+    const [cat] = await db.select().from(categoriesTable).where(eq(categoriesTable.id, categoryId));
+    updates.assignedGroupId = cat?.picGroupId ?? null;
+  }
+  if (incidentDate !== undefined) updates.incidentDate = incidentDate;
+  if (reportedDate !== undefined) updates.reportedDate = reportedDate;
+  if (detail !== undefined) updates.detail = detail;
+
+  const [inc] = await db.update(incidentsTable).set(updates).where(eq(incidentsTable.id, id)).returning();
+  if (!inc) { res.status(404).json({ message: "Not found" }); return; }
+  res.json(await formatIncident(inc));
+});
+
+router.delete("/:id", async (req, res) => {
+  await db.delete(incidentsTable).where(eq(incidentsTable.id, parseInt(req.params.id)));
+  res.status(204).end();
 });
 
 export default router;
