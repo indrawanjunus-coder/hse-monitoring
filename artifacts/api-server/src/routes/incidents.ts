@@ -22,6 +22,7 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
     reporterName: reporter?.name ?? "",
     plantName: plant?.name ?? "",
     categoryName: cat?.name ?? "",
+    categoryRiskLevel: (cat?.riskLevel ?? null) as "high" | "medium" | "low" | null,
     actionName: action?.name ?? null,
     assignedGroupName: assignedGroup?.name ?? null,
     createdAt: inc.createdAt.toISOString(),
