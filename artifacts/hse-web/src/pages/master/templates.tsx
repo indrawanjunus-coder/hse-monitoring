@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
-  Plus, Edit, Trash2, Layout, HelpCircle, ChevronUp, ChevronDown,
+  Plus, Edit, Trash2, LayoutTemplate, HelpCircle, ChevronUp, ChevronDown,
   GripVertical, Camera, Star, CheckSquare, AlignLeft,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -429,7 +429,7 @@ export default function TemplatesPage() {
         <div className="text-center py-12 text-gray-400">Memuat...</div>
       ) : templates.length === 0 ? (
         <div className="text-center py-12">
-          <Layout className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          <LayoutTemplate className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500">Belum ada template</p>
           <Button className="mt-4" onClick={() => { setEditTemplate(undefined); setFormDialog(true); }}>
             <Plus className="w-4 h-4 mr-2" /> Tambah Template
@@ -443,7 +443,7 @@ export default function TemplatesPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <Layout className="w-4 h-4 text-amber-600" />
+                      <LayoutTemplate className="w-4 h-4 text-amber-600" />
                     </div>
                     <div>
                       <p className="font-semibold text-gray-900 text-sm">{t.name}</p>

@@ -129,3 +129,29 @@ Expo React Native mobile app for HSE monitoring. Uses Expo Router with file-base
 - Admin: NIK ADM001 / password admin123
 - Supervisor: NIK SUP001 / password user123
 - Employee: NIK EMP001 / password user123
+
+### `artifacts/hse-web` (`@workspace/hse-web`)
+
+React + Vite web dashboard for HSE monitoring. Uses shadcn/ui, Recharts, wouter, TanStack React Query.
+
+**Features:**
+- Login page (NIK + password, same auth as mobile)
+- Dashboard: monthly incident charts (daily bar, open/closed stacked bar, risk matrix table, category trend bar)
+- Schedules: CRUD for inspection schedules with frequency (daily/weekly/biweekly/monthly/custom), assign to Group or User
+- Incidents: list with status filter, new incident form, detail view with status update
+- Master Data (admin only): Users (CRUD + password reset), Categories (CRUD), Groups (CRUD), Templates with Question Builder (full CRUD with type/mandatory/photo/category/order), Plants (CRUD), Actions (CRUD)
+- Profile: view info + self-service change password
+
+**Key files:**
+- `src/App.tsx` — router setup with auth guard
+- `src/lib/api.ts` — fetch wrapper with Bearer token
+- `src/lib/auth-context.tsx` — auth state (login/logout/user)
+- `src/components/layout.tsx` — sidebar nav + Layout wrapper
+- `src/components/badges.tsx` — RiskBadge, StatusBadge, FrequencyBadge
+- `src/pages/dashboard.tsx` — dashboard with recharts
+- `src/pages/schedules.tsx` — schedule CRUD
+- `src/pages/incidents.tsx` — incident CRUD
+- `src/pages/profile.tsx` — user profile + change password
+- `src/pages/master/` — templates, users, categories, groups, plants, actions
+
+**Served at:** `/hse-web/` (port 5174 in dev)

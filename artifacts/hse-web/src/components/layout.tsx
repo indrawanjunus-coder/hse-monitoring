@@ -7,7 +7,7 @@ import {
   AlertTriangle,
   Users,
   Tag,
-  Layout,
+  Layout as LayoutIcon,
   MapPin,
   Wrench,
   UsersRound,
@@ -40,7 +40,7 @@ const navItems: NavItem[] = [
       { label: "Users", href: "/master/users", icon: <Users className="w-4 h-4" /> },
       { label: "Kategori", href: "/master/categories", icon: <Tag className="w-4 h-4" /> },
       { label: "Group", href: "/master/groups", icon: <UsersRound className="w-4 h-4" /> },
-      { label: "Template", href: "/master/templates", icon: <Layout className="w-4 h-4" /> },
+      { label: "Template", href: "/master/templates", icon: <LayoutIcon className="w-4 h-4" /> },
       { label: "Plant", href: "/master/plants", icon: <MapPin className="w-4 h-4" /> },
       { label: "Aksi", href: "/master/actions", icon: <Wrench className="w-4 h-4" /> },
     ],
@@ -85,19 +85,18 @@ function NavLink({ item, depth = 0 }: { item: NavItem; depth?: number }) {
   }
 
   return (
-    <Link href={item.href}>
-      <a
-        className={cn(
-          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-          isActive
-            ? "bg-blue-600 text-white shadow-sm"
-            : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
-          depth > 0 && "pl-6 text-xs"
-        )}
-      >
-        {item.icon}
-        {item.label}
-      </a>
+    <Link
+      href={item.href}
+      className={cn(
+        "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+        isActive
+          ? "bg-blue-600 text-white shadow-sm"
+          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
+        depth > 0 && "pl-6 text-xs"
+      )}
+    >
+      {item.icon}
+      {item.label}
     </Link>
   );
 }
