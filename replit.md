@@ -139,19 +139,40 @@ React + Vite web dashboard for HSE monitoring. Uses shadcn/ui, Recharts, wouter,
 - Dashboard: monthly incident charts (daily bar, open/closed stacked bar, risk matrix table, category trend bar)
 - Schedules: CRUD for inspection schedules with frequency (daily/weekly/biweekly/monthly/custom), assign to Group or User
 - Incidents: list with status filter, new incident form, detail view with status update
-- Master Data (admin only): Users (CRUD + password reset), Categories (CRUD), Groups (CRUD), Templates with Question Builder (full CRUD with type/mandatory/photo/category/order), Plants (CRUD), Actions (CRUD)
+- Inspeksi Saya (/my-inspections): personal inspection task list for the logged-in user; shows pending/completed schedules and allows filling inspection template inline
+- Riwayat Inspeksi (/history): table of all submitted inspections; click row to view answer detail including expected vs actual answer comparison
+- Laporan Followup H&I (/reports/followup): incidents bucketed by time since creation (< 24h, 24–48h, 48–72h, > 72h) with recharts bar chart and per-bucket detail table
+- Master Data (admin only): Users (CRUD + password reset), Categories (CRUD + PIC Group assignment), Groups (CRUD + member/PIC management), Templates with Question Builder (full CRUD with type/mandatory/photo/category/expectedAnswer/order), Plants (CRUD), Actions (CRUD)
 - Profile: view info + self-service change password
+
+**Template/Question System:**
+- Questions have `expectedAnswer` field (yes/no type only): "yes", "no", or null
+- On inspection submission, if answer != expectedAnswer → auto-creates an open H&I incident with `needsFurtherAction=true`
+- Only Supervisors and Admins can create/edit templates and questions (lock shown for Employee role)
+
+**API Routes:**
+- `GET/POST /api/questions` — question CRUD with `expectedAnswer` field
+- `GET /api/inspections` — all inspections with supervisor/template/plant names
+- `POST /api/inspections` — submit inspection, auto-creates incidents for wrong answers
+- `GET /api/reports/followup` — time-bucketed incident report
 
 **Key files:**
 - `src/App.tsx` — router setup with auth guard
 - `src/lib/api.ts` — fetch wrapper with Bearer token
 - `src/lib/auth-context.tsx` — auth state (login/logout/user)
 - `src/components/layout.tsx` — sidebar nav + Layout wrapper
-- `src/components/badges.tsx` — RiskBadge, StatusBadge, FrequencyBadge
+- `src/components/badges.tsx` — RiskBadge, StatusBadge, FrequencyBadge (statuses: open, in_progress, in-progress, closed, pending, completed, active, resolved)
 - `src/pages/dashboard.tsx` — dashboard with recharts
 - `src/pages/schedules.tsx` — schedule CRUD
 - `src/pages/incidents.tsx` — incident CRUD
+- `src/pages/my-inspections.tsx` — personal inspection task page
+- `src/pages/history.tsx` — inspection history with detail dialog
+- `src/pages/reports/followup-report.tsx` — H&I followup time-bucket report
 - `src/pages/profile.tsx` — user profile + change password
-- `src/pages/master/` — templates, users, categories, groups, plants, actions
+- `src/pages/master/` — templates (w/ expectedAnswer), users, categories (w/ PIC Group), groups, plants, actions
+
+**Important notes:**
+- Radix Select does not allow empty string (`""`) as SelectItem value — use `"none"` for "no selection" and convert in save handler
+- TemplateBuilder uses `staleTime: 0` + `queryClient.setQueryData` pattern to avoid stale cache on re-open
 
 **Served at:** `/hse-web/` (port 5174 in dev)

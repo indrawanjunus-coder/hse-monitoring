@@ -45,7 +45,7 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, reporterI
   const [categoryId, setCategoryId] = useState("");
   const [incidentDate, setIncidentDate] = useState(today);
   const [detail, setDetail] = useState("");
-  const [actionId, setActionId] = useState("");
+  const [actionId, setActionId] = useState("none");
   const [needsFurtherAction, setNeedsFurtherAction] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -59,7 +59,7 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, reporterI
         categoryId: parseInt(categoryId),
         incidentDate,
         detail: detail.trim(),
-        actionId: actionId ? parseInt(actionId) : undefined,
+        actionId: (actionId && actionId !== "none") ? parseInt(actionId) : undefined,
         needsFurtherAction,
       });
     } finally {
@@ -107,7 +107,7 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, reporterI
         <Select value={actionId} onValueChange={setActionId}>
           <SelectTrigger><SelectValue placeholder="Pilih tindakan (opsional)" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Tidak ada</SelectItem>
+            <SelectItem value="none">Tidak ada</SelectItem>
             {actions.map(a => <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>)}
           </SelectContent>
         </Select>

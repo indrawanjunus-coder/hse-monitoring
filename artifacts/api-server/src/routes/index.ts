@@ -12,6 +12,7 @@ import schedulesRouter from "./schedules";
 import inspectionsRouter from "./inspections";
 import incidentsRouter from "./incidents";
 import dashboardRouter from "./dashboard";
+import reportsRouter from "./reports";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use("/schedules", schedulesRouter);
 router.use("/inspections", inspectionsRouter);
 router.use("/incidents", incidentsRouter);
 router.use("/dashboard", dashboardRouter);
+router.use("/reports", reportsRouter);
 
 export default router;

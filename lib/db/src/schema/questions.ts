@@ -13,6 +13,7 @@ export const questionsTable = pgTable("questions", {
   requiresPhoto: boolean("requires_photo").notNull().default(false),
   categoryId: integer("category_id").references(() => categoriesTable.id),
   orderIndex: integer("order_index").notNull().default(0),
+  expectedAnswer: text("expected_answer"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

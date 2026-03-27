@@ -8,6 +8,9 @@ import DashboardPage from "@/pages/dashboard";
 import SchedulesPage from "@/pages/schedules";
 import IncidentsPage from "@/pages/incidents";
 import ProfilePage from "@/pages/profile";
+import MyInspectionsPage from "@/pages/my-inspections";
+import HistoryPage from "@/pages/history";
+import FollowupReportPage from "@/pages/reports/followup-report";
 import UsersPage from "@/pages/master/users";
 import CategoriesPage from "@/pages/master/categories";
 import GroupsPage from "@/pages/master/groups";
@@ -31,8 +34,11 @@ function AppRoutes() {
       <Layout>
         <Switch>
           <Route path="/" component={DashboardPage} />
+          <Route path="/my-inspections" component={MyInspectionsPage} />
+          <Route path="/history" component={HistoryPage} />
           <Route path="/schedules" component={SchedulesPage} />
           <Route path="/incidents" component={IncidentsPage} />
+          <Route path="/reports/followup" component={FollowupReportPage} />
           <Route path="/profile" component={ProfilePage} />
           <Route path="/master/users" component={UsersPage} />
           <Route path="/master/categories" component={CategoriesPage} />
