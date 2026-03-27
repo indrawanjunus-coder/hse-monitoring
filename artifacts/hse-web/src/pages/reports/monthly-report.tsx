@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Legend,
 } from "recharts";
-import { TrendingUp, CheckCircle, AlertTriangle, Clock, Printer, FileBarChart } from "lucide-react";
+import { TrendingUp, Printer, FileBarChart, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface MonthlyData {
   period: { from: string; to: string };
@@ -63,12 +63,30 @@ export default function MonthlyReportPage() {
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo] = useState(defaultTo);
   const [applied, setApplied] = useState({ from: defaultFrom, to: defaultTo });
+  const [incPage, setIncPage] = useState(1);
+  const [incPageSize, setIncPageSize] = useState(20);
 
   const { data, isLoading } = useQuery<MonthlyData>({
     queryKey: ["reports", "monthly", applied.from, applied.to],
     queryFn: () => api.get(`/reports/monthly?from=${applied.from}&to=${applied.to}`),
     enabled: !!applied.from && !!applied.to,
   });
+
+  const actionChartData = useMemo(() => {
+    if (!data?.incidents) return [];
+    const counts = new Map<string, number>();
+    for (const inc of data.incidents) {
+      const name = inc.actionName ?? "Belum Ditentukan";
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count], i) => ({ name, count, color: COLORS[i % COLORS.length]! }));
+  }, [data?.incidents]);
+
+  const totalInc = data?.incidents.length ?? 0;
+  const incTotalPages = Math.max(1, Math.ceil(totalInc / incPageSize));
+  const paginatedIncidents = (data?.incidents ?? []).slice((incPage - 1) * incPageSize, incPage * incPageSize);
 
   const categoryChartData = (data?.byCategory ?? []).map((c, i) => ({
     name: c.categoryName,
@@ -108,7 +126,7 @@ export default function MonthlyReportPage() {
               <Label className="text-xs">Sampai Tanggal</Label>
               <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="h-8 text-sm w-36" />
             </div>
-            <Button size="sm" onClick={() => setApplied({ from, to })}>
+            <Button size="sm" onClick={() => { setApplied({ from, to }); setIncPage(1); }}>
               <FileBarChart className="w-4 h-4 mr-1.5" />Buat Laporan
             </Button>
           </div>
@@ -188,6 +206,28 @@ export default function MonthlyReportPage() {
             </Card>
           </div>
 
+          {/* Action distribution chart */}
+          {actionChartData.length > 0 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="text-base">Distribusi Tindakan Penanganan</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={actionChartData} barSize={36} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
+                    <YAxis type="category" dataKey="name" width={150} tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(v: number) => [`${v} incident`, "Jumlah"]} />
+                    <Bar dataKey="count" name="Jumlah" radius={[0, 3, 3, 0]}>
+                      {actionChartData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
           {/* By category table */}
           <Card className="mb-6">
             <CardHeader>
@@ -230,7 +270,7 @@ export default function MonthlyReportPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center justify-between">
-                <span>Daftar Incident ({data.incidents.length})</span>
+                <span>Daftar Incident ({totalInc})</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -249,7 +289,7 @@ export default function MonthlyReportPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.incidents.map((inc, i) => (
+                    {paginatedIncidents.map((inc, i) => (
                       <tr key={inc.id} className={`border-b ${i % 2 === 0 ? "bg-gray-50" : ""}`}>
                         <td className="py-2 px-3 text-gray-400 font-mono">#{inc.id}</td>
                         <td className="py-2 px-3">{inc.incidentDate}</td>
@@ -265,12 +305,33 @@ export default function MonthlyReportPage() {
                         </td>
                       </tr>
                     ))}
-                    {data.incidents.length === 0 && (
+                    {totalInc === 0 && (
                       <tr><td colSpan={8} className="text-center py-4 text-gray-400">Tidak ada incident dalam periode ini</td></tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              {totalInc > 0 && (
+                <div className="flex items-center justify-between pt-4 mt-2 border-t text-sm text-gray-600">
+                  <div className="flex items-center gap-2">
+                    <span>Tampilkan</span>
+                    {[20, 50].map(n => (
+                      <Button key={n} size="sm" variant={incPageSize === n ? "default" : "outline"} className="h-7 px-2 text-xs"
+                        onClick={() => { setIncPageSize(n); setIncPage(1); }}>{n}</Button>
+                    ))}
+                    <span>per halaman · {totalInc} total</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" disabled={incPage === 1} onClick={() => setIncPage(p => p - 1)}>
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </Button>
+                    <span className="px-2">{incPage} / {incTotalPages}</span>
+                    <Button size="sm" variant="outline" className="h-7 w-7 p-0" disabled={incPage >= incTotalPages} onClick={() => setIncPage(p => p + 1)}>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </>

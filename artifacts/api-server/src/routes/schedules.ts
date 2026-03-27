@@ -1,9 +1,9 @@
 import { Router } from "express";
 import {
   db, schedulesTable, usersTable, templatesTable, plantsTable, groupsTable,
-  scheduleGroupsTable, scheduleUsersTable, groupMembersTable,
+  scheduleGroupsTable, scheduleUsersTable, groupMembersTable, inspectionsTable,
 } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, max } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 import { sendEmail, scheduleReminderHtml } from "../lib/email";
 
@@ -36,6 +36,10 @@ async function formatSchedule(s: typeof schedulesTable.$inferSelect) {
   const groups = await getScheduleGroups(s.id);
   const users = await getScheduleUsers(s.id);
 
+  const [lastInsp] = await db.select({ inspectedAt: max(inspectionsTable.inspectedAt) })
+    .from(inspectionsTable)
+    .where(eq(inspectionsTable.scheduleId, s.id));
+
   return {
     ...s,
     title: s.title ?? template?.name ?? `Inspeksi #${s.id}`,
@@ -48,6 +52,7 @@ async function formatSchedule(s: typeof schedulesTable.$inferSelect) {
     groupIds: groups.map(g => g.id),
     userIds: users.map(u => u.id),
     createdAt: s.createdAt.toISOString(),
+    lastInspectedAt: lastInsp?.inspectedAt ?? null,
   };
 }
 

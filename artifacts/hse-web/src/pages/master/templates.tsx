@@ -15,6 +15,7 @@ import {
   Plus, Edit, Trash2, LayoutTemplate, HelpCircle, ChevronUp, ChevronDown,
   Camera, Star, CheckSquare, AlignLeft, Lock,
 } from "lucide-react";
+import { Pagination } from "@/components/pagination";
 import { useToast } from "@/hooks/use-toast";
 
 interface Question {
@@ -400,6 +401,8 @@ export default function TemplatesPage() {
   const [builderDialog, setBuilderDialog] = useState(false);
   const [editTemplate, setEditTemplate] = useState<Template | undefined>();
   const [builderTemplate, setBuilderTemplate] = useState<Template | undefined>();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const canManage = user?.role === "admin" || user?.role === "supervisor";
 
@@ -465,8 +468,9 @@ export default function TemplatesPage() {
           )}
         </div>
       ) : (
+        <>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {templates.map(t => (
+          {templates.slice((page - 1) * pageSize, page * pageSize).map(t => (
             <Card key={t.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-3">
@@ -506,6 +510,8 @@ export default function TemplatesPage() {
             </Card>
           ))}
         </div>
+        <Pagination page={page} total={templates.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
+        </>
       )}
 
       <Dialog open={formDialog} onOpenChange={setFormDialog}>

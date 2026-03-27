@@ -19,6 +19,7 @@ interface Schedule {
   groupId?: number; groupName?: string;
   userIds?: number[]; groupIds?: number[];
   groups?: { id: number; name: string }[];
+  lastInspectedAt?: string | null;
 }
 interface Question {
   id: number; text: string; answerType: "yes_no" | "text";
@@ -261,24 +262,22 @@ export default function MyInspectionsPage() {
       {completed.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Selesai</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {completed.map(s => (
-              <Card key={s.id} className="border-green-200 opacity-80">
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-700 truncate">{s.title}</p>
-                      <p className="text-xs text-gray-400">
-                        {s.templateName && <span>Template: {s.templateName} · </span>}
-                        {FREQ_LABEL[s.frequency] ?? s.frequency}
-                      </p>
-                    </div>
-                    <Badge className="bg-green-100 text-green-700 border-green-300 flex-shrink-0">
-                      <CheckCircle className="w-3 h-3 mr-1" />Selesai
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
+              <div key={s.id} className="flex items-center gap-3 bg-white border border-green-200 rounded-lg px-4 py-3">
+                <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <CheckCircle className="w-4 h-4 text-green-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-700 truncate">{s.templateName ?? s.title}</p>
+                  {s.lastInspectedAt && (
+                    <p className="text-xs text-gray-400 mt-0.5">Diselesaikan: {s.lastInspectedAt}</p>
+                  )}
+                </div>
+                <Badge className="bg-green-100 text-green-700 border-green-300 flex-shrink-0 text-xs">
+                  Selesai
+                </Badge>
+              </div>
             ))}
           </div>
         </div>

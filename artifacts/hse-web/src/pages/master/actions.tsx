@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, Wrench } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Pagination } from "@/components/pagination";
 
 interface Action { id: number; name: string; description?: string }
 
@@ -47,7 +48,10 @@ export default function ActionsPage() {
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState(false);
   const [editAction, setEditAction] = useState<Action | undefined>();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const { data: actions = [], isLoading } = useQuery<Action[]>({ queryKey: ["actions"], queryFn: () => api.get("/actions") });
+  const paginated = actions.slice((page - 1) * pageSize, page * pageSize);
   const saveMutation = useMutation({
     mutationFn: (d: Record<string, unknown>) => editAction ? api.put(`/actions/${editAction.id}`, d) : api.post("/actions", d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["actions"] }); setDialog(false); toast({ title: "Tindakan disimpan" }); },
@@ -75,7 +79,7 @@ export default function ActionsPage() {
               <Plus className="w-4 h-4 mr-2" />Tambah Tindakan
             </Button>
           </div>
-        ) : actions.map(a => (
+        ) : paginated.map(a => (
           <div key={a.id} className="bg-white border rounded-xl p-4 hover:shadow-md transition-shadow">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
@@ -93,6 +97,7 @@ export default function ActionsPage() {
           </div>
         ))}
       </div>
+      <Pagination page={page} total={actions.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{editAction ? "Edit Tindakan" : "Tambah Tindakan"}</DialogTitle></DialogHeader>

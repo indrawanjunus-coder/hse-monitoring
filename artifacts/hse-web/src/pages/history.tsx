@@ -168,7 +168,7 @@ export default function HistoryPage() {
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Plant</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Frekuensi</th>
                   <th className="text-left px-4 py-3 font-medium text-gray-600">Progress</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Tanggal</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Tanggal Diisi</th>
                   <th className="text-right px-4 py-3 font-medium text-gray-600">Detail</th>
                 </tr>
               </thead>

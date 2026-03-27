@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, MapPin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Pagination } from "@/components/pagination";
 
 interface Plant { id: number; name: string; code?: string; description?: string; location?: string }
 
@@ -59,7 +60,10 @@ export default function PlantsPage() {
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState(false);
   const [editPlant, setEditPlant] = useState<Plant | undefined>();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const { data: plants = [], isLoading } = useQuery<Plant[]>({ queryKey: ["plants"], queryFn: () => api.get("/plants") });
+  const paginated = plants.slice((page - 1) * pageSize, page * pageSize);
   const saveMutation = useMutation({
     mutationFn: (d: Record<string, unknown>) => editPlant ? api.put(`/plants/${editPlant.id}`, d) : api.post("/plants", d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["plants"] }); setDialog(false); toast({ title: "Plant disimpan" }); },
@@ -90,7 +94,7 @@ export default function PlantsPage() {
           <tbody>
             {isLoading ? <tr><td colSpan={5} className="text-center py-8 text-gray-400">Memuat...</td></tr>
               : plants.length === 0 ? <tr><td colSpan={5} className="text-center py-8 text-gray-400">Tidak ada plant</td></tr>
-              : plants.map(p => (
+              : paginated.map(p => (
                 <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50">
                   <td className="px-4 py-3 font-semibold text-gray-900">{p.name}</td>
                   <td className="px-4 py-3 font-mono text-xs text-gray-600">{p.code ?? "-"}</td>
@@ -107,6 +111,7 @@ export default function PlantsPage() {
           </tbody>
         </table>
       </div>
+      <Pagination page={page} total={plants.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{editPlant ? "Edit Plant" : "Tambah Plant"}</DialogTitle></DialogHeader>

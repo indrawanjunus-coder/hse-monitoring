@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RiskBadge } from "@/components/badges";
 import { Plus, Edit, Trash2, UsersRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Pagination } from "@/components/pagination";
 
 interface Category {
   id: number; name: string; description?: string; riskLevel: "high" | "medium" | "low";
@@ -100,6 +101,8 @@ export default function CategoriesPage() {
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState(false);
   const [editCat, setEditCat] = useState<Category | undefined>();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const { data: categories = [], isLoading } = useQuery<Category[]>({
     queryKey: ["categories"], queryFn: () => api.get("/categories"),
@@ -122,6 +125,8 @@ export default function CategoriesPage() {
     mutationFn: (id: number) => api.del(`/categories/${id}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["categories"] }); toast({ title: "Kategori dihapus" }); },
   });
+
+  const paginated = categories.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="p-6">
@@ -150,7 +155,7 @@ export default function CategoriesPage() {
               ? <tr><td colSpan={5} className="text-center py-8 text-gray-400">Memuat...</td></tr>
               : categories.length === 0
               ? <tr><td colSpan={5} className="text-center py-8 text-gray-400">Tidak ada kategori</td></tr>
-              : categories.map(c => (
+              : paginated.map(c => (
                 <tr key={c.id} className="border-b last:border-0 hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -188,6 +193,7 @@ export default function CategoriesPage() {
           </tbody>
         </table>
       </div>
+      <Pagination page={page} total={categories.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{editCat ? "Edit Kategori" : "Tambah Kategori"}</DialogTitle></DialogHeader>

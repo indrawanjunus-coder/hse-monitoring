@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Plus, Edit, Trash2, Users, Key } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Pagination } from "@/components/pagination";
 
 interface User {
   id: number; nik: string; name: string; email?: string;
@@ -156,11 +157,15 @@ export default function UsersPage() {
     },
   });
 
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
   const filtered = users.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
     u.nik.toLowerCase().includes(search.toLowerCase()) ||
     (u.email ?? "").toLowerCase().includes(search.toLowerCase())
   );
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="p-6">
@@ -197,7 +202,7 @@ export default function UsersPage() {
               <tr><td colSpan={5} className="text-center py-8 text-gray-400">Memuat...</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={5} className="text-center py-8 text-gray-400">Tidak ada user</td></tr>
-            ) : filtered.map(u => (
+            ) : paginated.map(u => (
               <tr key={u.id} className="border-b last:border-0 hover:bg-gray-50">
                 <td className="px-4 py-3 font-mono text-xs">{u.nik}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">{u.name}</td>
@@ -228,6 +233,7 @@ export default function UsersPage() {
           </tbody>
         </table>
       </div>
+      <Pagination page={page} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
 
       <Dialog open={formDialog} onOpenChange={setFormDialog}>
         <DialogContent className="max-w-md">

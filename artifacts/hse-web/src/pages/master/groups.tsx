@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, UsersRound, User, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Pagination } from "@/components/pagination";
 
 interface Member { userId: number; name: string; nik: string; email?: string }
 interface Group { id: number; name: string; description?: string; members?: Member[] }
@@ -41,6 +42,9 @@ function GroupForm({ group, onSave, onCancel, allUsers }: {
       return next;
     });
   };
+
+  const selectAll = () => setSelectedIds(new Set(filteredUsers.map(u => u.id)));
+  const deselectAll = () => setSelectedIds(new Set());
 
   const handleSave = async () => {
     if (!name.trim()) return;
@@ -76,7 +80,12 @@ function GroupForm({ group, onSave, onCancel, allUsers }: {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <Label>Anggota / PIC Group</Label>
-          <span className="text-xs text-blue-600 font-medium">{selectedIds.size} dipilih</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-blue-600 font-medium">{selectedIds.size} dipilih</span>
+            <button type="button" onClick={selectAll} className="text-xs text-blue-600 hover:underline">Pilih Semua</button>
+            <span className="text-xs text-gray-300">|</span>
+            <button type="button" onClick={deselectAll} className="text-xs text-gray-500 hover:underline">Hapus Pilihan</button>
+          </div>
         </div>
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" />
@@ -127,6 +136,8 @@ export default function GroupsPage() {
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState(false);
   const [editGroup, setEditGroup] = useState<Group | undefined>();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const { data: groups = [], isLoading } = useQuery<Group[]>({
     queryKey: ["groups"],
@@ -159,6 +170,8 @@ export default function GroupsPage() {
   const openEdit = (g: Group) => { setEditGroup(g); setDialog(true); };
   const openCreate = () => { setEditGroup(undefined); setDialog(true); };
 
+  const paginatedGroups = groups.slice((page - 1) * pageSize, page * pageSize);
+
   return (
     <div className="p-6">
       <PageHeader
@@ -180,7 +193,7 @@ export default function GroupsPage() {
             <p className="text-gray-500 mb-4">Belum ada group</p>
             <Button onClick={openCreate}><Plus className="w-4 h-4 mr-2" />Tambah Group</Button>
           </div>
-        ) : groups.map(g => (
+        ) : paginatedGroups.map(g => (
           <div key={g.id} className="bg-white border rounded-xl p-4 hover:shadow-md transition-shadow flex flex-col">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
@@ -240,6 +253,7 @@ export default function GroupsPage() {
           </div>
         ))}
       </div>
+      <Pagination page={page} total={groups.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
 
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">

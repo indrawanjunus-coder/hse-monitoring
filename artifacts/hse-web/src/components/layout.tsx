@@ -133,7 +133,7 @@ function Sidebar() {
   const roleLabel = user?.role === "admin" ? "Administrator" : user?.role === "supervisor" ? "Supervisor" : "Employee";
 
   return (
-    <aside className="w-60 flex-shrink-0 h-screen flex flex-col bg-white border-r border-gray-200">
+    <aside className="print:hidden w-60 flex-shrink-0 h-screen flex flex-col bg-white border-r border-gray-200">
       {/* Brand */}
       <div className="px-5 py-4 border-b border-gray-100">
         <div className="flex items-center gap-2.5">
