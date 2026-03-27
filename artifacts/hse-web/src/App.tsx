@@ -27,8 +27,8 @@ function AppRoutes() {
   const { user } = useAuth();
   if (!user) return <LoginPage />;
   return (
-    <Layout>
-      <Router base={base}>
+    <Router base={base}>
+      <Layout>
         <Switch>
           <Route path="/" component={DashboardPage} />
           <Route path="/schedules" component={SchedulesPage} />
@@ -42,8 +42,8 @@ function AppRoutes() {
           <Route path="/master/actions" component={ActionsPage} />
           <Route><Redirect to="/" /></Route>
         </Switch>
-      </Router>
-    </Layout>
+      </Layout>
+    </Router>
   );
 }
 

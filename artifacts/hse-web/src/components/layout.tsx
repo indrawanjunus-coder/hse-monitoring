@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronRight,
   Settings,
+  UserCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: <LayoutDashboard className="w-4 h-4" /> },
   { label: "Jadwal Inspeksi", href: "/schedules", icon: <Calendar className="w-4 h-4" /> },
   { label: "Hazard & Incident", href: "/incidents", icon: <AlertTriangle className="w-4 h-4" /> },
+  { label: "Profil", href: "/profile", icon: <UserCircle className="w-4 h-4" /> },
   {
     label: "Master Data", href: "/master", icon: <Settings className="w-4 h-4" />, adminOnly: true,
     children: [
