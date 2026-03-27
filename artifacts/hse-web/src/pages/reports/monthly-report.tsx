@@ -90,21 +90,24 @@ export default function MonthlyReportPage() {
     if (!data?.incidents) return;
     const rows = data.incidents.map(inc => ({
       "Tgl Kejadian": inc.incidentDate,
+      "Tgl Pelaporan": inc.reportedDate,
       "Kategori": inc.categoryName,
       "Plant": inc.plantName,
       "Pelapor": inc.reporterName,
       "Group PIC": inc.assignedGroupName ?? "—",
+      "Detail": inc.detail,
       "Tindakan": inc.actionName ?? "—",
+      "Need Follow Up": inc.followupNote ? "Ya" : "Tidak",
       "Status": STATUS_LABELS[inc.status] ?? inc.status,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Incident");
-    const colWidths = [
-      { wch: 14 }, { wch: 20 }, { wch: 18 }, { wch: 20 },
-      { wch: 20 }, { wch: 22 }, { wch: 14 },
+    ws["!cols"] = [
+      { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 18 },
+      { wch: 20 }, { wch: 20 }, { wch: 50 }, { wch: 22 },
+      { wch: 14 }, { wch: 14 },
     ];
-    ws["!cols"] = colWidths;
     XLSX.writeFile(wb, `incident_${applied.from}_sd_${applied.to}.xlsx`);
   };
 

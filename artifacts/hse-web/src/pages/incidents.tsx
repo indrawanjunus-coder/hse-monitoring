@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RiskBadge, StatusBadge } from "@/components/badges";
-import { Plus, AlertTriangle, MapPin, User, Calendar, ChevronDown, Users, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, AlertTriangle, MapPin, User, Calendar, ChevronDown, Users, ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 
@@ -36,7 +36,21 @@ interface Plant { id: number; name: string }
 interface Category { id: number; name: string; riskLevel?: string }
 interface Action { id: number; name: string }
 
+type SortMode = "reportedDate" | "aging";
+
 const PAGE_SIZE_OPTIONS = [20, 50];
+
+function agingDays(reportedDate: string): number {
+  const reported = new Date(reportedDate).getTime();
+  const now = Date.now();
+  return Math.floor((now - reported) / (1000 * 60 * 60 * 24));
+}
+
+function twoMonthsAgo(): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - 2);
+  return d.toISOString().slice(0, 10);
+}
 
 function Pagination({ page, total, pageSize, onPage, onPageSize }: {
   page: number; total: number; pageSize: number;
@@ -281,7 +295,10 @@ export default function IncidentsPage() {
   const queryClient = useQueryClient();
   const [newOpen, setNewOpen] = useState(false);
   const [detailIncident, setDetailIncident] = useState<Incident | null>(null);
-  const [filterStatus, setFilterStatus] = useState<"all" | "open" | "in_progress" | "closed">("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "open" | "in_progress" | "closed">("open");
+  const [sortMode, setSortMode] = useState<SortMode>("reportedDate");
+  const [dateFrom, setDateFrom] = useState(twoMonthsAgo());
+  const [dateTo, setDateTo] = useState(new Date().toISOString().slice(0, 10));
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -312,9 +329,25 @@ export default function IncidentsPage() {
     else toast({ title: "Incident diperbarui" });
   };
 
-  const filtered = incidents.filter(i => filterStatus === "all" || i.status === filterStatus);
+  const filtered = useMemo(() => {
+    let list = incidents.filter(i => {
+      if (filterStatus !== "all" && i.status !== filterStatus) return false;
+      if (dateFrom && i.reportedDate < dateFrom) return false;
+      if (dateTo && i.reportedDate > dateTo) return false;
+      return true;
+    });
+    if (sortMode === "reportedDate") {
+      list = [...list].sort((a, b) => b.reportedDate.localeCompare(a.reportedDate));
+    } else {
+      list = [...list].sort((a, b) => agingDays(a.reportedDate) > agingDays(b.reportedDate) ? -1 : 1);
+    }
+    return list;
+  }, [incidents, filterStatus, sortMode, dateFrom, dateTo]);
+
   const start = (page - 1) * pageSize;
   const paginated = filtered.slice(start, start + pageSize);
+
+  const resetPage = () => setPage(1);
 
   return (
     <div className="p-6">
@@ -328,17 +361,54 @@ export default function IncidentsPage() {
         }
       />
 
-      <div className="flex gap-2 mb-4">
-        {(["all", "open", "in_progress", "closed"] as const).map(f => (
-          <Button
-            key={f}
-            variant={filterStatus === f ? "default" : "outline"}
-            size="sm"
-            onClick={() => { setFilterStatus(f); setPage(1); }}
-          >
-            {f === "all" ? "Semua" : f === "open" ? "Open" : f === "in_progress" ? "Proses" : "Selesai"}
-          </Button>
-        ))}
+      {/* Filters */}
+      <div className="bg-white border rounded-lg p-3 mb-4 flex flex-wrap items-end gap-3">
+        {/* Status filter */}
+        <div className="space-y-1">
+          <p className="text-xs text-gray-500 font-medium">Status</p>
+          <div className="flex gap-1.5">
+            {(["all", "open", "in_progress", "closed"] as const).map(f => (
+              <Button
+                key={f}
+                variant={filterStatus === f ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs px-2.5"
+                onClick={() => { setFilterStatus(f); resetPage(); }}
+              >
+                {f === "all" ? "Semua" : f === "open" ? "Open" : f === "in_progress" ? "Proses" : "Selesai"}
+              </Button>
+            ))}
+          </div>
+        </div>
+
+        {/* Date range */}
+        <div className="space-y-1">
+          <p className="text-xs text-gray-500 font-medium">Tgl Pelaporan</p>
+          <div className="flex items-center gap-1.5">
+            <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); resetPage(); }}
+              className="h-7 text-xs w-32" />
+            <span className="text-xs text-gray-400">s/d</span>
+            <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); resetPage(); }}
+              className="h-7 text-xs w-32" />
+          </div>
+        </div>
+
+        {/* Sort */}
+        <div className="space-y-1">
+          <p className="text-xs text-gray-500 font-medium">Urutkan</p>
+          <div className="flex gap-1.5">
+            <Button size="sm" className="h-7 text-xs px-2.5 gap-1"
+              variant={sortMode === "reportedDate" ? "default" : "outline"}
+              onClick={() => { setSortMode("reportedDate"); resetPage(); }}>
+              <ArrowUpDown className="w-3 h-3" />Tgl Pelaporan
+            </Button>
+            <Button size="sm" className="h-7 text-xs px-2.5 gap-1"
+              variant={sortMode === "aging" ? "default" : "outline"}
+              onClick={() => { setSortMode("aging"); resetPage(); }}>
+              <ArrowUpDown className="w-3 h-3" />Aging
+            </Button>
+          </div>
+        </div>
       </div>
 
       {isLoading ? (
@@ -346,49 +416,56 @@ export default function IncidentsPage() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-12">
           <AlertTriangle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">Tidak ada incident{filterStatus !== "all" ? " dengan status ini" : ""}</p>
+          <p className="text-gray-500">Tidak ada incident{filterStatus !== "all" ? " dengan status ini" : ""} dalam rentang tanggal ini</p>
         </div>
       ) : (
         <>
           <div className="space-y-3">
-            {paginated.map(inc => (
-              <Card
-                key={inc.id}
-                className="cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => setDetailIncident(inc)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <StatusBadge status={inc.status} />
-                        {inc.categoryRiskLevel && <RiskBadge level={inc.categoryRiskLevel} />}
-                        <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-medium">
-                          {inc.categoryName}
-                        </span>
-                        {inc.needsFurtherAction && (
-                          <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md font-medium">
-                            ⚠ Tindak Lanjut
+            {paginated.map(inc => {
+              const aging = agingDays(inc.reportedDate);
+              return (
+                <Card
+                  key={inc.id}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setDetailIncident(inc)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <StatusBadge status={inc.status} />
+                          {inc.categoryRiskLevel && <RiskBadge level={inc.categoryRiskLevel} />}
+                          <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-medium">
+                            {inc.categoryName}
                           </span>
-                        )}
-                        {inc.assignedGroupName && (
-                          <span className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1 font-medium">
-                            <Users className="w-3 h-3" />{inc.assignedGroupName}
+                          {inc.needsFurtherAction && (
+                            <span className="text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md font-medium">
+                              ⚠ Tindak Lanjut
+                            </span>
+                          )}
+                          {inc.assignedGroupName && (
+                            <span className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1 font-medium">
+                              <Users className="w-3 h-3" />{inc.assignedGroupName}
+                            </span>
+                          )}
+                          <span className={`text-xs px-2 py-0.5 rounded-md font-medium ${aging > 48 ? "bg-red-50 text-red-600 border border-red-200" : aging > 24 ? "bg-amber-50 text-amber-600 border border-amber-200" : "bg-gray-50 text-gray-500 border border-gray-200"}`}>
+                            Aging: {aging} hari
                           </span>
-                        )}
+                        </div>
+                        <p className="text-gray-900 font-medium line-clamp-2 mb-2">{inc.detail}</p>
+                        <div className="flex items-center gap-4 text-xs text-gray-500">
+                          <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{inc.plantName}</span>
+                          <span className="flex items-center gap-1"><User className="w-3 h-3" />{inc.reporterName}</span>
+                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Kejadian: {inc.incidentDate}</span>
+                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />Laporan: {inc.reportedDate}</span>
+                        </div>
                       </div>
-                      <p className="text-gray-900 font-medium line-clamp-2 mb-2">{inc.detail}</p>
-                      <div className="flex items-center gap-4 text-xs text-gray-500">
-                        <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{inc.plantName}</span>
-                        <span className="flex items-center gap-1"><User className="w-3 h-3" />{inc.reporterName}</span>
-                        <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{inc.incidentDate}</span>
-                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-400 rotate-[-90deg] flex-shrink-0 mt-1" />
                     </div>
-                    <ChevronDown className="w-4 h-4 text-gray-400 rotate-[-90deg] flex-shrink-0 mt-1" />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
           <Pagination
             page={page}
