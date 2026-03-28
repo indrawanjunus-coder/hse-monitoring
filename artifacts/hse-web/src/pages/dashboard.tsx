@@ -188,7 +188,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Aksi per Hari vs Kategori */}
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-3 gap-4 mb-4">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Aksi per Hari</CardTitle>
@@ -253,13 +253,44 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader><CardTitle className="text-base">Incident per Kategori</CardTitle></CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-48 flex items-center justify-center text-gray-400">Memuat...</div>
+            ) : categoryData.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-gray-400">Tidak ada data</div>
+            ) : (
+              <div className="space-y-3">
+                {categoryData.map((item) => {
+                  const maxCount = Math.max(...categoryData.map(d => d.count));
+                  const pct = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
+                  return (
+                    <div key={item.name}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="font-medium text-gray-700">{item.name}</span>
+                        <span className="font-bold text-blue-600">{item.count}</span>
+                      </div>
+                      <div className="w-full bg-gray-100 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Card>
-          <CardHeader><CardTitle className="text-base">Risk Matrix per Kategori</CardTitle></CardHeader>
-          <CardContent>
-            <table className="w-full text-sm">
+      <Card className="mt-4">
+        <CardHeader><CardTitle className="text-base">Risk Matrix per Kategori</CardTitle></CardHeader>
+        <CardContent>
+          <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
                   <th className="text-left py-2 font-medium text-gray-600">Kategori</th>
@@ -329,39 +360,6 @@ export default function DashboardPage() {
             </table>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader><CardTitle className="text-base">Incident per Kategori</CardTitle></CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="h-48 flex items-center justify-center text-gray-400">Memuat...</div>
-            ) : categoryData.length === 0 ? (
-              <div className="h-48 flex items-center justify-center text-gray-400">Tidak ada data</div>
-            ) : (
-              <div className="space-y-3">
-                {categoryData.map((item) => {
-                  const maxCount = Math.max(...categoryData.map(d => d.count));
-                  const pct = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
-                  return (
-                    <div key={item.name}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="font-medium text-gray-700">{item.name}</span>
-                        <span className="font-bold text-blue-600">{item.count}</span>
-                      </div>
-                      <div className="w-full bg-gray-100 rounded-full h-2">
-                        <div
-                          className="bg-blue-500 h-2 rounded-full transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
