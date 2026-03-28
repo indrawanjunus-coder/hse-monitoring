@@ -54,18 +54,11 @@ router.get("/summary", async (req, res) => {
     const catIncidents = monthIncidents.filter(i => i.categoryId === cat.id);
     return {
       categoryId: cat.id, categoryName: cat.name,
-      high: catIncidents.filter(i => {
-        const c = categories.find(c => c.id === i.categoryId);
-        return c?.riskLevel === "high";
-      }).length,
-      medium: catIncidents.filter(i => {
-        const c = categories.find(c => c.id === i.categoryId);
-        return c?.riskLevel === "medium";
-      }).length,
-      low: catIncidents.filter(i => {
-        const c = categories.find(c => c.id === i.categoryId);
-        return c?.riskLevel === "low";
-      }).length,
+      riskLevel: cat.riskLevel,
+      fatal: cat.riskLevel === "fatal" ? catIncidents.length : 0,
+      major: cat.riskLevel === "major" ? catIncidents.length : 0,
+      moderate: cat.riskLevel === "moderate" ? catIncidents.length : 0,
+      minor: cat.riskLevel === "minor" ? catIncidents.length : 0,
       total: catIncidents.length,
     };
   }).filter(r => r.total > 0);

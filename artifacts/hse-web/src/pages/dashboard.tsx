@@ -18,7 +18,7 @@ interface DashboardSummary {
   closedIncidents: number;
   dailyIncidents: { date: string; count: number }[];
   dailyStatus: { date: string; open: number; closed: number }[];
-  riskMatrix: { categoryId: number; categoryName: string; high: number; medium: number; low: number; total: number }[];
+  riskMatrix: { categoryId: number; categoryName: string; riskLevel: string; fatal: number; major: number; moderate: number; minor: number; total: number }[];
   categoryTrend: { date: string; categoryId: number; categoryName: string; count: number }[];
   actionsPerDay: Record<string, number | string>[];
   actionNames: string[];
@@ -51,7 +51,7 @@ export default function DashboardPage() {
   const [year, setYear] = useState(now.getFullYear());
   const [, navigate] = useLocation();
 
-  const goToIncidents = (categoryName: string, risk: "high" | "medium" | "low" | "all") => {
+  const goToIncidents = (categoryName: string, risk: "fatal" | "major" | "moderate" | "minor" | "all") => {
     const params = new URLSearchParams({ category: categoryName, risk });
     navigate(`/incidents?${params.toString()}`);
   };
@@ -263,51 +263,65 @@ export default function DashboardPage() {
               <thead>
                 <tr className="border-b">
                   <th className="text-left py-2 font-medium text-gray-600">Kategori</th>
-                  <th className="text-center py-2 font-medium text-red-600">High</th>
-                  <th className="text-center py-2 font-medium text-amber-600">Med</th>
-                  <th className="text-center py-2 font-medium text-green-600">Low</th>
+                  <th className="text-center py-2 font-medium text-red-700">Fatal</th>
+                  <th className="text-center py-2 font-medium text-orange-600">Major</th>
+                  <th className="text-center py-2 font-medium text-amber-600">Moderate</th>
+                  <th className="text-center py-2 font-medium text-green-600">Minor</th>
                   <th className="text-center py-2 font-medium text-gray-600">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
-                  <tr><td colSpan={5} className="text-center py-8 text-gray-400">Memuat...</td></tr>
+                  <tr><td colSpan={6} className="text-center py-8 text-gray-400">Memuat...</td></tr>
                 ) : data?.riskMatrix.length === 0 ? (
-                  <tr><td colSpan={5} className="text-center py-8 text-gray-400">Tidak ada data</td></tr>
+                  <tr><td colSpan={6} className="text-center py-8 text-gray-400">Tidak ada data</td></tr>
                 ) : data?.riskMatrix.map((r) => (
                   <tr key={r.categoryId} className="border-b last:border-0 hover:bg-gray-50">
-                    <td className="py-2 font-medium">{r.categoryName}</td>
-                    <td className="text-center py-2">
-                      {r.high > 0 ? (
-                        <button onClick={() => goToIncidents(r.categoryName, "high")}
-                          className="text-red-600 font-bold hover:underline hover:text-red-700 cursor-pointer px-1 rounded hover:bg-red-50">
-                          {r.high}
-                        </button>
-                      ) : <span className="text-gray-300 font-bold">0</span>}
+                    <td className="py-2 font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <RiskBadge level={r.riskLevel as "fatal" | "major" | "moderate" | "minor"} />
+                        <span>{r.categoryName}</span>
+                      </div>
                     </td>
                     <td className="text-center py-2">
-                      {r.medium > 0 ? (
-                        <button onClick={() => goToIncidents(r.categoryName, "medium")}
-                          className="text-amber-600 font-bold hover:underline hover:text-amber-700 cursor-pointer px-1 rounded hover:bg-amber-50">
-                          {r.medium}
+                      {r.fatal > 0 ? (
+                        <button onClick={() => goToIncidents(r.categoryName, "fatal")}
+                          className="text-red-700 font-bold hover:underline cursor-pointer px-1 rounded hover:bg-red-50">
+                          {r.fatal}
                         </button>
-                      ) : <span className="text-gray-300 font-bold">0</span>}
+                      ) : <span className="text-gray-300 font-bold">—</span>}
                     </td>
                     <td className="text-center py-2">
-                      {r.low > 0 ? (
-                        <button onClick={() => goToIncidents(r.categoryName, "low")}
-                          className="text-green-600 font-bold hover:underline hover:text-green-700 cursor-pointer px-1 rounded hover:bg-green-50">
-                          {r.low}
+                      {r.major > 0 ? (
+                        <button onClick={() => goToIncidents(r.categoryName, "major")}
+                          className="text-orange-600 font-bold hover:underline cursor-pointer px-1 rounded hover:bg-orange-50">
+                          {r.major}
                         </button>
-                      ) : <span className="text-gray-300 font-bold">0</span>}
+                      ) : <span className="text-gray-300 font-bold">—</span>}
+                    </td>
+                    <td className="text-center py-2">
+                      {r.moderate > 0 ? (
+                        <button onClick={() => goToIncidents(r.categoryName, "moderate")}
+                          className="text-amber-600 font-bold hover:underline cursor-pointer px-1 rounded hover:bg-amber-50">
+                          {r.moderate}
+                        </button>
+                      ) : <span className="text-gray-300 font-bold">—</span>}
+                    </td>
+                    <td className="text-center py-2">
+                      {r.minor > 0 ? (
+                        <button onClick={() => goToIncidents(r.categoryName, "minor")}
+                          className="text-green-600 font-bold hover:underline cursor-pointer px-1 rounded hover:bg-green-50">
+                          {r.minor}
+                        </button>
+                      ) : <span className="text-gray-300 font-bold">—</span>}
                     </td>
                     <td className="text-center py-2">
                       {r.total > 0 ? (
                         <button onClick={() => goToIncidents(r.categoryName, "all")}
-                          className="text-gray-800 font-bold hover:underline hover:text-gray-900 cursor-pointer px-1 rounded hover:bg-gray-100">
+                          className="text-gray-800 font-bold hover:underline cursor-pointer px-1 rounded hover:bg-gray-100">
                           {r.total}
                         </button>
-                      ) : <span className="text-gray-300 font-bold">0</span>}
+                      ) : <span className="text-gray-300 font-bold">—</span>}
                     </td>
                   </tr>
                 ))}

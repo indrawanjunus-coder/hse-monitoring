@@ -11,6 +11,7 @@ import {
   PieChart, Pie, Legend,
 } from "recharts";
 import { TrendingUp, Printer, FileBarChart, Download } from "lucide-react";
+import { RiskBadge } from "@/components/badges";
 import * as XLSX from "xlsx";
 
 interface MonthlyData {
@@ -20,6 +21,7 @@ interface MonthlyData {
     withAction: number; resolutionRate: number;
   };
   byCategory: { categoryId: number; categoryName: string; total: number; closed: number; open: number; inProgress: number }[];
+  riskMatrix: { categoryId: number; categoryName: string; riskLevel: string | null; fatal: number; major: number; moderate: number; minor: number; total: number }[];
   byType: { type: string; label: string; total: number; open: number; closed: number; inProgress: number }[];
   typeMatrix: Record<string, number | string>[];
   typeCategories: string[];
@@ -243,6 +245,54 @@ export default function MonthlyReportPage() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Risk Matrix Severity × Kategori */}
+          {data.riskMatrix && data.riskMatrix.length > 0 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="text-base">Risk Matrix (Severity × Kategori)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left py-2 px-3 font-medium text-gray-600">Kategori</th>
+                      <th className="text-center py-2 px-3 font-medium text-red-700">Fatal</th>
+                      <th className="text-center py-2 px-3 font-medium text-orange-600">Major</th>
+                      <th className="text-center py-2 px-3 font-medium text-amber-600">Moderate</th>
+                      <th className="text-center py-2 px-3 font-medium text-green-600">Minor</th>
+                      <th className="text-center py-2 px-3 font-bold text-gray-700">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.riskMatrix.map((r, i) => (
+                      <tr key={r.categoryId} className={`border-b ${i % 2 === 0 ? "" : "bg-gray-50"}`}>
+                        <td className="py-2 px-3 font-medium">
+                          <div className="flex items-center gap-1.5">
+                            {r.riskLevel && <RiskBadge level={r.riskLevel as "fatal" | "major" | "moderate" | "minor"} />}
+                            <span>{r.categoryName}</span>
+                          </div>
+                        </td>
+                        <td className={`py-2 px-3 text-center font-semibold ${r.fatal > 0 ? "text-red-700" : "text-gray-300"}`}>{r.fatal > 0 ? r.fatal : "—"}</td>
+                        <td className={`py-2 px-3 text-center font-semibold ${r.major > 0 ? "text-orange-600" : "text-gray-300"}`}>{r.major > 0 ? r.major : "—"}</td>
+                        <td className={`py-2 px-3 text-center font-semibold ${r.moderate > 0 ? "text-amber-600" : "text-gray-300"}`}>{r.moderate > 0 ? r.moderate : "—"}</td>
+                        <td className={`py-2 px-3 text-center font-semibold ${r.minor > 0 ? "text-green-600" : "text-gray-300"}`}>{r.minor > 0 ? r.minor : "—"}</td>
+                        <td className="py-2 px-3 text-center font-bold text-blue-700">{r.total}</td>
+                      </tr>
+                    ))}
+                    <tr className="border-t-2 bg-gray-100 font-bold">
+                      <td className="py-2 px-3">Total</td>
+                      {(["fatal", "major", "moderate", "minor"] as const).map(sev => {
+                        const colTotal = data.riskMatrix.reduce((s, r) => s + r[sev], 0);
+                        return <td key={sev} className="py-2 px-3 text-center text-gray-800">{colTotal > 0 ? colTotal : "—"}</td>;
+                      })}
+                      <td className="py-2 px-3 text-center text-blue-800">{data.summary.total}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </CardContent>
             </Card>
           )}

@@ -175,6 +175,22 @@ router.get("/monthly", async (req, res) => {
     else byType[type]!.open++;
   }
 
+  // Risk matrix by severity level × category
+  const riskMatrix = Object.values(byCategory).map(cat => {
+    const catRows = rawIncidents.filter(r => String(r.inc.categoryId) === String(cat.categoryId));
+    const riskLevel = catRows[0]?.cat?.riskLevel ?? null;
+    return {
+      categoryId: cat.categoryId,
+      categoryName: cat.categoryName,
+      riskLevel,
+      fatal: catRows.filter(r => r.cat?.riskLevel === "fatal").length,
+      major: catRows.filter(r => r.cat?.riskLevel === "major").length,
+      moderate: catRows.filter(r => r.cat?.riskLevel === "moderate").length,
+      minor: catRows.filter(r => r.cat?.riskLevel === "minor").length,
+      total: cat.total,
+    };
+  }).filter(r => r.total > 0);
+
   // By plant
   const byPlant: Record<string, { plantId: number; plantName: string; total: number; closed: number }> = {};
   for (const r of rawIncidents) {
@@ -220,6 +236,7 @@ router.get("/monthly", async (req, res) => {
       resolutionRate: total > 0 ? Math.round((closed / total) * 100) : 0,
     },
     byCategory: Object.values(byCategory),
+    riskMatrix,
     byType: Object.values(byType).filter(t => t.total > 0),
     typeMatrix,
     typeCategories,
