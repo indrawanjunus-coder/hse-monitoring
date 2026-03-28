@@ -14,3 +14,4 @@ export * from "./incidents";
 export * from "./smtp-settings";
 export * from "./indicators";
 export * from "./preventive-actions";
+export * from "./incident-types";

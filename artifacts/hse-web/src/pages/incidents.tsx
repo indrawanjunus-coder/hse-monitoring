@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { RiskBadge, StatusBadge, IncidentTypeBadge, INCIDENT_TYPES } from "@/components/badges";
+import { RiskBadge, StatusBadge, IncidentTypeBadge } from "@/components/badges";
 import { Plus, AlertTriangle, MapPin, User, Calendar, ChevronDown, Users, ChevronLeft, ChevronRight, ArrowUpDown, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -56,12 +56,16 @@ function twoMonthsAgo(): string {
   return d.toISOString().slice(0, 10);
 }
 
+interface ApiIncidentType { id: number; code: string; label: string; isActive: boolean; }
+
 function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiveActions, reporterId }: {
   onSave: (data: Record<string, unknown>) => Promise<void>;
   onCancel: () => void;
   plants: Plant[]; categories: Category[]; actions: Action[]; preventiveActions: PreventiveAction[];
   reporterId: number;
 }) {
+  const { data: incidentTypes = [] } = useQuery<ApiIncidentType[]>({ queryKey: ["incident-types"], queryFn: () => api.get("/incident-types") });
+  const activeTypes = incidentTypes.filter(t => t.isActive);
   const today = new Date().toISOString().split("T")[0]!;
   const [plantId, setPlantId] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -125,7 +129,7 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
           <Select value={incidentType} onValueChange={setIncidentType}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              {INCIDENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+              {activeTypes.map(t => <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -185,6 +189,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
 }) {
   const { user } = useAuth();
   const canUpdate = user?.role === "admin" || user?.role === "supervisor";
+  const { data: incidentTypes = [] } = useQuery<ApiIncidentType[]>({ queryKey: ["incident-types"], queryFn: () => api.get("/incident-types") });
   const [incidentType, setIncidentType] = useState(incident.incidentType ?? "none");
   const [actionId, setActionId] = useState(String(incident.actionId ?? "none"));
   const [preventiveActionId, setPreventiveActionId] = useState(String(incident.preventiveActionId ?? "none"));
@@ -262,7 +267,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Tidak Ditentukan</SelectItem>
-                {INCIDENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                {incidentTypes.map(t => <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -351,6 +356,7 @@ export default function IncidentsPage() {
   const { data: categories = [] } = useQuery<Category[]>({ queryKey: ["categories"], queryFn: () => api.get("/categories") });
   const { data: actions = [] } = useQuery<Action[]>({ queryKey: ["actions"], queryFn: () => api.get("/actions") });
   const { data: preventiveActions = [] } = useQuery<PreventiveAction[]>({ queryKey: ["preventive-actions"], queryFn: () => api.get("/preventive-actions") });
+  const { data: incidentTypesMaster = [] } = useQuery<ApiIncidentType[]>({ queryKey: ["incident-types"], queryFn: () => api.get("/incident-types") });
 
   const createMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) => api.post("/incidents", data),
@@ -390,7 +396,7 @@ export default function IncidentsPage() {
   const resetPage = () => setPage(1);
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
-  const typeMap: Record<string, string> = { near_miss: "Near Miss", accident: "Accident", unsafe_act: "Unsafe Act", unsafe_condition: "Unsafe Condition" };
+  const typeMap: Record<string, string> = incidentTypesMaster.reduce((m, t) => ({ ...m, [t.code]: t.label }), { near_miss: "Near Miss", accident: "Accident", unsafe_act: "Unsafe Act", unsafe_condition: "Unsafe Condition" });
 
   return (
     <div className="p-6">
@@ -430,9 +436,9 @@ export default function IncidentsPage() {
           <p className="text-xs text-gray-500 font-medium">Tipe</p>
           <div className="flex gap-1.5 flex-wrap">
             <Button size="sm" variant={filterType === "" ? "default" : "outline"} className="h-7 text-xs px-2.5" onClick={() => { setFilterType(""); resetPage(); }}>Semua</Button>
-            {INCIDENT_TYPES.map(t => (
-              <Button key={t.value} size="sm" variant={filterType === t.value ? "default" : "outline"} className="h-7 text-xs px-2.5"
-                onClick={() => { setFilterType(t.value); resetPage(); }}>{t.label}</Button>
+            {incidentTypesMaster.map(t => (
+              <Button key={t.code} size="sm" variant={filterType === t.code ? "default" : "outline"} className="h-7 text-xs px-2.5"
+                onClick={() => { setFilterType(t.code); resetPage(); }}>{t.label}</Button>
             ))}
           </div>
         </div>

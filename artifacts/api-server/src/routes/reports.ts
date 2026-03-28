@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, incidentsTable, usersTable, categoriesTable, actionsTable, groupsTable, plantsTable } from "@workspace/db";
-import { eq, desc, gte, lte, and } from "drizzle-orm";
+import { db, incidentsTable, usersTable, categoriesTable, actionsTable, groupsTable, plantsTable, indicatorsTable, indicatorQuestionsTable, questionsTable, inspectionAnswersTable, inspectionsTable } from "@workspace/db";
+import { eq, desc, gte, lte, and, inArray, sql } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 
 const router = Router();
@@ -299,6 +299,93 @@ router.get("/action-matrix", async (req, res) => {
   }
 
   res.json({ plants, actions: actions.filter(a => matrixRows.find(r => r.actionName === a)), rows: matrixRows, plantTotals, grandTotal: rows.length });
+});
+
+// Indicator HSE achievement report
+router.get("/indicators", async (req, res) => {
+  const { month, year } = req.query;
+  const indicators = await db.select().from(indicatorsTable).orderBy(indicatorsTable.type, indicatorsTable.id);
+
+  const result = await Promise.all(indicators.map(async (ind) => {
+    const links = await db.select().from(indicatorQuestionsTable).where(eq(indicatorQuestionsTable.indicatorId, ind.id));
+    if (links.length === 0) return { ...ind, percentage: null, questionCount: 0, totalAnswers: 0, correctAnswers: 0 };
+
+    const questionIds = links.map(l => l.questionId);
+    const qs = await db.select().from(questionsTable).where(inArray(questionsTable.id, questionIds));
+
+    // Join answers with inspections to filter by month/year
+    let answersQuery = db.select({
+      id: inspectionAnswersTable.id,
+      questionId: inspectionAnswersTable.questionId,
+      answerYesNo: inspectionAnswersTable.answerYesNo,
+      answerText: inspectionAnswersTable.answerText,
+      inspectedAt: inspectionsTable.inspectedAt,
+    })
+      .from(inspectionAnswersTable)
+      .leftJoin(inspectionsTable, eq(inspectionAnswersTable.inspectionId, inspectionsTable.id))
+      .where(inArray(inspectionAnswersTable.questionId, questionIds));
+
+    const answers = await answersQuery;
+
+    // Filter by month/year if provided
+    const filtered = (month && year)
+      ? answers.filter(a => {
+          if (!a.inspectedAt) return false;
+          const d = new Date(a.inspectedAt);
+          return d.getMonth() + 1 === parseInt(String(month)) && d.getFullYear() === parseInt(String(year));
+        })
+      : year
+        ? answers.filter(a => {
+            if (!a.inspectedAt) return false;
+            return new Date(a.inspectedAt).getFullYear() === parseInt(String(year));
+          })
+        : answers;
+
+    let totalWeight = 0;
+    let correctWeight = 0;
+    for (const link of links) {
+      const q = qs.find(q => q.id === link.questionId);
+      if (!q) continue;
+      const qAnswers = filtered.filter(a => a.questionId === link.questionId);
+      for (const ans of qAnswers) {
+        totalWeight += link.weight;
+        if (q.answerType === "yes_no") {
+          const expected = q.expectedAnswer === "no" ? false : true;
+          if (ans.answerYesNo === expected) correctWeight += link.weight;
+        } else {
+          if (ans.answerText && ans.answerText.trim() !== "") correctWeight += link.weight;
+        }
+      }
+    }
+
+    const percentage = totalWeight > 0 ? Math.round((correctWeight / totalWeight) * 100) : null;
+    return { ...ind, percentage, questionCount: links.length, totalAnswers: filtered.length, correctAnswers: correctWeight };
+  }));
+
+  // Group by type
+  const byType: Record<string, typeof result> = {};
+  for (const r of result) {
+    if (!byType[r.type]) byType[r.type] = [];
+    byType[r.type].push(r);
+  }
+
+  const totalWithData = result.filter(r => r.percentage !== null);
+  const avgPercentage = totalWithData.length > 0
+    ? Math.round(totalWithData.reduce((s, r) => s + (r.percentage ?? 0), 0) / totalWithData.length)
+    : null;
+  const metTarget = result.filter(r => r.percentage !== null && r.percentage >= r.targetPercentage).length;
+
+  res.json({
+    indicators: result,
+    byType,
+    summary: {
+      total: result.length,
+      withData: totalWithData.length,
+      avgPercentage,
+      metTarget,
+      notMet: totalWithData.length - metTarget,
+    },
+  });
 });
 
 export default router;

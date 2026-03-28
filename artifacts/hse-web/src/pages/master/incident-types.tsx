@@ -1,0 +1,222 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { api } from "@/lib/api";
+import { PageHeader } from "@/components/layout";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Edit, Trash2, AlertTriangle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
+
+interface IncidentType {
+  id: number;
+  code: string;
+  label: string;
+  description?: string | null;
+  isActive: boolean;
+  orderIndex: number;
+}
+
+const TYPE_COLORS: Record<string, string> = {
+  near_miss: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  accident: "bg-red-100 text-red-800 border-red-300",
+  unsafe_act: "bg-orange-100 text-orange-800 border-orange-300",
+  unsafe_condition: "bg-purple-100 text-purple-800 border-purple-300",
+};
+
+function TypeBadge({ code, label }: { code: string; label: string }) {
+  const cls = TYPE_COLORS[code] ?? "bg-gray-100 text-gray-700 border-gray-300";
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold ${cls}`}>
+      <AlertTriangle className="w-3 h-3" />
+      {label}
+    </span>
+  );
+}
+
+function IncidentTypeForm({ type, onSave, onCancel }: {
+  type?: IncidentType;
+  onSave: (d: Record<string, unknown>) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [code, setCode] = useState(type?.code ?? "");
+  const [label, setLabel] = useState(type?.label ?? "");
+  const [description, setDescription] = useState(type?.description ?? "");
+  const [isActive, setIsActive] = useState(type?.isActive ?? true);
+  const [orderIndex, setOrderIndex] = useState(String(type?.orderIndex ?? 0));
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    if (!label.trim() || (!type && !code.trim())) return;
+    setSaving(true);
+    try {
+      await onSave({ code: code.trim(), label: label.trim(), description: description.trim() || null, isActive, orderIndex: parseInt(orderIndex) || 0 });
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {!type && (
+        <div className="space-y-1">
+          <Label>Kode <span className="text-red-500">*</span></Label>
+          <Input value={code} onChange={e => setCode(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_"))} placeholder="contoh: near_miss, accident" />
+          <p className="text-xs text-gray-500">Hanya huruf kecil, angka, dan underscore. Tidak bisa diubah setelah disimpan.</p>
+        </div>
+      )}
+      <div className="space-y-1">
+        <Label>Label / Nama Tampilan <span className="text-red-500">*</span></Label>
+        <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="contoh: Near Miss, Kecelakaan" />
+      </div>
+      <div className="space-y-1">
+        <Label>Deskripsi</Label>
+        <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Penjelasan singkat tipe incident ini" />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1">
+          <Label>Urutan Tampil</Label>
+          <Input type="number" value={orderIndex} onChange={e => setOrderIndex(e.target.value)} min={0} />
+        </div>
+        <div className="flex items-center gap-2 pt-6">
+          <Switch checked={isActive} onCheckedChange={setIsActive} />
+          <Label>{isActive ? "Aktif" : "Nonaktif"}</Label>
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onCancel}>Batal</Button>
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Menyimpan..." : "Simpan"}
+        </Button>
+      </DialogFooter>
+    </div>
+  );
+}
+
+export default function IncidentTypesPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [showForm, setShowForm] = useState(false);
+  const [editTarget, setEditTarget] = useState<IncidentType | null>(null);
+
+  const { data: types = [], isLoading } = useQuery<IncidentType[]>({
+    queryKey: ["incident-types"],
+    queryFn: () => api.get("/incident-types"),
+  });
+
+  const createMut = useMutation({
+    mutationFn: (d: Record<string, unknown>) => api.post("/incident-types", d),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["incident-types"] }); setShowForm(false); toast({ title: "Tipe incident berhasil ditambahkan" }); },
+    onError: (e: any) => toast({ title: e.message ?? "Gagal menyimpan", variant: "destructive" }),
+  });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, ...d }: Record<string, unknown>) => api.put(`/incident-types/${id}`, d),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["incident-types"] }); setEditTarget(null); toast({ title: "Tipe incident diperbarui" }); },
+    onError: (e: any) => toast({ title: e.message ?? "Gagal memperbarui", variant: "destructive" }),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => api.delete(`/incident-types/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["incident-types"] }); toast({ title: "Tipe incident dihapus" }); },
+  });
+
+  const handleDelete = (t: IncidentType) => {
+    if (confirm(`Hapus tipe incident "${t.label}"?`)) deleteMut.mutate(t.id);
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Master Tipe Incident"
+        subtitle="Kelola daftar tipe incident yang tersedia di sistem"
+        action={isAdmin ? <Button size="sm" onClick={() => setShowForm(true)}><Plus className="w-4 h-4 mr-1" />Tambah Tipe</Button> : undefined}
+      />
+
+      {isLoading ? (
+        <div className="text-center py-12 text-gray-400">Memuat data...</div>
+      ) : types.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <AlertTriangle className="w-10 h-10 mx-auto mb-2 opacity-30" />
+          <p>Belum ada tipe incident</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600">Label</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600">Kode</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600 hidden md:table-cell">Deskripsi</th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
+                <th className="px-4 py-3 text-center font-semibold text-gray-600">Urutan</th>
+                {isAdmin && <th className="px-4 py-3" />}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {types.map(t => (
+                <tr key={t.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-3">
+                    <TypeBadge code={t.code} label={t.label} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{t.code}</code>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{t.description ?? "—"}</td>
+                  <td className="px-4 py-3 text-center">
+                    {t.isActive
+                      ? <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">Aktif</Badge>
+                      : <Badge variant="outline" className="text-gray-400">Nonaktif</Badge>
+                    }
+                  </td>
+                  <td className="px-4 py-3 text-center text-gray-500">{t.orderIndex}</td>
+                  {isAdmin && (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditTarget(t)}>
+                          <Edit className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                          onClick={() => handleDelete(t)}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Tambah Tipe Incident</DialogTitle></DialogHeader>
+          <IncidentTypeForm
+            onSave={async d => { await createMut.mutateAsync(d); }}
+            onCancel={() => setShowForm(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {editTarget && (
+        <Dialog open={true} onOpenChange={() => setEditTarget(null)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader><DialogTitle>Edit Tipe Incident</DialogTitle></DialogHeader>
+            <IncidentTypeForm
+              type={editTarget}
+              onSave={async d => { await updateMut.mutateAsync({ id: editTarget.id, ...d }); }}
+              onCancel={() => setEditTarget(null)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}
