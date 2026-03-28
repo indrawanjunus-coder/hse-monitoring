@@ -20,9 +20,10 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { templateId, text, answerType, isMandatory, requiresPhoto, categoryId, orderIndex, expectedAnswer } = req.body;
+  const { templateId, text, answerType, isMandatory, requiresPhoto, categoryId, orderIndex, expectedAnswer, questionType } = req.body;
   const [q] = await db.insert(questionsTable).values({
     templateId, text, answerType, isMandatory, requiresPhoto, categoryId, orderIndex, expectedAnswer,
+    questionType: questionType ?? null,
   }).returning();
   if (!q) { res.status(500).json({ message: "Failed" }); return; }
   res.status(201).json({ ...q, createdAt: q.createdAt.toISOString() });
@@ -30,7 +31,7 @@ router.post("/", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { templateId, text, answerType, isMandatory, requiresPhoto, categoryId, orderIndex, expectedAnswer } = req.body;
+  const { templateId, text, answerType, isMandatory, requiresPhoto, categoryId, orderIndex, expectedAnswer, questionType } = req.body;
   const updates: Partial<typeof questionsTable.$inferInsert> = {};
   if (templateId !== undefined) updates.templateId = templateId;
   if (text !== undefined) updates.text = text;
@@ -40,6 +41,7 @@ router.put("/:id", async (req, res) => {
   if (categoryId !== undefined) updates.categoryId = categoryId;
   if (orderIndex !== undefined) updates.orderIndex = orderIndex;
   if (expectedAnswer !== undefined) updates.expectedAnswer = expectedAnswer;
+  if (questionType !== undefined) updates.questionType = questionType ?? null;
   const [q] = await db.update(questionsTable).set(updates).where(eq(questionsTable.id, id)).returning();
   if (!q) { res.status(404).json({ message: "Not found" }); return; }
   const cats = q.categoryId ? await db.select().from(categoriesTable).where(eq(categoriesTable.id, q.categoryId)) : [];

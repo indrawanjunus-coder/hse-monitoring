@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
   db, incidentsTable, usersTable, plantsTable, categoriesTable, actionsTable, groupsTable,
-  groupMembersTable,
+  groupMembersTable, preventiveActionsTable,
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
@@ -15,6 +15,7 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
   const [plant] = await db.select().from(plantsTable).where(eq(plantsTable.id, inc.plantId));
   const [cat] = await db.select().from(categoriesTable).where(eq(categoriesTable.id, inc.categoryId));
   const [action] = inc.actionId ? await db.select().from(actionsTable).where(eq(actionsTable.id, inc.actionId)) : [undefined];
+  const [preventiveAction] = inc.preventiveActionId ? await db.select().from(preventiveActionsTable).where(eq(preventiveActionsTable.id, inc.preventiveActionId)) : [undefined];
   const [assignedGroup] = inc.assignedGroupId ? await db.select().from(groupsTable).where(eq(groupsTable.id, inc.assignedGroupId)) : [undefined];
 
   return {
@@ -22,8 +23,9 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
     reporterName: reporter?.name ?? "",
     plantName: plant?.name ?? "",
     categoryName: cat?.name ?? "",
-    categoryRiskLevel: (cat?.riskLevel ?? null) as "high" | "medium" | "low" | null,
+    categoryRiskLevel: (cat?.riskLevel ?? null) as "minor" | "moderate" | "major" | "fatal" | null,
     actionName: action?.name ?? null,
+    preventiveActionName: preventiveAction?.name ?? null,
     assignedGroupName: assignedGroup?.name ?? null,
     createdAt: inc.createdAt.toISOString(),
   };
@@ -44,7 +46,7 @@ router.get("/:id", async (req, res) => {
 
 router.post("/", async (req, res) => {
   const user = (req as typeof req & { user: { id: number } }).user;
-  const { plantId, categoryId, incidentDate, reportedDate, detail, actionId, needsFurtherAction } = req.body;
+  const { plantId, categoryId, incidentDate, reportedDate, detail, actionId, preventiveActionId, targetDate, rootCause, needsFurtherAction, incidentType } = req.body;
   const reporterId = req.body.reporterId ?? user.id;
 
   const [cat] = await db.select().from(categoriesTable).where(eq(categoriesTable.id, categoryId));
@@ -58,7 +60,11 @@ router.post("/", async (req, res) => {
     incidentDate: incidentDate ?? today,
     reportedDate: reportedDate ?? today,
     detail,
+    incidentType: incidentType ?? "near_miss",
     actionId: actionId && actionId !== "none" ? parseInt(String(actionId)) : null,
+    preventiveActionId: preventiveActionId && preventiveActionId !== "none" ? parseInt(String(preventiveActionId)) : null,
+    targetDate: targetDate || null,
+    rootCause: rootCause?.trim() || null,
     needsFurtherAction: needsFurtherAction ?? false,
     status: "open",
     assignedGroupId,
@@ -97,13 +103,18 @@ router.post("/", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const { status, actionId, followupNote, needsFurtherAction, plantId, categoryId, incidentDate, reportedDate, detail } = req.body;
+  const {
+    status, actionId, preventiveActionId, followupNote, needsFurtherAction,
+    plantId, categoryId, incidentDate, reportedDate, detail,
+    incidentType, targetDate, rootCause,
+  } = req.body;
   const updates: Record<string, unknown> = {};
   if (status !== undefined) {
     updates.status = status;
     if (status === "closed") updates.closedAt = new Date().toISOString().slice(0, 10);
   }
   if (actionId !== undefined) updates.actionId = (actionId && actionId !== "none") ? parseInt(String(actionId)) : null;
+  if (preventiveActionId !== undefined) updates.preventiveActionId = (preventiveActionId && preventiveActionId !== "none") ? parseInt(String(preventiveActionId)) : null;
   if (followupNote !== undefined) updates.followupNote = followupNote;
   if (needsFurtherAction !== undefined) updates.needsFurtherAction = needsFurtherAction;
   if (plantId !== undefined) updates.plantId = plantId;
@@ -115,6 +126,9 @@ router.put("/:id", async (req, res) => {
   if (incidentDate !== undefined) updates.incidentDate = incidentDate;
   if (reportedDate !== undefined) updates.reportedDate = reportedDate;
   if (detail !== undefined) updates.detail = detail;
+  if (incidentType !== undefined) updates.incidentType = incidentType;
+  if (targetDate !== undefined) updates.targetDate = targetDate || null;
+  if (rootCause !== undefined) updates.rootCause = rootCause?.trim() || null;
 
   const [inc] = await db.update(incidentsTable).set(updates).where(eq(incidentsTable.id, id)).returning();
   if (!inc) { res.status(404).json({ message: "Not found" }); return; }

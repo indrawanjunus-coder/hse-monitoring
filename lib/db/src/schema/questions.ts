@@ -9,6 +9,7 @@ export const questionsTable = pgTable("questions", {
   templateId: integer("template_id").notNull().references(() => templatesTable.id, { onDelete: "cascade" }),
   text: text("text").notNull(),
   answerType: text("answer_type", { enum: ["yes_no", "text"] }).notNull().default("yes_no"),
+  questionType: text("question_type", { enum: ["near_miss", "accident", "unsafe_act", "unsafe_condition"] }),
   isMandatory: boolean("is_mandatory").notNull().default(true),
   requiresPhoto: boolean("requires_photo").notNull().default(false),
   categoryId: integer("category_id").references(() => categoriesTable.id),

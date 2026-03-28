@@ -1,12 +1,17 @@
 import { cn } from "@/lib/utils";
 
-type RiskLevel = "high" | "medium" | "low";
+type RiskLevel = "minor" | "moderate" | "major" | "fatal" | "high" | "medium" | "low";
 type Status = "open" | "in_progress" | "closed" | "pending" | "completed" | "active" | string;
 
 const riskConfig: Record<RiskLevel, { label: string; class: string }> = {
-  high: { label: "High", class: "bg-red-100 text-red-700 border border-red-200" },
-  medium: { label: "Medium", class: "bg-amber-100 text-amber-700 border border-amber-200" },
-  low: { label: "Low", class: "bg-green-100 text-green-700 border border-green-200" },
+  minor: { label: "Minor", class: "bg-green-100 text-green-700 border border-green-200" },
+  moderate: { label: "Moderate", class: "bg-yellow-100 text-yellow-700 border border-yellow-200" },
+  major: { label: "Major", class: "bg-orange-100 text-orange-700 border border-orange-200" },
+  fatal: { label: "Fatal", class: "bg-red-100 text-red-700 border border-red-200" },
+  // Legacy aliases
+  low: { label: "Minor", class: "bg-green-100 text-green-700 border border-green-200" },
+  medium: { label: "Moderate", class: "bg-yellow-100 text-yellow-700 border border-yellow-200" },
+  high: { label: "Major", class: "bg-orange-100 text-orange-700 border border-orange-200" },
 };
 
 const statusConfig: Record<string, { label: string; class: string }> = {
@@ -20,8 +25,15 @@ const statusConfig: Record<string, { label: string; class: string }> = {
   resolved: { label: "Resolved", class: "bg-teal-100 text-teal-700 border border-teal-200" },
 };
 
+const incidentTypeConfig: Record<string, { label: string; class: string }> = {
+  near_miss: { label: "Near Miss", class: "bg-blue-100 text-blue-700 border border-blue-200" },
+  accident: { label: "Accident", class: "bg-red-100 text-red-700 border border-red-200" },
+  unsafe_act: { label: "Unsafe Act", class: "bg-orange-100 text-orange-700 border border-orange-200" },
+  unsafe_condition: { label: "Unsafe Condition", class: "bg-purple-100 text-purple-700 border border-purple-200" },
+};
+
 export function RiskBadge({ level }: { level: RiskLevel }) {
-  const cfg = riskConfig[level];
+  const cfg = riskConfig[level] ?? { label: level, class: "bg-gray-100 text-gray-700 border border-gray-200" };
   return (
     <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold", cfg.class)}>
       {cfg.label}
@@ -31,6 +43,15 @@ export function RiskBadge({ level }: { level: RiskLevel }) {
 
 export function StatusBadge({ status }: { status: Status }) {
   const cfg = statusConfig[status] ?? { label: status, class: "bg-gray-100 text-gray-700 border border-gray-200" };
+  return (
+    <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold", cfg.class)}>
+      {cfg.label}
+    </span>
+  );
+}
+
+export function IncidentTypeBadge({ type }: { type: string }) {
+  const cfg = incidentTypeConfig[type] ?? { label: type, class: "bg-gray-100 text-gray-700 border border-gray-200" };
   return (
     <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold", cfg.class)}>
       {cfg.label}
@@ -53,3 +74,17 @@ export function FrequencyBadge({ frequency }: { frequency: string }) {
     </span>
   );
 }
+
+export const INCIDENT_TYPES = [
+  { value: "near_miss", label: "Near Miss" },
+  { value: "accident", label: "Accident" },
+  { value: "unsafe_act", label: "Unsafe Act" },
+  { value: "unsafe_condition", label: "Unsafe Condition" },
+] as const;
+
+export const SEVERITY_LEVELS = [
+  { value: "minor", label: "Minor" },
+  { value: "moderate", label: "Moderate" },
+  { value: "major", label: "Major" },
+  { value: "fatal", label: "Fatal" },
+] as const;

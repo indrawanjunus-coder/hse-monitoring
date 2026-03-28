@@ -72,6 +72,7 @@ const navItems: NavItem[] = [
       { label: "Template", href: "/master/templates", icon: <LayoutIcon className="w-4 h-4" />, supervisorOrAdmin: true },
       { label: "Plant", href: "/master/plants", icon: <MapPin className="w-4 h-4" /> },
       { label: "Aksi", href: "/master/actions", icon: <Wrench className="w-4 h-4" /> },
+      { label: "Tindakan Preventif", href: "/master/preventive-actions", icon: <Target className="w-4 h-4" /> },
       { label: "Indikator", href: "/master/indicators", icon: <Target className="w-4 h-4" />, supervisorOrAdmin: true },
     ],
   },

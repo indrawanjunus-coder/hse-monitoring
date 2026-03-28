@@ -15,6 +15,7 @@ import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
 import smtpRouter from "./smtp";
 import indicatorsRouter from "./indicators";
+import preventiveActionsRouter from "./preventive-actions";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use("/dashboard", dashboardRouter);
 router.use("/reports", reportsRouter);
 router.use("/settings/smtp", smtpRouter);
 router.use("/indicators", indicatorsRouter);
+router.use("/preventive-actions", preventiveActionsRouter);
 
 export default router;

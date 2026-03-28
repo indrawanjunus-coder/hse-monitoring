@@ -23,6 +23,7 @@ interface Question {
   answerType: "yes_no" | "text"; isMandatory: boolean; requiresPhoto: boolean;
   categoryId?: number; categoryName?: string; orderIndex: number;
   expectedAnswer?: string | null;
+  questionType?: string | null;
 }
 interface Template { id: number; name: string; description?: string; questionCount?: number }
 interface Category { id: number; name: string }
@@ -42,12 +43,14 @@ function QuestionRow({ q, categories, onUpdate, onDelete, onMoveUp, onMoveDown, 
   const [requiresPhoto, setRequiresPhoto] = useState(q.requiresPhoto);
   const [categoryId, setCategoryId] = useState(q.categoryId ? String(q.categoryId) : "none");
   const [expectedAnswer, setExpectedAnswer] = useState(q.expectedAnswer ?? "none");
+  const [questionType, setQuestionType] = useState(q.questionType ?? "none");
 
   const handleSave = () => {
     onUpdate(q.id, {
       text, answerType, isMandatory, requiresPhoto,
       categoryId: (categoryId && categoryId !== "none") ? parseInt(categoryId) : undefined,
       expectedAnswer: answerType === "yes_no" ? (expectedAnswer !== "none" ? expectedAnswer : null) : null,
+      questionType: questionType !== "none" ? questionType : null,
     });
     setEditing(false);
   };
@@ -67,6 +70,19 @@ function QuestionRow({ q, categories, onUpdate, onDelete, onMoveUp, onMoveDown, 
               <SelectContent>
                 <SelectItem value="yes_no">Ya / Tidak</SelectItem>
                 <SelectItem value="text">Teks Bebas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Tipe Incident</Label>
+            <Select value={questionType} onValueChange={setQuestionType}>
+              <SelectTrigger className="h-8 bg-white"><SelectValue placeholder="Pilih tipe" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Tidak ada</SelectItem>
+                <SelectItem value="near_miss">Near Miss</SelectItem>
+                <SelectItem value="accident">Accident</SelectItem>
+                <SelectItem value="unsafe_act">Unsafe Act</SelectItem>
+                <SelectItem value="unsafe_condition">Unsafe Condition</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -178,6 +194,7 @@ function AddQuestionForm({ templateId, categories, onAdded, onCancel }: {
   const [requiresPhoto, setRequiresPhoto] = useState(false);
   const [categoryId, setCategoryId] = useState("none");
   const [expectedAnswer, setExpectedAnswer] = useState("none");
+  const [questionType, setQuestionType] = useState("none");
   const [saving, setSaving] = useState(false);
 
   const handleAdd = async () => {
@@ -188,11 +205,12 @@ function AddQuestionForm({ templateId, categories, onAdded, onCancel }: {
         templateId, text: text.trim(), answerType, isMandatory, requiresPhoto,
         categoryId: (categoryId && categoryId !== "none") ? parseInt(categoryId) : undefined,
         expectedAnswer: answerType === "yes_no" ? (expectedAnswer !== "none" ? expectedAnswer : null) : null,
+        questionType: questionType !== "none" ? questionType : null,
         orderIndex: 999,
       });
       onAdded(q);
       setText(""); setAnswerType("yes_no"); setIsMandatory(true);
-      setRequiresPhoto(false); setCategoryId("none"); setExpectedAnswer("none");
+      setRequiresPhoto(false); setCategoryId("none"); setExpectedAnswer("none"); setQuestionType("none");
     } finally { setSaving(false); }
   };
 
@@ -208,6 +226,19 @@ function AddQuestionForm({ templateId, categories, onAdded, onCancel }: {
             <SelectContent>
               <SelectItem value="yes_no">Ya / Tidak</SelectItem>
               <SelectItem value="text">Teks Bebas</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Tipe Incident</Label>
+          <Select value={questionType} onValueChange={setQuestionType}>
+            <SelectTrigger className="h-8 bg-white"><SelectValue placeholder="Opsional" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Tidak ada</SelectItem>
+              <SelectItem value="near_miss">Near Miss</SelectItem>
+              <SelectItem value="accident">Accident</SelectItem>
+              <SelectItem value="unsafe_act">Unsafe Act</SelectItem>
+              <SelectItem value="unsafe_condition">Unsafe Condition</SelectItem>
             </SelectContent>
           </Select>
         </div>

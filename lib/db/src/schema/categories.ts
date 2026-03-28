@@ -7,7 +7,7 @@ export const categoriesTable = pgTable("categories", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
-  riskLevel: text("risk_level", { enum: ["low", "medium", "high"] }).notNull().default("low"),
+  riskLevel: text("risk_level", { enum: ["minor", "moderate", "major", "fatal"] }).notNull().default("minor"),
   picGroupId: integer("pic_group_id").references(() => groupsTable.id),
   color: text("color").default("#3B82F6"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

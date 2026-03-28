@@ -21,6 +21,7 @@ import TemplatesPage from "@/pages/master/templates";
 import PlantsPage from "@/pages/master/plants";
 import ActionsPage from "@/pages/master/actions";
 import IndicatorsPage from "@/pages/master/indicators";
+import PreventiveActionsPage from "@/pages/master/preventive-actions";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -54,6 +55,7 @@ function AppRoutes() {
           <Route path="/master/plants" component={PlantsPage} />
           <Route path="/master/actions" component={ActionsPage} />
           <Route path="/master/indicators" component={IndicatorsPage} />
+          <Route path="/master/preventive-actions" component={PreventiveActionsPage} />
           <Route><Redirect to="/" /></Route>
         </Switch>
       </Layout>

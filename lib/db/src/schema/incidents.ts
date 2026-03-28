@@ -6,6 +6,7 @@ import { plantsTable } from "./plants";
 import { categoriesTable } from "./categories";
 import { actionsTable } from "./actions";
 import { groupsTable } from "./groups";
+import { preventiveActionsTable } from "./preventive-actions";
 
 export const incidentsTable = pgTable("incidents", {
   id: serial("id").primaryKey(),
@@ -15,7 +16,11 @@ export const incidentsTable = pgTable("incidents", {
   incidentDate: text("incident_date").notNull(),
   reportedDate: text("reported_date").notNull(),
   detail: text("detail").notNull(),
+  incidentType: text("incident_type", { enum: ["near_miss", "accident", "unsafe_act", "unsafe_condition"] }).notNull().default("near_miss"),
   actionId: integer("action_id").references(() => actionsTable.id),
+  preventiveActionId: integer("preventive_action_id").references(() => preventiveActionsTable.id),
+  targetDate: text("target_date"),
+  rootCause: text("root_cause"),
   needsFurtherAction: boolean("needs_further_action").notNull().default(false),
   status: text("status", { enum: ["open", "in_progress", "closed"] }).notNull().default("open"),
   assignedGroupId: integer("assigned_group_id").references(() => groupsTable.id),

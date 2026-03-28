@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Pagination } from "@/components/pagination";
 
 interface Category {
-  id: number; name: string; description?: string; riskLevel: "high" | "medium" | "low";
+  id: number; name: string; description?: string; riskLevel: "minor" | "moderate" | "major" | "fatal";
   picGroupId?: number; picGroupName?: string; color?: string;
 }
 interface Group { id: number; name: string }
@@ -25,7 +25,7 @@ function CategoryForm({ cat, groups, onSave, onCancel }: {
 }) {
   const [name, setName] = useState(cat?.name ?? "");
   const [description, setDescription] = useState(cat?.description ?? "");
-  const [riskLevel, setRiskLevel] = useState(cat?.riskLevel ?? "low");
+  const [riskLevel, setRiskLevel] = useState(cat?.riskLevel ?? "minor");
   const [picGroupId, setPicGroupId] = useState(cat?.picGroupId ? String(cat.picGroupId) : "none");
   const [color, setColor] = useState(cat?.color ?? "#3B82F6");
   const [saving, setSaving] = useState(false);
@@ -56,9 +56,10 @@ function CategoryForm({ cat, groups, onSave, onCancel }: {
           <Select value={riskLevel} onValueChange={setRiskLevel}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="minor">Minor</SelectItem>
+              <SelectItem value="moderate">Moderate</SelectItem>
+              <SelectItem value="major">Major</SelectItem>
+              <SelectItem value="fatal">Fatal</SelectItem>
             </SelectContent>
           </Select>
         </div>

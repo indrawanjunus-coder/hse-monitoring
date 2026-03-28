@@ -20,12 +20,15 @@ interface MonthlyData {
     withAction: number; resolutionRate: number;
   };
   byCategory: { categoryId: number; categoryName: string; total: number; closed: number; open: number; inProgress: number }[];
+  byType: { type: string; label: string; total: number; open: number; closed: number; inProgress: number }[];
+  typeMatrix: Record<string, number | string>[];
+  typeCategories: string[];
   byPlant: { plantId: number; plantName: string; total: number; closed: number }[];
   timeBuckets: { label: string; key: string; count: number; pct: number }[];
   incidents: {
     id: number; incidentDate: string; reportedDate: string; status: string;
     categoryName: string; plantName: string; reporterName: string;
-    assignedGroupName?: string | null; actionName?: string | null;
+    incidentType?: string; assignedGroupName?: string | null; actionName?: string | null;
     followupNote?: string | null; detail: string; closedAt?: string | null;
   }[];
 }
@@ -240,6 +243,90 @@ export default function MonthlyReportPage() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Matrix Tipe × Kategori */}
+          {data.typeMatrix && data.typeMatrix.length > 0 && data.typeCategories && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="text-base">Matrix Tipe Incident × Kategori</CardTitle>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                <table className="w-full text-sm border-collapse min-w-max">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left py-2 px-3 font-medium text-gray-600 min-w-[140px]">Tipe Incident</th>
+                      {data.typeCategories.map(cat => (
+                        <th key={cat} className="text-center py-2 px-3 font-medium text-gray-600 whitespace-nowrap">{cat}</th>
+                      ))}
+                      <th className="text-center py-2 px-3 font-bold text-gray-700">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.typeMatrix.map((row, i) => (
+                      <tr key={String(row.type)} className={`border-b ${i % 2 === 0 ? "" : "bg-gray-50"}`}>
+                        <td className="py-2 px-3 font-medium text-gray-800">{String(row.label)}</td>
+                        {data.typeCategories.map(cat => {
+                          const v = (row[cat] as number) ?? 0;
+                          return (
+                            <td key={cat} className={`py-2 px-3 text-center font-semibold ${v > 0 ? "text-red-600" : "text-gray-300"}`}>
+                              {v > 0 ? v : "—"}
+                            </td>
+                          );
+                        })}
+                        <td className="py-2 px-3 text-center font-bold text-blue-700">{Number(row._total)}</td>
+                      </tr>
+                    ))}
+                    {/* Totals row */}
+                    <tr className="border-t-2 bg-gray-100 font-bold">
+                      <td className="py-2 px-3">Total</td>
+                      {data.typeCategories.map(cat => {
+                        const colTotal = data.typeMatrix.reduce((sum, row) => sum + ((row[cat] as number) ?? 0), 0);
+                        return (
+                          <td key={cat} className="py-2 px-3 text-center text-gray-800">
+                            {colTotal > 0 ? colTotal : "—"}
+                          </td>
+                        );
+                      })}
+                      <td className="py-2 px-3 text-center text-blue-800">{data.summary.total}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Rekapitulasi per Tipe */}
+          {data.byType && data.byType.length > 0 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle className="text-base">Rekapitulasi per Tipe Incident</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 px-3 font-medium text-gray-600">Tipe</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600">Total</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600">Open</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600">Proses</th>
+                      <th className="text-center py-2 px-3 font-medium text-gray-600">Selesai</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.byType.map((t, i) => (
+                      <tr key={t.type} className={`border-b ${i % 2 === 0 ? "bg-gray-50" : ""}`}>
+                        <td className="py-2 px-3 font-medium">{t.label}</td>
+                        <td className="py-2 px-3 text-center font-bold">{t.total}</td>
+                        <td className="py-2 px-3 text-center text-red-600">{t.open}</td>
+                        <td className="py-2 px-3 text-center text-amber-600">{t.inProgress}</td>
+                        <td className="py-2 px-3 text-center text-green-600">{t.closed}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </CardContent>
             </Card>
           )}

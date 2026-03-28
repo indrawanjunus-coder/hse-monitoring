@@ -134,6 +134,47 @@ router.get("/monthly", async (req, res) => {
     else byCategory[key]!.open++;
   }
 
+  // By incident type vs category matrix
+  const incidentTypes = ["near_miss", "accident", "unsafe_act", "unsafe_condition"] as const;
+  const typeLabels: Record<string, string> = { near_miss: "Near Miss", accident: "Accident", unsafe_act: "Unsafe Act", unsafe_condition: "Unsafe Condition" };
+  type ByTypeCat = Record<string, Record<string, number>>;
+  const byTypeCat: ByTypeCat = {};
+  for (const type of incidentTypes) byTypeCat[type] = {};
+
+  for (const r of rawIncidents) {
+    const type = (r.inc as Record<string, unknown>).incidentType as string ?? "near_miss";
+    const catName = r.cat?.name ?? "—";
+    if (!byTypeCat[type]) byTypeCat[type] = {};
+    byTypeCat[type]![catName] = (byTypeCat[type]![catName] ?? 0) + 1;
+  }
+
+  const typeCategories = [...new Set(rawIncidents.map(r => r.cat?.name ?? "—"))].sort();
+  const typeMatrix = incidentTypes.map(type => {
+    const row: Record<string, number | string> = { type, label: typeLabels[type] ?? type };
+    let rowTotal = 0;
+    for (const cat of typeCategories) {
+      const v = byTypeCat[type]?.[cat] ?? 0;
+      row[cat] = v;
+      rowTotal += v;
+    }
+    row._total = rowTotal;
+    return row;
+  }).filter(r => (r._total as number) > 0);
+
+  // By type summary
+  const byType: Record<string, { type: string; label: string; total: number; open: number; closed: number; inProgress: number }> = {};
+  for (const type of incidentTypes) {
+    byType[type] = { type, label: typeLabels[type] ?? type, total: 0, open: 0, closed: 0, inProgress: 0 };
+  }
+  for (const r of rawIncidents) {
+    const type = (r.inc as Record<string, unknown>).incidentType as string ?? "near_miss";
+    if (!byType[type]) byType[type] = { type, label: typeLabels[type] ?? type, total: 0, open: 0, closed: 0, inProgress: 0 };
+    byType[type]!.total++;
+    if (r.inc.status === "closed") byType[type]!.closed++;
+    else if (r.inc.status === "in_progress") byType[type]!.inProgress++;
+    else byType[type]!.open++;
+  }
+
   // By plant
   const byPlant: Record<string, { plantId: number; plantName: string; total: number; closed: number }> = {};
   for (const r of rawIncidents) {
@@ -179,6 +220,9 @@ router.get("/monthly", async (req, res) => {
       resolutionRate: total > 0 ? Math.round((closed / total) * 100) : 0,
     },
     byCategory: Object.values(byCategory),
+    byType: Object.values(byType).filter(t => t.total > 0),
+    typeMatrix,
+    typeCategories,
     byPlant: Object.values(byPlant),
     timeBuckets: [
       { label: "< 24 jam", key: "lt_24h", count: timeBuckets.lt_24h, pct: total > 0 ? Math.round((timeBuckets.lt_24h / total) * 100) : 0 },
