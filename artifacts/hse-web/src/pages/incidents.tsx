@@ -26,7 +26,7 @@ interface Incident {
   incidentDate: string;
   reportedDate: string;
   detail: string;
-  incidentType: string;
+  incidentType?: string | null;
   actionId?: number | null;
   actionName?: string | null;
   preventiveActionId?: number | null;
@@ -185,6 +185,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
 }) {
   const { user } = useAuth();
   const canUpdate = user?.role === "admin" || user?.role === "supervisor";
+  const [incidentType, setIncidentType] = useState(incident.incidentType ?? "none");
   const [actionId, setActionId] = useState(String(incident.actionId ?? "none"));
   const [preventiveActionId, setPreventiveActionId] = useState(String(incident.preventiveActionId ?? "none"));
   const [targetDate, setTargetDate] = useState(incident.targetDate ?? "");
@@ -196,6 +197,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
     try {
       await onUpdate({
         status,
+        incidentType: incidentType !== "none" ? incidentType : null,
         actionId: actionId !== "none" ? parseInt(actionId) : null,
         preventiveActionId: preventiveActionId !== "none" ? parseInt(preventiveActionId) : null,
         targetDate: targetDate || null,
@@ -210,7 +212,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
     <div className="space-y-4">
       <div className="flex gap-2 flex-wrap">
         <StatusBadge status={incident.status} />
-        <IncidentTypeBadge type={incident.incidentType} />
+        {incident.incidentType && <IncidentTypeBadge type={incident.incidentType} />}
         {incident.categoryRiskLevel && <RiskBadge level={incident.categoryRiskLevel} />}
       </div>
       <div className="bg-gray-50 rounded-lg p-4">
@@ -254,6 +256,16 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
       {canUpdate && incident.status !== "closed" && (
         <div className="space-y-3 border-t pt-3">
           <p className="text-sm font-medium text-gray-700">Resolusi Incident</p>
+          <div className="space-y-2">
+            <Label>Tipe Incident</Label>
+            <Select value={incidentType} onValueChange={setIncidentType}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Tidak Ditentukan</SelectItem>
+                {INCIDENT_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label>Tindakan Penanganan</Label>
@@ -464,7 +476,7 @@ export default function IncidentsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
                           <StatusBadge status={inc.status} />
-                          <IncidentTypeBadge type={inc.incidentType} />
+                          {inc.incidentType && <IncidentTypeBadge type={inc.incidentType} />}
                           {inc.categoryRiskLevel && <RiskBadge level={inc.categoryRiskLevel} />}
                           <span className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-medium">{inc.categoryName}</span>
                           {inc.needsFurtherAction && (
@@ -524,7 +536,7 @@ export default function IncidentsPage() {
         <Dialog open={true} onOpenChange={() => setDetailIncident(null)}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Incident #{detailIncident.id} — {typeMap[detailIncident.incidentType] ?? detailIncident.incidentType}</DialogTitle>
+              <DialogTitle>Incident #{detailIncident.id}{detailIncident.incidentType ? ` — ${typeMap[detailIncident.incidentType] ?? detailIncident.incidentType}` : ""}</DialogTitle>
             </DialogHeader>
             <IncidentDetail
               incident={detailIncident}

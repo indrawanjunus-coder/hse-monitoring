@@ -16,7 +16,7 @@ export const incidentsTable = pgTable("incidents", {
   incidentDate: text("incident_date").notNull(),
   reportedDate: text("reported_date").notNull(),
   detail: text("detail").notNull(),
-  incidentType: text("incident_type", { enum: ["near_miss", "accident", "unsafe_act", "unsafe_condition"] }).notNull().default("near_miss"),
+  incidentType: text("incident_type", { enum: ["near_miss", "accident", "unsafe_act", "unsafe_condition"] }),
   actionId: integer("action_id").references(() => actionsTable.id),
   preventiveActionId: integer("preventive_action_id").references(() => preventiveActionsTable.id),
   targetDate: text("target_date"),

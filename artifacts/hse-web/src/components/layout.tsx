@@ -45,6 +45,7 @@ const navItems: NavItem[] = [
   { label: "Inspeksi Saya", href: "/my-inspections", icon: <ClipboardList className="w-4 h-4" /> },
   { label: "Riwayat Inspeksi", href: "/history", icon: <ClipboardCheck className="w-4 h-4" /> },
   { label: "Jadwal Inspeksi", href: "/schedules", icon: <Calendar className="w-4 h-4" /> },
+  { label: "Indikator HSE", href: "/master/indicators", icon: <Target className="w-4 h-4" />, supervisorOrAdmin: true },
   {
     label: "Hazard & Incident",
     href: "/incidents",
@@ -73,7 +74,6 @@ const navItems: NavItem[] = [
       { label: "Plant", href: "/master/plants", icon: <MapPin className="w-4 h-4" /> },
       { label: "Aksi", href: "/master/actions", icon: <Wrench className="w-4 h-4" /> },
       { label: "Tindakan Preventif", href: "/master/preventive-actions", icon: <Target className="w-4 h-4" /> },
-      { label: "Indikator", href: "/master/indicators", icon: <Target className="w-4 h-4" />, supervisorOrAdmin: true },
     ],
   },
 ];
@@ -231,9 +231,6 @@ function Sidebar() {
           <NavLink key={item.href} item={item} />
         ))}
       </nav>
-
-      {/* Indicator Widget */}
-      <IndicatorWidget />
 
       {/* User footer */}
       <div className="border-t border-gray-100 p-3">
