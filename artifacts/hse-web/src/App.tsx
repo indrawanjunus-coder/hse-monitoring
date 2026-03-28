@@ -12,6 +12,7 @@ import MyInspectionsPage from "@/pages/my-inspections";
 import HistoryPage from "@/pages/history";
 import FollowupReportPage from "@/pages/reports/followup-report";
 import MonthlyReportPage from "@/pages/reports/monthly-report";
+import ActionMatrixPage from "@/pages/reports/action-matrix";
 import SmtpSettingsPage from "@/pages/settings/smtp";
 import UsersPage from "@/pages/master/users";
 import CategoriesPage from "@/pages/master/categories";
@@ -19,6 +20,7 @@ import GroupsPage from "@/pages/master/groups";
 import TemplatesPage from "@/pages/master/templates";
 import PlantsPage from "@/pages/master/plants";
 import ActionsPage from "@/pages/master/actions";
+import IndicatorsPage from "@/pages/master/indicators";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,6 +44,7 @@ function AppRoutes() {
           <Route path="/incidents" component={IncidentsPage} />
           <Route path="/reports/followup" component={FollowupReportPage} />
           <Route path="/reports/monthly" component={MonthlyReportPage} />
+          <Route path="/reports/action-matrix" component={ActionMatrixPage} />
           <Route path="/settings/smtp" component={SmtpSettingsPage} />
           <Route path="/profile" component={ProfilePage} />
           <Route path="/master/users" component={UsersPage} />
@@ -50,6 +53,7 @@ function AppRoutes() {
           <Route path="/master/templates" component={TemplatesPage} />
           <Route path="/master/plants" component={PlantsPage} />
           <Route path="/master/actions" component={ActionsPage} />
+          <Route path="/master/indicators" component={IndicatorsPage} />
           <Route><Redirect to="/" /></Route>
         </Switch>
       </Layout>

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  LineChart, Line,
 } from "recharts";
 import { AlertTriangle, CheckCircle, Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import { RiskBadge } from "@/components/badges";
@@ -19,9 +20,14 @@ interface DashboardSummary {
   dailyStatus: { date: string; open: number; closed: number }[];
   riskMatrix: { categoryId: number; categoryName: string; high: number; medium: number; low: number; total: number }[];
   categoryTrend: { date: string; categoryId: number; categoryName: string; count: number }[];
+  actionsPerDay: Record<string, number | string>[];
+  actionNames: string[];
 }
 
 const MONTHS = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+
+const ACTION_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4", "#EC4899", "#84CC16"];
+const CATEGORY_COLORS = ["#6366F1", "#F43F5E", "#14B8A6", "#F97316", "#8B5CF6", "#0EA5E9", "#D946EF"];
 
 function StatCard({ title, value, icon, color }: { title: string; value: number; icon: React.ReactNode; color: string }) {
   return (
@@ -78,6 +84,31 @@ export default function DashboardPage() {
     return acc;
   }, {});
   const categoryData = Object.entries(categoryTotalMap).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+
+  // Aksi per hari — only days with actions
+  const actionsPerDay = (data?.actionsPerDay ?? []).filter(d => (d.total as number) > 0).map(d => ({
+    ...d,
+    day: String(d.date).split("-")[2],
+  }));
+  const actionNames = data?.actionNames ?? [];
+
+  // Category per day stacked bar — merge dailyIncidents with categoryTrend
+  const categoryPerDayMap: Record<string, Record<string, number>> = {};
+  for (const item of data?.categoryTrend ?? []) {
+    const day = item.date.split("-")[2]!;
+    if (!categoryPerDayMap[day]) categoryPerDayMap[day] = {};
+    categoryPerDayMap[day]![item.categoryName] = item.count;
+  }
+  const allCategories = [...new Set((data?.categoryTrend ?? []).map(t => t.categoryName))];
+  const categoryPerDayData = (data?.dailyIncidents ?? [])
+    .filter(d => {
+      const day = d.date.split("-")[2]!;
+      return Object.values(categoryPerDayMap[day] ?? {}).reduce((s, v) => s + v, 0) > 0;
+    })
+    .map(d => {
+      const day = d.date.split("-")[2]!;
+      return { day, ...categoryPerDayMap[day] };
+    });
 
   return (
     <div className="p-6">
@@ -150,6 +181,74 @@ export default function DashboardPage() {
                   <Bar dataKey="Open" fill="#EF4444" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="Selesai" fill="#10B981" radius={[4, 4, 0, 0]} />
                 </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Aksi per Hari vs Kategori */}
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Aksi per Hari</CardTitle>
+            <p className="text-xs text-gray-400 -mt-1">Distribusi tindakan penanganan harian – {MONTHS[month - 1]} {year}</p>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-48 flex items-center justify-center text-gray-400">Memuat...</div>
+            ) : actionsPerDay.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+                Belum ada aksi pada bulan ini
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={actionsPerDay}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {actionNames.map((name, i) => (
+                    <Bar key={name} dataKey={name} stackId="a" fill={ACTION_COLORS[i % ACTION_COLORS.length]} radius={i === actionNames.length - 1 ? [4, 4, 0, 0] : undefined} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Incident per Kategori per Hari</CardTitle>
+            <p className="text-xs text-gray-400 -mt-1">Perbandingan kategori kejadian harian – {MONTHS[month - 1]} {year}</p>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-48 flex items-center justify-center text-gray-400">Memuat...</div>
+            ) : categoryPerDayData.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-gray-400 text-sm">
+                Tidak ada data pada bulan ini
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={categoryPerDayData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="day" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  {allCategories.map((cat, i) => (
+                    <Line
+                      key={cat}
+                      type="monotone"
+                      dataKey={cat}
+                      stroke={CATEGORY_COLORS[i % CATEGORY_COLORS.length]}
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                    />
+                  ))}
+                </LineChart>
               </ResponsiveContainer>
             )}
           </CardContent>

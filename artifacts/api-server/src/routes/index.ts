@@ -14,6 +14,7 @@ import incidentsRouter from "./incidents";
 import dashboardRouter from "./dashboard";
 import reportsRouter from "./reports";
 import smtpRouter from "./smtp";
+import indicatorsRouter from "./indicators";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,6 @@ router.use("/incidents", incidentsRouter);
 router.use("/dashboard", dashboardRouter);
 router.use("/reports", reportsRouter);
 router.use("/settings/smtp", smtpRouter);
+router.use("/indicators", indicatorsRouter);
 
 export default router;

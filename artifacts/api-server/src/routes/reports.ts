@@ -190,4 +190,71 @@ router.get("/monthly", async (req, res) => {
   });
 });
 
+// Action matrix per plant
+router.get("/action-matrix", async (req, res) => {
+  const { from, to } = req.query;
+  let whereClause = undefined as ReturnType<typeof and> | undefined;
+  if (from && to) {
+    whereClause = and(gte(incidentsTable.incidentDate, String(from)), lte(incidentsTable.incidentDate, String(to)));
+  } else if (from) {
+    whereClause = gte(incidentsTable.incidentDate, String(from));
+  } else if (to) {
+    whereClause = lte(incidentsTable.incidentDate, String(to));
+  }
+
+  const query = db.select({
+    inc: incidentsTable,
+    plant: plantsTable,
+    action: actionsTable,
+  })
+    .from(incidentsTable)
+    .leftJoin(plantsTable, eq(incidentsTable.plantId, plantsTable.id))
+    .leftJoin(actionsTable, eq(incidentsTable.actionId, actionsTable.id));
+
+  const rows = whereClause ? await query.where(whereClause) : await query;
+
+  const plantSet = new Map<number, string>();
+  const actionSet = new Map<number | null, string>();
+  const matrix: Record<string, Record<string, number>> = {};
+
+  for (const r of rows) {
+    const plantId = r.inc.plantId;
+    const plantName = r.plant?.name ?? "Unknown";
+    const actionId = r.inc.actionId ?? 0;
+    const actionName = r.action?.name ?? "(Tanpa Tindakan)";
+
+    plantSet.set(plantId, plantName);
+    actionSet.set(actionId, actionName);
+
+    if (!matrix[actionName]) matrix[actionName] = {};
+    matrix[actionName]![plantName] = (matrix[actionName]![plantName] ?? 0) + 1;
+  }
+
+  const plants = [...plantSet.values()].sort();
+  const actions = [...actionSet.values()].sort((a, b) => {
+    if (a === "(Tanpa Tindakan)") return 1;
+    if (b === "(Tanpa Tindakan)") return -1;
+    return a.localeCompare(b);
+  });
+
+  const matrixRows = actions.map(actionName => {
+    const row: Record<string, number | string> = { actionName };
+    let rowTotal = 0;
+    for (const plantName of plants) {
+      const count = matrix[actionName]?.[plantName] ?? 0;
+      row[plantName] = count;
+      rowTotal += count;
+    }
+    row["_total"] = rowTotal;
+    return row;
+  }).filter(r => r["_total"] > 0);
+
+  const plantTotals: Record<string, number> = {};
+  for (const plantName of plants) {
+    plantTotals[plantName] = matrixRows.reduce((s, r) => s + (Number(r[plantName]) || 0), 0);
+  }
+
+  res.json({ plants, actions: actions.filter(a => matrixRows.find(r => r.actionName === a)), rows: matrixRows, plantTotals, grandTotal: rows.length });
+});
+
 export default router;

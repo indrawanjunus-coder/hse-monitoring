@@ -1,6 +1,8 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import {
   LayoutDashboard,
   Calendar,
@@ -21,6 +23,8 @@ import {
   BarChart2,
   FileBarChart,
   Mail,
+  Target,
+  Grid3X3,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
@@ -49,6 +53,7 @@ const navItems: NavItem[] = [
       { label: "Daftar H&I", href: "/incidents", icon: <AlertTriangle className="w-4 h-4" /> },
       { label: "Laporan Followup", href: "/reports/followup", icon: <BarChart2 className="w-4 h-4" /> },
       { label: "Laporan Bulanan", href: "/reports/monthly", icon: <FileBarChart className="w-4 h-4" /> },
+      { label: "Matrix Aksi per Plant", href: "/reports/action-matrix", icon: <Grid3X3 className="w-4 h-4" /> },
     ],
   },
   { label: "Profil", href: "/profile", icon: <UserCircle className="w-4 h-4" /> },
@@ -67,6 +72,7 @@ const navItems: NavItem[] = [
       { label: "Template", href: "/master/templates", icon: <LayoutIcon className="w-4 h-4" />, supervisorOrAdmin: true },
       { label: "Plant", href: "/master/plants", icon: <MapPin className="w-4 h-4" /> },
       { label: "Aksi", href: "/master/actions", icon: <Wrench className="w-4 h-4" /> },
+      { label: "Indikator", href: "/master/indicators", icon: <Target className="w-4 h-4" />, supervisorOrAdmin: true },
     ],
   },
 ];
@@ -128,6 +134,77 @@ function NavLink({ item, depth = 0 }: { item: NavItem; depth?: number }) {
   );
 }
 
+interface IndicatorItem {
+  id: number;
+  name: string;
+  type: string;
+  percentage: number | null;
+  targetPercentage: number;
+}
+
+function IndicatorWidget() {
+  const [, navigate] = useLocation();
+  const { data: indicators = [] } = useQuery<IndicatorItem[]>({
+    queryKey: ["indicators"],
+    queryFn: () => api.get("/indicators"),
+    staleTime: 60_000,
+  });
+
+  if (indicators.length === 0) return null;
+
+  return (
+    <div className="border-t border-gray-100 px-3 py-3">
+      <button
+        className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 hover:text-blue-600 w-full"
+        onClick={() => navigate("/master/indicators")}
+      >
+        <Target className="w-3.5 h-3.5" />
+        Indikator HSE
+      </button>
+      <div className="space-y-2">
+        {indicators.slice(0, 4).map(ind => {
+          const pct = ind.percentage;
+          const isOk = pct !== null && pct >= ind.targetPercentage;
+          const isWarn = pct !== null && !isOk && pct >= ind.targetPercentage * 0.8;
+          const barColor = pct === null ? "bg-gray-300" : isOk ? "bg-green-500" : isWarn ? "bg-amber-500" : "bg-red-500";
+          const textColor = pct === null ? "text-gray-400" : isOk ? "text-green-600" : isWarn ? "text-amber-600" : "text-red-600";
+
+          return (
+            <button
+              key={ind.id}
+              className="w-full text-left hover:bg-gray-50 rounded-lg px-2 py-1.5 transition-colors"
+              onClick={() => navigate("/master/indicators")}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium text-gray-700 truncate max-w-[120px]" title={ind.name}>
+                  {ind.name.length > 18 ? ind.name.slice(0, 18) + "…" : ind.name}
+                </span>
+                <span className={`text-xs font-bold ${textColor}`}>
+                  {pct !== null ? `${pct}%` : "—"}
+                </span>
+              </div>
+              <div className="w-full bg-gray-100 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full transition-all ${barColor}`}
+                  style={{ width: `${Math.min(pct ?? 0, 100)}%` }}
+                />
+              </div>
+            </button>
+          );
+        })}
+        {indicators.length > 4 && (
+          <button
+            className="text-xs text-blue-500 hover:text-blue-700 px-2"
+            onClick={() => navigate("/master/indicators")}
+          >
+            +{indicators.length - 4} lainnya →
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Sidebar() {
   const { user, logout } = useAuth();
   const roleLabel = user?.role === "admin" ? "Administrator" : user?.role === "supervisor" ? "Supervisor" : "Employee";
@@ -153,6 +230,9 @@ function Sidebar() {
           <NavLink key={item.href} item={item} />
         ))}
       </nav>
+
+      {/* Indicator Widget */}
+      <IndicatorWidget />
 
       {/* User footer */}
       <div className="border-t border-gray-100 p-3">

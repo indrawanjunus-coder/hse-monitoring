@@ -12,3 +12,4 @@ export * from "./schedule-users";
 export * from "./inspections";
 export * from "./incidents";
 export * from "./smtp-settings";
+export * from "./indicators";
