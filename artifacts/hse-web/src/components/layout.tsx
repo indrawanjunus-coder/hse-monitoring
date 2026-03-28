@@ -45,7 +45,6 @@ const navItems: NavItem[] = [
   { label: "Inspeksi Saya", href: "/my-inspections", icon: <ClipboardList className="w-4 h-4" /> },
   { label: "Riwayat Inspeksi", href: "/history", icon: <ClipboardCheck className="w-4 h-4" /> },
   { label: "Jadwal Inspeksi", href: "/schedules", icon: <Calendar className="w-4 h-4" /> },
-  { label: "Indikator HSE", href: "/master/indicators", icon: <Target className="w-4 h-4" />, supervisorOrAdmin: true },
   {
     label: "Hazard & Incident",
     href: "/incidents",
@@ -65,15 +64,16 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    label: "Master Data", href: "/master", icon: <Settings className="w-4 h-4" />, adminOnly: true,
+    label: "Master Data", href: "/master", icon: <Settings className="w-4 h-4" />, supervisorOrAdmin: true,
     children: [
-      { label: "Users", href: "/master/users", icon: <Users className="w-4 h-4" /> },
+      { label: "Users", href: "/master/users", icon: <Users className="w-4 h-4" />, adminOnly: true },
       { label: "Kategori", href: "/master/categories", icon: <Tag className="w-4 h-4" /> },
       { label: "Group", href: "/master/groups", icon: <UsersRound className="w-4 h-4" /> },
-      { label: "Template", href: "/master/templates", icon: <LayoutIcon className="w-4 h-4" />, supervisorOrAdmin: true },
+      { label: "Template", href: "/master/templates", icon: <LayoutIcon className="w-4 h-4" /> },
       { label: "Plant", href: "/master/plants", icon: <MapPin className="w-4 h-4" /> },
       { label: "Aksi", href: "/master/actions", icon: <Wrench className="w-4 h-4" /> },
       { label: "Tindakan Preventif", href: "/master/preventive-actions", icon: <Target className="w-4 h-4" /> },
+      { label: "Indikator HSE", href: "/master/indicators", icon: <Target className="w-4 h-4" /> },
     ],
   },
 ];
