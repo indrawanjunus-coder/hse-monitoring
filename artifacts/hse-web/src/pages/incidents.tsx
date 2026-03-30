@@ -21,6 +21,7 @@ interface Incident {
   id: number;
   reporterName: string;
   plantName: string;
+  categoryId: number;
   categoryName: string;
   categoryRiskLevel?: "minor" | "moderate" | "major" | "fatal" | null;
   incidentDate: string;
@@ -205,7 +206,8 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
   actions: Action[]; preventiveActions: PreventiveAction[];
 }) {
   const canUpdate = incident.status !== "closed";
-  const { data: incidentTypes = [] } = useQuery<ApiIncidentType[]>({ queryKey: ["incident-types"], queryFn: () => api.get("/incident-types") });
+  const { data: allIncidentTypes = [] } = useQuery<ApiIncidentType[]>({ queryKey: ["incident-types"], queryFn: () => api.get("/incident-types") });
+  const incidentTypes = allIncidentTypes.filter(t => t.categoryId === incident.categoryId || t.categoryId == null);
   const [incidentType, setIncidentType] = useState(incident.incidentType ?? "none");
   const [actionId, setActionId] = useState(String(incident.actionId ?? "none"));
   const [preventiveActionId, setPreventiveActionId] = useState(String(incident.preventiveActionId ?? "none"));

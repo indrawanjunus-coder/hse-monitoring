@@ -40,18 +40,24 @@ router.get("/", async (req, res) => {
 
 router.post("/", requireAdmin, async (req, res) => {
   const { code, label, description, categoryId, isActive, orderIndex } = req.body;
-  if (!code?.trim() || !label?.trim()) return res.status(400).json({ error: "code and label required" });
-  const existing = await db.select().from(incidentTypesTable).where(eq(incidentTypesTable.code, code.trim()));
-  if (existing.length) return res.status(409).json({ error: "Code already exists" });
-  const [created] = await db.insert(incidentTypesTable).values({
-    code: code.trim().toLowerCase().replace(/\s+/g, "_"),
-    label: label.trim(),
-    description: description?.trim() || null,
-    categoryId: categoryId ? parseInt(categoryId) : null,
-    isActive: isActive ?? true,
-    orderIndex: orderIndex ?? 0,
-  }).returning();
-  res.status(201).json(created);
+  if (!code?.trim() || !label?.trim()) { res.status(400).json({ error: "code and label required" }); return; }
+  const sanitizedCode = code.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "_");
+  try {
+    const existing = await db.select().from(incidentTypesTable).where(eq(incidentTypesTable.code, sanitizedCode));
+    if (existing.length) { res.status(409).json({ error: "Code sudah digunakan, gunakan kode lain" }); return; }
+    const [created] = await db.insert(incidentTypesTable).values({
+      code: sanitizedCode,
+      label: label.trim(),
+      description: description?.trim() || null,
+      categoryId: categoryId != null ? parseInt(String(categoryId)) : null,
+      isActive: isActive ?? true,
+      orderIndex: orderIndex ?? 0,
+    }).returning();
+    res.status(201).json(created);
+  } catch (err: any) {
+    if (err?.code === "23505") { res.status(409).json({ error: "Code sudah digunakan, gunakan kode lain" }); return; }
+    res.status(500).json({ error: err?.message ?? "Gagal menyimpan tipe incident" });
+  }
 });
 
 router.put("/:id", requireAdmin, async (req, res) => {
