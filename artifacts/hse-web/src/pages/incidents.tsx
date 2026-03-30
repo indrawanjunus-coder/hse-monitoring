@@ -115,14 +115,14 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
           <Label>Plant *</Label>
           <Select value={plantId} onValueChange={setPlantId}>
             <SelectTrigger><SelectValue placeholder="Pilih plant" /></SelectTrigger>
-            <SelectContent>{plants.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}</SelectContent>
+            <SelectContent className="max-h-60 overflow-y-auto">{plants.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
         <div className="space-y-2">
           <Label>Kategori *</Label>
           <Select value={categoryId} onValueChange={setCategoryId}>
             <SelectTrigger><SelectValue placeholder="Pilih kategori" /></SelectTrigger>
-            <SelectContent>{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
+            <SelectContent className="max-h-60 overflow-y-auto">{categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
           </Select>
         </div>
       </div>
@@ -144,7 +144,7 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
           ) : (
             <Select value={incidentType} onValueChange={setIncidentType}>
               <SelectTrigger><SelectValue placeholder="Pilih tipe..." /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-60 overflow-y-auto">
                 {availableTypes.map(t => <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -282,7 +282,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
             <Label>Tipe Incident</Label>
             <Select value={incidentType} onValueChange={setIncidentType}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-60 overflow-y-auto">
                 <SelectItem value="none">Tidak Ditentukan</SelectItem>
                 {incidentTypes.map(t => <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>)}
               </SelectContent>
@@ -450,14 +450,16 @@ export default function IncidentsPage() {
           </div>
         </div>
         <div className="space-y-1">
-          <p className="text-xs text-gray-500 font-medium">Tipe</p>
-          <div className="flex gap-1.5 flex-wrap">
-            <Button size="sm" variant={filterType === "" ? "default" : "outline"} className="h-7 text-xs px-2.5" onClick={() => { setFilterType(""); resetPage(); }}>Semua</Button>
-            {incidentTypesMaster.map(t => (
-              <Button key={t.code} size="sm" variant={filterType === t.code ? "default" : "outline"} className="h-7 text-xs px-2.5"
-                onClick={() => { setFilterType(t.code); resetPage(); }}>{t.label}</Button>
-            ))}
-          </div>
+          <p className="text-xs text-gray-500 font-medium">Tipe Incident</p>
+          <Select value={filterType || "all"} onValueChange={v => { setFilterType(v === "all" ? "" : v); resetPage(); }}>
+            <SelectTrigger className="h-7 text-xs w-48"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Tipe</SelectItem>
+              {incidentTypesMaster.map(t => (
+                <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="space-y-1">
           <p className="text-xs text-gray-500 font-medium">Tgl Pelaporan</p>
