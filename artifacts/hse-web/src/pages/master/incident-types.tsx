@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Plus, Edit, Trash2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
+import { Pagination } from "@/components/pagination";
 
 interface Category { id: number; name: string }
 
@@ -73,7 +74,7 @@ function IncidentTypeForm({ type, categories, onSave, onCancel }: {
         <Label>Kategori <span className="text-red-500">*</span></Label>
         <Select value={categoryId} onValueChange={setCategoryId}>
           <SelectTrigger><SelectValue placeholder="Pilih kategori..." /></SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-60 overflow-y-auto">
             <SelectItem value="none">— Tidak ada kategori —</SelectItem>
             {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
           </SelectContent>
@@ -112,6 +113,8 @@ export default function IncidentTypesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<IncidentType | null>(null);
   const [filterCat, setFilterCat] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   const { data: types = [], isLoading } = useQuery<IncidentType[]>({
     queryKey: ["incident-types"],
@@ -144,11 +147,13 @@ export default function IncidentTypesPage() {
     if (confirm(`Hapus tipe incident "${t.label}"?`)) deleteMut.mutate(t.id);
   };
 
-  const displayed = filterCat === "all"
+  const filtered = filterCat === "all"
     ? types
     : filterCat === "none"
       ? types.filter(t => !t.categoryId)
       : types.filter(t => String(t.categoryId) === filterCat);
+
+  const displayed = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="space-y-6">
@@ -161,77 +166,80 @@ export default function IncidentTypesPage() {
       {/* Filter by category */}
       <div className="flex items-center gap-3">
         <span className="text-sm text-gray-500">Filter Kategori:</span>
-        <Select value={filterCat} onValueChange={setFilterCat}>
+        <Select value={filterCat} onValueChange={v => { setFilterCat(v); setPage(1); }}>
           <SelectTrigger className="w-52 h-8 text-sm"><SelectValue /></SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-60 overflow-y-auto">
             <SelectItem value="all">Semua Kategori</SelectItem>
             <SelectItem value="none">— Tanpa Kategori —</SelectItem>
             {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
           </SelectContent>
         </Select>
-        <span className="text-xs text-gray-400">{displayed.length} tipe</span>
+        <span className="text-xs text-gray-400">{filtered.length} tipe</span>
       </div>
 
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Memuat data...</div>
-      ) : displayed.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <AlertTriangle className="w-10 h-10 mx-auto mb-2 opacity-30" />
           <p>Tidak ada tipe incident untuk kategori ini</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Label</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Kode</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600">Kategori</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-600 hidden md:table-cell">Deskripsi</th>
-                <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
-                {isAdmin && <th className="px-4 py-3" />}
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {displayed.map(t => (
-                <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-gray-800">{t.label}</span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{t.code}</code>
-                  </td>
-                  <td className="px-4 py-3">
-                    {t.categoryName
-                      ? <Badge variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">{t.categoryName}</Badge>
-                      : <span className="text-gray-400 text-xs italic">Umum</span>
-                    }
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{t.description ?? "—"}</td>
-                  <td className="px-4 py-3 text-center">
-                    {t.isActive
-                      ? <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">Aktif</Badge>
-                      : <Badge variant="outline" className="text-gray-400">Nonaktif</Badge>
-                    }
-                  </td>
-                  {isAdmin && (
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditTarget(t)}>
-                          <Edit className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                          onClick={() => handleDelete(t)}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  )}
+        <>
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Label</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Kode</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600">Kategori</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600 hidden md:table-cell">Deskripsi</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
+                  {isAdmin && <th className="px-4 py-3" />}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y">
+                {displayed.map(t => (
+                  <tr key={t.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-gray-800">{t.label}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{t.code}</code>
+                    </td>
+                    <td className="px-4 py-3">
+                      {t.categoryName
+                        ? <Badge variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">{t.categoryName}</Badge>
+                        : <span className="text-gray-400 text-xs italic">Umum</span>
+                      }
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{t.description ?? "—"}</td>
+                    <td className="px-4 py-3 text-center">
+                      {t.isActive
+                        ? <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">Aktif</Badge>
+                        : <Badge variant="outline" className="text-gray-400">Nonaktif</Badge>
+                      }
+                    </td>
+                    {isAdmin && (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditTarget(t)}>
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                            onClick={() => handleDelete(t)}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Pagination page={page} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} pageSizeOptions={[20, 50, 100]} />
+        </>
       )}
 
       <Dialog open={showForm} onOpenChange={setShowForm}>

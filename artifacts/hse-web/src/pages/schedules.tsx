@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FrequencyBadge, StatusBadge } from "@/components/badges";
 import { Plus, Calendar, Edit, Trash2, User, Users, MapPin, Layout, Printer, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 
 interface Group { id: number; name: string }
 interface Schedule {
@@ -316,6 +317,8 @@ function PrintView({ schedules }: { schedules: Schedule[] }) {
 
 export default function SchedulesPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canManage = user?.role === "admin" || user?.role === "supervisor";
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editSchedule, setEditSchedule] = useState<Schedule | undefined>();
@@ -379,9 +382,11 @@ export default function SchedulesPage() {
               <Button variant="outline" onClick={() => window.print()}>
                 <Printer className="w-4 h-4 mr-2" />Cetak
               </Button>
-              <Button onClick={() => { setEditSchedule(undefined); setDialogOpen(true); }}>
-                <Plus className="w-4 h-4 mr-2" />Tambah Jadwal
-              </Button>
+              {canManage && (
+                <Button onClick={() => { setEditSchedule(undefined); setDialogOpen(true); }}>
+                  <Plus className="w-4 h-4 mr-2" />Tambah Jadwal
+                </Button>
+              )}
             </div>
           }
         />
@@ -405,9 +410,11 @@ export default function SchedulesPage() {
           <div className="text-center py-12">
             <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
             <p className="text-gray-500">Belum ada jadwal inspeksi</p>
-            <Button className="mt-4" onClick={() => { setEditSchedule(undefined); setDialogOpen(true); }}>
-              <Plus className="w-4 h-4 mr-2" />Tambah Jadwal
-            </Button>
+            {canManage && (
+              <Button className="mt-4" onClick={() => { setEditSchedule(undefined); setDialogOpen(true); }}>
+                <Plus className="w-4 h-4 mr-2" />Tambah Jadwal
+              </Button>
+            )}
           </div>
         ) : (
           <>
@@ -421,16 +428,18 @@ export default function SchedulesPage() {
                         <StatusBadge status={s.status as "pending" | "completed"} />
                         {s.isActive === 0 && <Badge variant="secondary">Nonaktif</Badge>}
                       </div>
-                      <div className="flex gap-1 ml-2">
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
-                          onClick={() => { setEditSchedule(s); setDialogOpen(true); }}>
-                          <Edit className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
-                          onClick={() => { if (confirm("Hapus jadwal ini?")) deleteMutation.mutate(s.id); }}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
+                      {canManage && (
+                        <div className="flex gap-1 ml-2">
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
+                            onClick={() => { setEditSchedule(s); setDialogOpen(true); }}>
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                            onClick={() => { if (confirm("Hapus jadwal ini?")) deleteMutation.mutate(s.id); }}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      )}
                     </div>
                     <div className="space-y-1.5">
                       {s.title && (
@@ -463,11 +472,13 @@ export default function SchedulesPage() {
                         <span>{frequencyLabel(s)}</span>
                       </div>
                     </div>
-                    <div className="mt-3 pt-3 border-t">
-                      <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => toggleActive(s)}>
-                        {s.isActive ? "Nonaktifkan" : "Aktifkan"}
-                      </Button>
-                    </div>
+                    {canManage && (
+                      <div className="mt-3 pt-3 border-t">
+                        <Button variant="ghost" size="sm" className="w-full text-xs" onClick={() => toggleActive(s)}>
+                          {s.isActive ? "Nonaktifkan" : "Aktifkan"}
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}

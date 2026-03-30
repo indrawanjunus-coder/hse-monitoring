@@ -78,7 +78,7 @@ function CategoryForm({ cat, groups, onSave, onCancel }: {
         </Label>
         <Select value={picGroupId} onValueChange={setPicGroupId}>
           <SelectTrigger><SelectValue placeholder="Pilih group PIC..." /></SelectTrigger>
-          <SelectContent>
+          <SelectContent className="max-h-60 overflow-y-auto">
             <SelectItem value="none">Tidak ada</SelectItem>
             {groups.map(g => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
           </SelectContent>
