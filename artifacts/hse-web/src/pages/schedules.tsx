@@ -146,7 +146,7 @@ function ScheduleForm({
           <Label>Template Inspeksi *</Label>
           <Select value={templateId} onValueChange={setTemplateId}>
             <SelectTrigger><SelectValue placeholder="Pilih template" /></SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-60 overflow-y-auto">
               {templates.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -155,7 +155,7 @@ function ScheduleForm({
           <Label>Plant *</Label>
           <Select value={plantId} onValueChange={setPlantId}>
             <SelectTrigger><SelectValue placeholder="Pilih plant" /></SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-60 overflow-y-auto">
               {plants.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -189,7 +189,7 @@ function ScheduleForm({
           <Label>Tanggal dalam Bulan (1-31)</Label>
           <Select value={dayOfMonth} onValueChange={setDayOfMonth}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
+            <SelectContent className="max-h-60 overflow-y-auto">
               {Array.from({ length: 31 }, (_, i) => i + 1).map(d => (
                 <SelectItem key={d} value={String(d)}>Tanggal {d}</SelectItem>
               ))}
