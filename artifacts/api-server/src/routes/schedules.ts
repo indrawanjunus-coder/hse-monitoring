@@ -57,33 +57,39 @@ async function formatSchedule(s: typeof schedulesTable.$inferSelect) {
 }
 
 router.get("/", async (req, res) => {
-  const supervisorId = req.query.supervisorId ? parseInt(req.query.supervisorId as string) : undefined;
-  const groupId = req.query.groupId ? parseInt(req.query.groupId as string) : undefined;
-
-  let scheduleIds: number[] | undefined;
-
-  if (groupId) {
-    // Find schedules assigned to this group via junction table OR old column
-    const junctionMatches = await db.select({ scheduleId: scheduleGroupsTable.scheduleId })
-      .from(scheduleGroupsTable).where(eq(scheduleGroupsTable.groupId, groupId));
-    scheduleIds = junctionMatches.map(r => r.scheduleId);
-  }
+  const authUser = req.user!;
 
   let schedules: (typeof schedulesTable.$inferSelect)[];
-  if (supervisorId) {
-    const junctionMatches = await db.select({ scheduleId: scheduleUsersTable.scheduleId })
-      .from(scheduleUsersTable).where(eq(scheduleUsersTable.userId, supervisorId));
-    const jIds = junctionMatches.map(r => r.scheduleId);
-    const fromCol = await db.select().from(schedulesTable).where(eq(schedulesTable.supervisorId, supervisorId));
-    const fromJunction = jIds.length
-      ? await db.select().from(schedulesTable).where(inArray(schedulesTable.id, jIds))
-      : [];
-    const allIds = new Set([...fromCol.map(s => s.id), ...fromJunction.map(s => s.id)]);
-    schedules = [...fromCol, ...fromJunction].filter((s, i, arr) => arr.findIndex(x => x.id === s.id) === i);
-  } else if (scheduleIds) {
-    schedules = scheduleIds.length ? await db.select().from(schedulesTable).where(inArray(schedulesTable.id, scheduleIds)) : [];
-  } else {
+
+  if (authUser.role === "admin") {
     schedules = await db.select().from(schedulesTable);
+  } else {
+    // Find all group IDs this user belongs to
+    const memberOf = await db.select({ groupId: groupMembersTable.groupId })
+      .from(groupMembersTable).where(eq(groupMembersTable.userId, authUser.id));
+    const userGroupIds = memberOf.map(r => r.groupId);
+
+    // Schedules directly assigned to this user (via junction or legacy supervisorId column)
+    const fromUser = await db.select({ scheduleId: scheduleUsersTable.scheduleId })
+      .from(scheduleUsersTable).where(eq(scheduleUsersTable.userId, authUser.id));
+    const fromUserCol = await db.select({ id: schedulesTable.id })
+      .from(schedulesTable).where(eq(schedulesTable.supervisorId, authUser.id));
+
+    // Schedules assigned to any group this user belongs to
+    const fromGroups = userGroupIds.length
+      ? await db.select({ scheduleId: scheduleGroupsTable.scheduleId })
+          .from(scheduleGroupsTable).where(inArray(scheduleGroupsTable.groupId, userGroupIds))
+      : [];
+
+    const allIds = new Set([
+      ...fromUser.map(r => r.scheduleId),
+      ...fromUserCol.map(r => r.id),
+      ...fromGroups.map(r => r.scheduleId),
+    ]);
+
+    schedules = allIds.size
+      ? await db.select().from(schedulesTable).where(inArray(schedulesTable.id, [...allIds]))
+      : [];
   }
 
   const result = await Promise.all(schedules.map(formatSchedule));

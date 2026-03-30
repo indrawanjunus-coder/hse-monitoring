@@ -1,9 +1,9 @@
 import { Router } from "express";
 import {
   db, incidentsTable, usersTable, plantsTable, categoriesTable, actionsTable, groupsTable,
-  groupMembersTable, preventiveActionsTable,
+  groupMembersTable, preventiveActionsTable, categoryGroupsTable, categoryUsersTable,
 } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 import { sendEmail, incidentEmailHtml } from "../lib/email";
 
@@ -31,8 +31,47 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
   };
 }
 
-router.get("/", async (_req, res) => {
-  const incidents = await db.select().from(incidentsTable).orderBy(desc(incidentsTable.createdAt));
+router.get("/", async (req, res) => {
+  const authUser = req.user!;
+
+  let incidents: (typeof incidentsTable.$inferSelect)[];
+
+  if (authUser.role === "admin") {
+    incidents = await db.select().from(incidentsTable).orderBy(desc(incidentsTable.createdAt));
+  } else {
+    // Find all groups the user belongs to
+    const memberOf = await db.select({ groupId: groupMembersTable.groupId })
+      .from(groupMembersTable).where(eq(groupMembersTable.userId, authUser.id));
+    const userGroupIds = memberOf.map(r => r.groupId);
+
+    // Find all categories where this user is directly assigned
+    const directCats = await db.select({ categoryId: categoryUsersTable.categoryId })
+      .from(categoryUsersTable).where(eq(categoryUsersTable.userId, authUser.id));
+
+    // Find all categories where any of the user's groups are assigned
+    const groupCats = userGroupIds.length
+      ? await db.select({ categoryId: categoryGroupsTable.categoryId })
+          .from(categoryGroupsTable).where(inArray(categoryGroupsTable.groupId, userGroupIds))
+      : [];
+
+    const allowedCategoryIds = new Set([
+      ...directCats.map(r => r.categoryId),
+      ...groupCats.map(r => r.categoryId),
+    ]);
+
+    // Also include incidents the user personally reported
+    if (allowedCategoryIds.size === 0) {
+      incidents = await db.select().from(incidentsTable)
+        .where(eq(incidentsTable.reporterId, authUser.id))
+        .orderBy(desc(incidentsTable.createdAt));
+    } else {
+      const allIncidents = await db.select().from(incidentsTable).orderBy(desc(incidentsTable.createdAt));
+      incidents = allIncidents.filter(i =>
+        allowedCategoryIds.has(i.categoryId) || i.reporterId === authUser.id
+      );
+    }
+  }
+
   const result = await Promise.all(incidents.map(formatIncident));
   res.json(result);
 });
@@ -74,29 +113,40 @@ router.post("/", async (req, res) => {
 
   const formatted = await formatIncident(inc);
 
-  if (assignedGroupId) {
-    try {
+  // Notify all groups assigned to the category + directly assigned users
+  try {
+    const catGroups = await db.select({ groupId: categoryGroupsTable.groupId })
+      .from(categoryGroupsTable).where(eq(categoryGroupsTable.categoryId, categoryId));
+    const catUsers = await db.select({ email: usersTable.email })
+      .from(categoryUsersTable)
+      .innerJoin(usersTable, eq(categoryUsersTable.userId, usersTable.id))
+      .where(eq(categoryUsersTable.categoryId, categoryId));
+
+    const groupEmailSets: string[] = [];
+    for (const cg of catGroups) {
       const members = await db.select({ email: usersTable.email })
         .from(groupMembersTable)
         .innerJoin(usersTable, eq(groupMembersTable.userId, usersTable.id))
-        .where(eq(groupMembersTable.groupId, assignedGroupId));
-      const emails = members.map(m => m.email).filter(Boolean) as string[];
-      if (emails.length) {
-        sendEmail(
-          emails,
-          `[HSE] Incident Baru #${inc.id} - ${formatted.categoryName}`,
-          incidentEmailHtml({
-            id: inc.id, detail: inc.detail,
-            categoryName: formatted.categoryName,
-            plantName: formatted.plantName,
-            incidentDate: inc.incidentDate,
-            reporterName: formatted.reporterName,
-            assignedGroupName: formatted.assignedGroupName ?? undefined,
-          })
-        ).catch(() => {});
-      }
-    } catch { /* ignore email errors */ }
-  }
+        .where(eq(groupMembersTable.groupId, cg.groupId));
+      groupEmailSets.push(...members.map(m => m.email).filter(Boolean) as string[]);
+    }
+    const directEmails = catUsers.map(u => u.email).filter(Boolean) as string[];
+    const emails = [...new Set([...groupEmailSets, ...directEmails])];
+    if (emails.length) {
+      sendEmail(
+        emails,
+        `[HSE] Incident Baru #${inc.id} - ${formatted.categoryName}`,
+        incidentEmailHtml({
+          id: inc.id, detail: inc.detail,
+          categoryName: formatted.categoryName,
+          plantName: formatted.plantName,
+          incidentDate: inc.incidentDate,
+          reporterName: formatted.reporterName,
+          assignedGroupName: formatted.assignedGroupName ?? undefined,
+        })
+      ).catch(() => {});
+    }
+  } catch { /* ignore email errors */ }
 
   res.status(201).json(formatted);
 });

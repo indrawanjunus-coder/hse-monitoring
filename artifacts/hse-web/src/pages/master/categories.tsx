@@ -6,27 +6,70 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RiskBadge } from "@/components/badges";
-import { Plus, Edit, Trash2, UsersRound } from "lucide-react";
+import { Plus, Edit, Trash2, UsersRound, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Pagination } from "@/components/pagination";
 
 interface Category {
   id: number; name: string; description?: string; riskLevel: "minor" | "moderate" | "major" | "fatal";
   picGroupId?: number; picGroupName?: string; color?: string;
+  groupIds?: number[]; userIds?: number[];
+  groups?: { id: number; name: string }[];
+  users?: { id: number; name: string; nik: string }[];
 }
 interface Group { id: number; name: string }
+interface UserItem { id: number; name: string; nik: string }
 
-function CategoryForm({ cat, groups, onSave, onCancel }: {
-  cat?: Category; groups: Group[];
+function MultiCheckList<T extends { id: number; name: string }>({
+  label, icon, items, selected, onChange, placeholder,
+}: {
+  label: string; icon?: React.ReactNode;
+  items: T[]; selected: number[];
+  onChange: (ids: number[]) => void;
+  placeholder?: string;
+}) {
+  const toggle = (id: number) =>
+    onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
+
+  return (
+    <div className="space-y-2">
+      <Label className="flex items-center gap-1.5">
+        {icon}{label}
+      </Label>
+      <div className="border rounded-md max-h-40 overflow-y-auto p-2 space-y-1 bg-white">
+        {items.length === 0
+          ? <p className="text-xs text-gray-400 py-1 px-1">{placeholder ?? "Tidak ada data"}</p>
+          : items.map(item => (
+            <label key={item.id} className="flex items-center gap-2 px-1 py-1 rounded hover:bg-gray-50 cursor-pointer text-sm">
+              <Checkbox
+                checked={selected.includes(item.id)}
+                onCheckedChange={() => toggle(item.id)}
+              />
+              <span>{item.name}</span>
+            </label>
+          ))
+        }
+      </div>
+      {selected.length > 0 && (
+        <p className="text-xs text-indigo-600">{selected.length} dipilih</p>
+      )}
+    </div>
+  );
+}
+
+function CategoryForm({ cat, groups, users, onSave, onCancel }: {
+  cat?: Category; groups: Group[]; users: UserItem[];
   onSave: (d: Record<string, unknown>) => Promise<void>; onCancel: () => void;
 }) {
   const [name, setName] = useState(cat?.name ?? "");
   const [description, setDescription] = useState(cat?.description ?? "");
   const [riskLevel, setRiskLevel] = useState(cat?.riskLevel ?? "minor");
-  const [picGroupId, setPicGroupId] = useState(cat?.picGroupId ? String(cat.picGroupId) : "none");
+  const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>(cat?.groupIds ?? []);
+  const [selectedUserIds, setSelectedUserIds] = useState<number[]>(cat?.userIds ?? []);
   const [color, setColor] = useState(cat?.color ?? "#3B82F6");
   const [saving, setSaving] = useState(false);
 
@@ -38,8 +81,9 @@ function CategoryForm({ cat, groups, onSave, onCancel }: {
         name: name.trim(),
         description: description.trim() || undefined,
         riskLevel,
-        picGroupId: (picGroupId && picGroupId !== "none") ? parseInt(picGroupId) : null,
         color,
+        groupIds: selectedGroupIds,
+        userIds: selectedUserIds,
       });
     } finally { setSaving(false); }
   };
@@ -71,20 +115,27 @@ function CategoryForm({ cat, groups, onSave, onCancel }: {
           </div>
         </div>
       </div>
-      <div className="space-y-2">
-        <Label className="flex items-center gap-1.5">
-          <UsersRound className="w-3.5 h-3.5" />
-          Group PIC (Penanggung Jawab)
-        </Label>
-        <Select value={picGroupId} onValueChange={setPicGroupId}>
-          <SelectTrigger><SelectValue placeholder="Pilih group PIC..." /></SelectTrigger>
-          <SelectContent className="max-h-60 overflow-y-auto">
-            <SelectItem value="none">Tidak ada</SelectItem>
-            {groups.map(g => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-gray-500">Group yang akan menerima notifikasi incident pada kategori ini</p>
-      </div>
+
+      <MultiCheckList
+        label="Group PIC (Penanggung Jawab)"
+        icon={<UsersRound className="w-3.5 h-3.5" />}
+        items={groups}
+        selected={selectedGroupIds}
+        onChange={setSelectedGroupIds}
+        placeholder="Tidak ada group tersedia"
+      />
+      <p className="text-xs text-gray-500 -mt-2">Semua anggota group yang dipilih akan menerima notifikasi dan melihat incident kategori ini</p>
+
+      <MultiCheckList
+        label="User Penanggung Jawab"
+        icon={<User className="w-3.5 h-3.5" />}
+        items={users.map(u => ({ id: u.id, name: `${u.name} (${u.nik})` }))}
+        selected={selectedUserIds}
+        onChange={setSelectedUserIds}
+        placeholder="Tidak ada user tersedia"
+      />
+      <p className="text-xs text-gray-500 -mt-2">User yang dipilih akan menerima notifikasi dan melihat incident kategori ini</p>
+
       <div className="space-y-2">
         <Label>Deskripsi</Label>
         <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Deskripsi opsional" />
@@ -111,6 +162,9 @@ export default function CategoriesPage() {
   const { data: groups = [] } = useQuery<Group[]>({
     queryKey: ["groups"], queryFn: () => api.get("/groups"),
   });
+  const { data: users = [] } = useQuery<UserItem[]>({
+    queryKey: ["users"], queryFn: () => api.get("/users"),
+  });
 
   const saveMutation = useMutation({
     mutationFn: (d: Record<string, unknown>) =>
@@ -133,7 +187,7 @@ export default function CategoriesPage() {
     <div className="p-6">
       <PageHeader
         title="Master Kategori"
-        subtitle="Kelola kategori hazard & incident dan assign group PIC"
+        subtitle="Kelola kategori hazard & incident dan assign group/user PIC"
         action={
           <Button onClick={() => { setEditCat(undefined); setDialog(true); }}>
             <Plus className="w-4 h-4 mr-2" />Tambah Kategori
@@ -147,15 +201,16 @@ export default function CategoriesPage() {
               <th className="text-left px-4 py-3 font-medium text-gray-600">Nama</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Risk Level</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Group PIC</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">User PIC</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Deskripsi</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Aksi</th>
             </tr>
           </thead>
           <tbody>
             {isLoading
-              ? <tr><td colSpan={5} className="text-center py-8 text-gray-400">Memuat...</td></tr>
+              ? <tr><td colSpan={6} className="text-center py-8 text-gray-400">Memuat...</td></tr>
               : categories.length === 0
-              ? <tr><td colSpan={5} className="text-center py-8 text-gray-400">Tidak ada kategori</td></tr>
+              ? <tr><td colSpan={6} className="text-center py-8 text-gray-400">Tidak ada kategori</td></tr>
               : paginated.map(c => (
                 <tr key={c.id} className="border-b last:border-0 hover:bg-gray-50">
                   <td className="px-4 py-3">
@@ -168,10 +223,27 @@ export default function CategoriesPage() {
                   </td>
                   <td className="px-4 py-3"><RiskBadge level={c.riskLevel} /></td>
                   <td className="px-4 py-3">
-                    {c.picGroupName ? (
-                      <span className="inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
-                        <UsersRound className="w-3 h-3" />{c.picGroupName}
-                      </span>
+                    {c.groups && c.groups.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {c.groups.map(g => (
+                          <span key={g.id} className="inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full">
+                            <UsersRound className="w-3 h-3" />{g.name}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {c.users && c.users.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {c.users.map(u => (
+                          <span key={u.id} className="inline-flex items-center gap-1 text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full">
+                            <User className="w-3 h-3" />{u.name}
+                          </span>
+                        ))}
+                      </div>
                     ) : (
                       <span className="text-xs text-gray-400">—</span>
                     )}
@@ -196,10 +268,10 @@ export default function CategoriesPage() {
       </div>
       <Pagination page={page} total={categories.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
       <Dialog open={dialog} onOpenChange={setDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editCat ? "Edit Kategori" : "Tambah Kategori"}</DialogTitle></DialogHeader>
           <CategoryForm
-            cat={editCat} groups={groups}
+            cat={editCat} groups={groups} users={users}
             onSave={(d) => saveMutation.mutateAsync(d)}
             onCancel={() => setDialog(false)}
           />

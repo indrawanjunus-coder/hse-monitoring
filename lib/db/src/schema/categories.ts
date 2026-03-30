@@ -2,6 +2,7 @@ import { integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { groupsTable } from "./groups";
+import { usersTable } from "./users";
 
 export const categoriesTable = pgTable("categories", {
   id: serial("id").primaryKey(),
@@ -11,6 +12,18 @@ export const categoriesTable = pgTable("categories", {
   picGroupId: integer("pic_group_id").references(() => groupsTable.id),
   color: text("color").default("#3B82F6"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const categoryGroupsTable = pgTable("category_groups", {
+  id: serial("id").primaryKey(),
+  categoryId: integer("category_id").notNull().references(() => categoriesTable.id, { onDelete: "cascade" }),
+  groupId: integer("group_id").notNull().references(() => groupsTable.id, { onDelete: "cascade" }),
+});
+
+export const categoryUsersTable = pgTable("category_users", {
+  id: serial("id").primaryKey(),
+  categoryId: integer("category_id").notNull().references(() => categoriesTable.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
 });
 
 export const insertCategorySchema = createInsertSchema(categoriesTable).omit({ id: true, createdAt: true });
