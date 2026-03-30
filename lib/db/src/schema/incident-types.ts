@@ -7,6 +7,7 @@ export const incidentTypesTable = pgTable("incident_types", {
   code: text("code").notNull().unique(),
   label: text("label").notNull(),
   description: text("description"),
+  categoryId: integer("category_id"),
   isActive: boolean("is_active").notNull().default(true),
   orderIndex: integer("order_index").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),

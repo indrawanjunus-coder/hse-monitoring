@@ -8,45 +8,35 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Edit, Trash2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
+
+interface Category { id: number; name: string }
 
 interface IncidentType {
   id: number;
   code: string;
   label: string;
   description?: string | null;
+  categoryId?: number | null;
+  categoryName?: string | null;
   isActive: boolean;
   orderIndex: number;
 }
 
-const TYPE_COLORS: Record<string, string> = {
-  near_miss: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  accident: "bg-red-100 text-red-800 border-red-300",
-  unsafe_act: "bg-orange-100 text-orange-800 border-orange-300",
-  unsafe_condition: "bg-purple-100 text-purple-800 border-purple-300",
-};
-
-function TypeBadge({ code, label }: { code: string; label: string }) {
-  const cls = TYPE_COLORS[code] ?? "bg-gray-100 text-gray-700 border-gray-300";
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-xs font-semibold ${cls}`}>
-      <AlertTriangle className="w-3 h-3" />
-      {label}
-    </span>
-  );
-}
-
-function IncidentTypeForm({ type, onSave, onCancel }: {
+function IncidentTypeForm({ type, categories, onSave, onCancel }: {
   type?: IncidentType;
+  categories: Category[];
   onSave: (d: Record<string, unknown>) => Promise<void>;
   onCancel: () => void;
 }) {
   const [code, setCode] = useState(type?.code ?? "");
   const [label, setLabel] = useState(type?.label ?? "");
   const [description, setDescription] = useState(type?.description ?? "");
+  const [categoryId, setCategoryId] = useState(type?.categoryId ? String(type.categoryId) : "none");
   const [isActive, setIsActive] = useState(type?.isActive ?? true);
   const [orderIndex, setOrderIndex] = useState(String(type?.orderIndex ?? 0));
   const [saving, setSaving] = useState(false);
@@ -55,7 +45,14 @@ function IncidentTypeForm({ type, onSave, onCancel }: {
     if (!label.trim() || (!type && !code.trim())) return;
     setSaving(true);
     try {
-      await onSave({ code: code.trim(), label: label.trim(), description: description.trim() || null, isActive, orderIndex: parseInt(orderIndex) || 0 });
+      await onSave({
+        code: code.trim(),
+        label: label.trim(),
+        description: description.trim() || null,
+        categoryId: categoryId !== "none" ? parseInt(categoryId) : null,
+        isActive,
+        orderIndex: parseInt(orderIndex) || 0,
+      });
     } finally { setSaving(false); }
   };
 
@@ -71,6 +68,17 @@ function IncidentTypeForm({ type, onSave, onCancel }: {
       <div className="space-y-1">
         <Label>Label / Nama Tampilan <span className="text-red-500">*</span></Label>
         <Input value={label} onChange={e => setLabel(e.target.value)} placeholder="contoh: Near Miss, Kecelakaan" />
+      </div>
+      <div className="space-y-1">
+        <Label>Kategori <span className="text-red-500">*</span></Label>
+        <Select value={categoryId} onValueChange={setCategoryId}>
+          <SelectTrigger><SelectValue placeholder="Pilih kategori..." /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">— Tidak ada kategori —</SelectItem>
+            {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-gray-500">Tipe incident ini akan muncul saat pelapor memilih kategori di atas.</p>
       </div>
       <div className="space-y-1">
         <Label>Deskripsi</Label>
@@ -103,10 +111,16 @@ export default function IncidentTypesPage() {
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<IncidentType | null>(null);
+  const [filterCat, setFilterCat] = useState("all");
 
   const { data: types = [], isLoading } = useQuery<IncidentType[]>({
     queryKey: ["incident-types"],
     queryFn: () => api.get("/incident-types"),
+  });
+
+  const { data: categories = [] } = useQuery<Category[]>({
+    queryKey: ["categories"],
+    queryFn: () => api.get("/categories"),
   });
 
   const createMut = useMutation({
@@ -130,20 +144,40 @@ export default function IncidentTypesPage() {
     if (confirm(`Hapus tipe incident "${t.label}"?`)) deleteMut.mutate(t.id);
   };
 
+  const displayed = filterCat === "all"
+    ? types
+    : filterCat === "none"
+      ? types.filter(t => !t.categoryId)
+      : types.filter(t => String(t.categoryId) === filterCat);
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Master Tipe Incident"
-        subtitle="Kelola daftar tipe incident yang tersedia di sistem"
+        subtitle="Kelola daftar tipe incident per kategori"
         action={isAdmin ? <Button size="sm" onClick={() => setShowForm(true)}><Plus className="w-4 h-4 mr-1" />Tambah Tipe</Button> : undefined}
       />
 
+      {/* Filter by category */}
+      <div className="flex items-center gap-3">
+        <span className="text-sm text-gray-500">Filter Kategori:</span>
+        <Select value={filterCat} onValueChange={setFilterCat}>
+          <SelectTrigger className="w-52 h-8 text-sm"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Kategori</SelectItem>
+            <SelectItem value="none">— Tanpa Kategori —</SelectItem>
+            {categories.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <span className="text-xs text-gray-400">{displayed.length} tipe</span>
+      </div>
+
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Memuat data...</div>
-      ) : types.length === 0 ? (
+      ) : displayed.length === 0 ? (
         <div className="text-center py-12 text-gray-400">
           <AlertTriangle className="w-10 h-10 mx-auto mb-2 opacity-30" />
-          <p>Belum ada tipe incident</p>
+          <p>Tidak ada tipe incident untuk kategori ini</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
@@ -152,20 +186,26 @@ export default function IncidentTypesPage() {
               <tr>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">Label</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600">Kode</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-600">Kategori</th>
                 <th className="px-4 py-3 text-left font-semibold text-gray-600 hidden md:table-cell">Deskripsi</th>
                 <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
-                <th className="px-4 py-3 text-center font-semibold text-gray-600">Urutan</th>
                 {isAdmin && <th className="px-4 py-3" />}
               </tr>
             </thead>
             <tbody className="divide-y">
-              {types.map(t => (
+              {displayed.map(t => (
                 <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-4 py-3">
-                    <TypeBadge code={t.code} label={t.label} />
+                    <span className="font-medium text-gray-800">{t.label}</span>
                   </td>
                   <td className="px-4 py-3">
                     <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{t.code}</code>
+                  </td>
+                  <td className="px-4 py-3">
+                    {t.categoryName
+                      ? <Badge variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">{t.categoryName}</Badge>
+                      : <span className="text-gray-400 text-xs italic">Umum</span>
+                    }
                   </td>
                   <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{t.description ?? "—"}</td>
                   <td className="px-4 py-3 text-center">
@@ -174,7 +214,6 @@ export default function IncidentTypesPage() {
                       : <Badge variant="outline" className="text-gray-400">Nonaktif</Badge>
                     }
                   </td>
-                  <td className="px-4 py-3 text-center text-gray-500">{t.orderIndex}</td>
                   {isAdmin && (
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
@@ -199,6 +238,7 @@ export default function IncidentTypesPage() {
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Tambah Tipe Incident</DialogTitle></DialogHeader>
           <IncidentTypeForm
+            categories={categories}
             onSave={async d => { await createMut.mutateAsync(d); }}
             onCancel={() => setShowForm(false)}
           />
@@ -211,6 +251,7 @@ export default function IncidentTypesPage() {
             <DialogHeader><DialogTitle>Edit Tipe Incident</DialogTitle></DialogHeader>
             <IncidentTypeForm
               type={editTarget}
+              categories={categories}
               onSave={async d => { await updateMut.mutateAsync({ id: editTarget.id, ...d }); }}
               onCancel={() => setEditTarget(null)}
             />

@@ -56,7 +56,7 @@ function twoMonthsAgo(): string {
   return d.toISOString().slice(0, 10);
 }
 
-interface ApiIncidentType { id: number; code: string; label: string; isActive: boolean; }
+interface ApiIncidentType { id: number; code: string; label: string; isActive: boolean; categoryId?: number | null; }
 
 function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiveActions, reporterId }: {
   onSave: (data: Record<string, unknown>) => Promise<void>;
@@ -65,12 +65,11 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
   reporterId: number;
 }) {
   const { data: incidentTypes = [] } = useQuery<ApiIncidentType[]>({ queryKey: ["incident-types"], queryFn: () => api.get("/incident-types") });
-  const activeTypes = incidentTypes.filter(t => t.isActive);
   const today = new Date().toISOString().split("T")[0]!;
   const [plantId, setPlantId] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [incidentDate, setIncidentDate] = useState(today);
-  const [incidentType, setIncidentType] = useState("near_miss");
+  const [incidentType, setIncidentType] = useState("");
   const [detail, setDetail] = useState("");
   const [rootCause, setRootCause] = useState("");
   const [actionId, setActionId] = useState("none");
@@ -78,6 +77,14 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
   const [targetDate, setTargetDate] = useState("");
   const [needsFurtherAction, setNeedsFurtherAction] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const availableTypes = incidentTypes.filter(t => t.isActive && (categoryId ? t.categoryId === parseInt(categoryId) : !t.categoryId));
+
+  useEffect(() => {
+    if (!availableTypes.find(t => t.code === incidentType)) {
+      setIncidentType(availableTypes[0]?.code ?? "");
+    }
+  }, [categoryId, incidentTypes]);
 
   const handleSave = async () => {
     if (!plantId || !categoryId || !detail.trim()) return;
@@ -125,13 +132,23 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
           <Input type="date" value={incidentDate} onChange={e => setIncidentDate(e.target.value)} />
         </div>
         <div className="space-y-2">
-          <Label>Tipe Incident *</Label>
-          <Select value={incidentType} onValueChange={setIncidentType}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {activeTypes.map(t => <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <Label>Tipe Incident</Label>
+          {!categoryId ? (
+            <div className="flex items-center h-9 px-3 rounded-md border border-dashed border-gray-300 text-sm text-gray-400">
+              Pilih kategori terlebih dahulu
+            </div>
+          ) : availableTypes.length === 0 ? (
+            <div className="flex items-center h-9 px-3 rounded-md border border-dashed border-amber-300 bg-amber-50 text-sm text-amber-600">
+              Tidak ada tipe untuk kategori ini
+            </div>
+          ) : (
+            <Select value={incidentType} onValueChange={setIncidentType}>
+              <SelectTrigger><SelectValue placeholder="Pilih tipe..." /></SelectTrigger>
+              <SelectContent>
+                {availableTypes.map(t => <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
       <div className="space-y-2">
