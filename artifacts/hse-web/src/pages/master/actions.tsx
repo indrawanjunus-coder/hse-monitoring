@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Edit, Trash2, Wrench } from "lucide-react";
+import { Plus, Edit, Trash2, Wrench, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Pagination } from "@/components/pagination";
 
@@ -50,8 +50,10 @@ export default function ActionsPage() {
   const [editAction, setEditAction] = useState<Action | undefined>();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [search, setSearch] = useState("");
   const { data: actions = [], isLoading } = useQuery<Action[]>({ queryKey: ["actions"], queryFn: () => api.get("/actions") });
-  const paginated = actions.slice((page - 1) * pageSize, page * pageSize);
+  const filtered = actions.filter(a => !search.trim() || a.name.toLowerCase().includes(search.toLowerCase()) || a.description?.toLowerCase().includes(search.toLowerCase()));
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
   const saveMutation = useMutation({
     mutationFn: (d: Record<string, unknown>) => editAction ? api.put(`/actions/${editAction.id}`, d) : api.post("/actions", d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["actions"] }); setDialog(false); toast({ title: "Tindakan disimpan" }); },
@@ -68,16 +70,22 @@ export default function ActionsPage() {
         subtitle="Kelola daftar tindakan penanganan incident"
         action={<Button onClick={() => { setEditAction(undefined); setDialog(true); }}><Plus className="w-4 h-4 mr-2" />Tambah Tindakan</Button>}
       />
+      <div className="mb-3">
+        <div className="relative max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" />
+          <Input className="pl-8 h-9 text-sm" placeholder="Cari nama tindakan..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+        </div>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {isLoading ? (
           <div className="col-span-3 text-center py-12 text-gray-400">Memuat...</div>
-        ) : actions.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="col-span-3 text-center py-12">
             <Wrench className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">Belum ada tindakan</p>
-            <Button className="mt-4" onClick={() => { setEditAction(undefined); setDialog(true); }}>
+            <p className="text-gray-500">{search ? `Tidak ada tindakan cocok dengan "${search}"` : "Belum ada tindakan"}</p>
+            {!search && <Button className="mt-4" onClick={() => { setEditAction(undefined); setDialog(true); }}>
               <Plus className="w-4 h-4 mr-2" />Tambah Tindakan
-            </Button>
+            </Button>}
           </div>
         ) : paginated.map(a => (
           <div key={a.id} className="bg-white border rounded-xl p-4 hover:shadow-md transition-shadow">
@@ -97,7 +105,7 @@ export default function ActionsPage() {
           </div>
         ))}
       </div>
-      <Pagination page={page} total={actions.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
+      <Pagination page={page} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{editAction ? "Edit Tindakan" : "Tambah Tindakan"}</DialogTitle></DialogHeader>

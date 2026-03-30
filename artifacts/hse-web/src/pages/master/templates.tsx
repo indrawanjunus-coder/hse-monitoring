@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus, Edit, Trash2, LayoutTemplate, HelpCircle, ChevronUp, ChevronDown,
-  Camera, Star, CheckSquare, AlignLeft, Lock,
+  Camera, Star, CheckSquare, AlignLeft, Lock, Search,
 } from "lucide-react";
 import { Pagination } from "@/components/pagination";
 import { useToast } from "@/hooks/use-toast";
@@ -403,6 +403,7 @@ export default function TemplatesPage() {
   const [builderTemplate, setBuilderTemplate] = useState<Template | undefined>();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [search, setSearch] = useState("");
 
   const canManage = user?.role === "admin" || user?.role === "supervisor";
 
@@ -431,6 +432,8 @@ export default function TemplatesPage() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["templates"] }); toast({ title: "Template dihapus" }); },
   });
 
+  const filtered = templates.filter(t => !search.trim() || t.name.toLowerCase().includes(search.toLowerCase()) || t.description?.toLowerCase().includes(search.toLowerCase()));
+
   const openBuilder = (t: Template) => {
     setBuilderTemplate(t);
     setBuilderDialog(true);
@@ -455,13 +458,20 @@ export default function TemplatesPage() {
         </div>
       )}
 
+      <div className="mb-3">
+        <div className="relative max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" />
+          <Input className="pl-8 h-9 text-sm" placeholder="Cari nama atau deskripsi template..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+        </div>
+      </div>
+
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Memuat...</div>
-      ) : templates.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="text-center py-12">
           <LayoutTemplate className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">Belum ada template</p>
-          {canManage && (
+          <p className="text-gray-500">{search ? `Tidak ada template cocok dengan "${search}"` : "Belum ada template"}</p>
+          {!search && canManage && (
             <Button className="mt-4" onClick={() => { setEditTemplate(undefined); setFormDialog(true); }}>
               <Plus className="w-4 h-4 mr-2" />Tambah Template
             </Button>
@@ -470,7 +480,7 @@ export default function TemplatesPage() {
       ) : (
         <>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {templates.slice((page - 1) * pageSize, page * pageSize).map(t => (
+          {filtered.slice((page - 1) * pageSize, page * pageSize).map(t => (
             <Card key={t.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between mb-3">
@@ -510,7 +520,7 @@ export default function TemplatesPage() {
             </Card>
           ))}
         </div>
-        <Pagination page={page} total={templates.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
+        <Pagination page={page} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
         </>
       )}
 

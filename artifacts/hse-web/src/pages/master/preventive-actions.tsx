@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Edit, Trash2, ShieldCheck } from "lucide-react";
+import { Plus, Edit, Trash2, ShieldCheck, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Pagination } from "@/components/pagination";
 
@@ -50,12 +50,14 @@ export default function PreventiveActionsPage() {
   const [editPa, setEditPa] = useState<PreventiveAction | undefined>();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [search, setSearch] = useState("");
 
   const { data: pas = [], isLoading } = useQuery<PreventiveAction[]>({
     queryKey: ["preventive-actions"],
     queryFn: () => api.get("/preventive-actions"),
   });
-  const paginated = pas.slice((page - 1) * pageSize, page * pageSize);
+  const filtered = pas.filter(pa => !search.trim() || pa.name.toLowerCase().includes(search.toLowerCase()) || pa.description?.toLowerCase().includes(search.toLowerCase()));
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const saveMutation = useMutation({
     mutationFn: (d: Record<string, unknown>) => editPa ? api.put(`/preventive-actions/${editPa.id}`, d) : api.post("/preventive-actions", d),
@@ -74,13 +76,19 @@ export default function PreventiveActionsPage() {
         subtitle="Kelola daftar tindakan pencegahan incident"
         action={<Button onClick={() => { setEditPa(undefined); setDialog(true); }}><Plus className="w-4 h-4 mr-2" />Tambah</Button>}
       />
+      <div className="mb-3">
+        <div className="relative max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" />
+          <Input className="pl-8 h-9 text-sm" placeholder="Cari nama tindakan preventif..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+        </div>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {isLoading ? (
           <div className="col-span-3 text-center py-12 text-gray-400">Memuat...</div>
-        ) : pas.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="col-span-3 text-center py-12">
             <ShieldCheck className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">Belum ada tindakan preventif</p>
+            <p className="text-gray-500">{search ? `Tidak ada hasil untuk "${search}"` : "Belum ada tindakan preventif"}</p>
           </div>
         ) : paginated.map(pa => (
           <div key={pa.id} className="bg-white border rounded-xl p-4 hover:shadow-md transition-shadow">
@@ -100,7 +108,7 @@ export default function PreventiveActionsPage() {
           </div>
         ))}
       </div>
-      <Pagination page={page} total={pas.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
+      <Pagination page={page} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{editPa ? "Edit Tindakan Preventif" : "Tambah Tindakan Preventif"}</DialogTitle></DialogHeader>

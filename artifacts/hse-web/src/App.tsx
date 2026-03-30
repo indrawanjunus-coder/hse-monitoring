@@ -24,6 +24,7 @@ import IndicatorsPage from "@/pages/master/indicators";
 import PreventiveActionsPage from "@/pages/master/preventive-actions";
 import IncidentTypesPage from "@/pages/master/incident-types";
 import IndicatorReportPage from "@/pages/reports/indicator-report";
+import LogsPage from "@/pages/admin/logs";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,6 +61,7 @@ function AppRoutes() {
           <Route path="/master/preventive-actions" component={PreventiveActionsPage} />
           <Route path="/master/incident-types" component={IncidentTypesPage} />
           <Route path="/reports/indicators" component={IndicatorReportPage} />
+          <Route path="/admin/logs" component={LogsPage} />
           <Route><Redirect to="/" /></Route>
         </Switch>
       </Layout>

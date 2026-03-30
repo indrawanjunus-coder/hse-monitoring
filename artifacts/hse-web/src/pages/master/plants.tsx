@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Plus, Edit, Trash2, MapPin } from "lucide-react";
+import { Plus, Edit, Trash2, MapPin, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Pagination } from "@/components/pagination";
 
@@ -62,8 +62,14 @@ export default function PlantsPage() {
   const [editPlant, setEditPlant] = useState<Plant | undefined>();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
+  const [search, setSearch] = useState("");
   const { data: plants = [], isLoading } = useQuery<Plant[]>({ queryKey: ["plants"], queryFn: () => api.get("/plants") });
-  const paginated = plants.slice((page - 1) * pageSize, page * pageSize);
+  const filtered = plants.filter(p => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return p.name.toLowerCase().includes(q) || p.code?.toLowerCase().includes(q) || p.location?.toLowerCase().includes(q);
+  });
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
   const saveMutation = useMutation({
     mutationFn: (d: Record<string, unknown>) => editPlant ? api.put(`/plants/${editPlant.id}`, d) : api.post("/plants", d),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["plants"] }); setDialog(false); toast({ title: "Plant disimpan" }); },
@@ -80,6 +86,12 @@ export default function PlantsPage() {
         subtitle="Kelola daftar plant / area inspeksi"
         action={<Button onClick={() => { setEditPlant(undefined); setDialog(true); }}><Plus className="w-4 h-4 mr-2" />Tambah Plant</Button>}
       />
+      <div className="mb-3">
+        <div className="relative max-w-sm">
+          <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" />
+          <Input className="pl-8 h-9 text-sm" placeholder="Cari nama, kode, atau lokasi..." value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+        </div>
+      </div>
       <div className="bg-white rounded-lg border overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b">
@@ -93,7 +105,7 @@ export default function PlantsPage() {
           </thead>
           <tbody>
             {isLoading ? <tr><td colSpan={5} className="text-center py-8 text-gray-400">Memuat...</td></tr>
-              : plants.length === 0 ? <tr><td colSpan={5} className="text-center py-8 text-gray-400">Tidak ada plant</td></tr>
+              : filtered.length === 0 ? <tr><td colSpan={5} className="text-center py-8 text-gray-400">{search ? `Tidak ada plant cocok dengan "${search}"` : "Tidak ada plant"}</td></tr>
               : paginated.map(p => (
                 <tr key={p.id} className="border-b last:border-0 hover:bg-gray-50">
                   <td className="px-4 py-3 font-semibold text-gray-900">{p.name}</td>
@@ -111,7 +123,7 @@ export default function PlantsPage() {
           </tbody>
         </table>
       </div>
-      <Pagination page={page} total={plants.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
+      <Pagination page={page} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>{editPlant ? "Edit Plant" : "Tambah Plant"}</DialogTitle></DialogHeader>

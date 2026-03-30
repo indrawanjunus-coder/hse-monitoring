@@ -25,6 +25,7 @@ import {
   Mail,
   Target,
   Grid3X3,
+  ScrollText,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
@@ -59,9 +60,10 @@ const navItems: NavItem[] = [
   },
   { label: "Profil", href: "/profile", icon: <UserCircle className="w-4 h-4" /> },
   {
-    label: "Pengaturan", href: "/settings", icon: <Mail className="w-4 h-4" />, adminOnly: true,
+    label: "Pengaturan", href: "/settings", icon: <Settings className="w-4 h-4" />, adminOnly: true,
     children: [
       { label: "Email (SMTP)", href: "/settings/smtp", icon: <Mail className="w-4 h-4" /> },
+      { label: "Log Sistem", href: "/admin/logs", icon: <ScrollText className="w-4 h-4" />, adminOnly: true },
     ],
   },
   {
