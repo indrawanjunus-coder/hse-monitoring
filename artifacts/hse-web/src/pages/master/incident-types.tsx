@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Plus, Edit, Trash2, AlertTriangle } from "lucide-react";
+import { Plus, Edit, Trash2, AlertTriangle, Search, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { Pagination } from "@/components/pagination";
@@ -113,6 +113,7 @@ export default function IncidentTypesPage() {
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<IncidentType | null>(null);
   const [filterCat, setFilterCat] = useState("all");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -139,7 +140,7 @@ export default function IncidentTypesPage() {
   });
 
   const deleteMut = useMutation({
-    mutationFn: (id: number) => api.delete(`/incident-types/${id}`),
+    mutationFn: (id: number) => api.del(`/incident-types/${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["incident-types"] }); toast({ title: "Tipe incident dihapus" }); },
   });
 
@@ -147,11 +148,13 @@ export default function IncidentTypesPage() {
     if (confirm(`Hapus tipe incident "${t.label}"?`)) deleteMut.mutate(t.id);
   };
 
-  const filtered = filterCat === "all"
-    ? types
-    : filterCat === "none"
-      ? types.filter(t => !t.categoryId)
-      : types.filter(t => String(t.categoryId) === filterCat);
+  const filtered = types
+    .filter(t => filterCat === "all" ? true : filterCat === "none" ? !t.categoryId : String(t.categoryId) === filterCat)
+    .filter(t => {
+      if (!search.trim()) return true;
+      const q = search.trim().toLowerCase();
+      return t.code.toLowerCase().includes(q) || t.label.toLowerCase().includes(q) || (t.description ?? "").toLowerCase().includes(q);
+    });
 
   const displayed = filtered.slice((page - 1) * pageSize, page * pageSize);
 
@@ -163,9 +166,22 @@ export default function IncidentTypesPage() {
         action={isAdmin ? <Button size="sm" onClick={() => setShowForm(true)}><Plus className="w-4 h-4 mr-1" />Tambah Tipe</Button> : undefined}
       />
 
-      {/* Filter by category */}
-      <div className="flex items-center gap-3">
-        <span className="text-sm text-gray-500">Filter Kategori:</span>
+      {/* Filter bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px] max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+          <Input
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            placeholder="Cari kode atau label..."
+            className="pl-8 h-8 text-sm"
+          />
+          {search && (
+            <button onClick={() => { setSearch(""); setPage(1); }} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
         <Select value={filterCat} onValueChange={v => { setFilterCat(v); setPage(1); }}>
           <SelectTrigger className="w-52 h-8 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent className="max-h-60 overflow-y-auto">
