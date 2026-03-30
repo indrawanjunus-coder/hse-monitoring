@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable, departmentsTable, groupMembersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { authMiddleware, hashPassword } from "../lib/auth";
+import { sendEmail, newUserEmailHtml, passwordResetEmailHtml } from "../lib/email";
 
 const router = Router();
 router.use(authMiddleware);
@@ -50,6 +51,13 @@ router.post("/", async (req, res) => {
   if (groupIds?.length) {
     await db.insert(groupMembersTable).values(groupIds.map((gid: number) => ({ groupId: gid, userId: u.id })));
   }
+  if (u.email && password) {
+    sendEmail(
+      u.email,
+      "Akun HSE Monitor Anda Telah Dibuat",
+      newUserEmailHtml({ name: u.name, nik: u.nik, email: u.email, password, role: u.role }),
+    ).catch(() => {});
+  }
   res.status(201).json({
     id: u.id, nik: u.nik, name: u.name, email: u.email, role: u.role,
     departmentId: u.departmentId, isHead: u.isHead, groupIds: groupIds ?? [],
@@ -60,6 +68,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const { name, email, password, role, departmentId, isHead, groupIds } = req.body;
+  const authUser = req.user!;
   const updateData: Record<string, unknown> = {};
   if (name) updateData.name = name;
   if (email) updateData.email = email;
@@ -74,6 +83,13 @@ router.put("/:id", async (req, res) => {
     if (groupIds.length) {
       await db.insert(groupMembersTable).values(groupIds.map((gid: number) => ({ groupId: gid, userId: id })));
     }
+  }
+  if (password && u.email && authUser.role === "admin" && authUser.id !== id) {
+    sendEmail(
+      u.email,
+      "Password HSE Monitor Anda Telah Direset",
+      passwordResetEmailHtml({ name: u.name, nik: u.nik, newPassword: password, resetBy: authUser.name }),
+    ).catch(() => {});
   }
   const gms = await db.select().from(groupMembersTable).where(eq(groupMembersTable.userId, id));
   res.json({
@@ -92,7 +108,7 @@ router.delete("/:id", async (req, res) => {
 router.post("/:id/change-password", async (req, res) => {
   const id = parseInt(req.params.id);
   const { currentPassword, newPassword } = req.body;
-  const authUser = (req as unknown as { user: { id: number; role: string } }).user;
+  const authUser = req.user!;
   if (!newPassword || newPassword.length < 6) {
     res.status(400).json({ message: "Password baru minimal 6 karakter" }); return;
   }
@@ -106,6 +122,13 @@ router.post("/:id/change-password", async (req, res) => {
   }
   const passwordHash = await hashPassword(newPassword);
   await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, id));
+  if (authUser.role === "admin" && authUser.id !== id && u.email) {
+    sendEmail(
+      u.email,
+      "Password HSE Monitor Anda Telah Direset",
+      passwordResetEmailHtml({ name: u.name, nik: u.nik, newPassword, resetBy: authUser.name }),
+    ).catch(() => {});
+  }
   res.json({ message: "Password berhasil diubah" });
 });
 

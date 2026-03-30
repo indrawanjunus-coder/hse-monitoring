@@ -57,6 +57,55 @@ export function incidentEmailHtml(incident: {
   `;
 }
 
+export function newUserEmailHtml(user: {
+  name: string; nik: string; email: string; password: string; role: string;
+}) {
+  const roleLabel: Record<string, string> = { admin: "Admin", supervisor: "Supervisor", employee: "Employee" };
+  return `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;color:white;padding:20px;border-radius:8px 8px 0 0">
+        <h2 style="margin:0">👋 Selamat Datang di Sistem HSE</h2>
+      </div>
+      <div style="background:#f9fafb;padding:20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
+        <p style="color:#374151">Halo <strong>${user.name}</strong>, akun Anda telah dibuat. Berikut adalah informasi login Anda:</p>
+        <table style="width:100%;border-collapse:collapse;margin:12px 0">
+          <tr><td style="padding:8px;color:#6b7280;width:40%">Nama</td><td style="padding:8px;font-weight:600">${user.name}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">NIK (Username)</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${user.nik}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Password</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${user.password}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Role</td><td style="padding:8px">${roleLabel[user.role] ?? user.role}</td></tr>
+        </table>
+        <div style="margin-top:12px;padding:12px;background:#fef3c7;border-radius:6px;border-left:4px solid #f59e0b">
+          <p style="margin:0;color:#92400e;font-size:13px">⚠️ Harap simpan informasi ini dengan aman dan segera ganti password Anda setelah login pertama.</p>
+        </div>
+        <p style="margin-top:20px;color:#9ca3af;font-size:12px">Email ini dikirim secara otomatis oleh Sistem HSE.</p>
+      </div>
+    </div>
+  `;
+}
+
+export function passwordResetEmailHtml(user: {
+  name: string; nik: string; newPassword: string; resetBy: string;
+}) {
+  return `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;color:white;padding:20px;border-radius:8px 8px 0 0">
+        <h2 style="margin:0">🔑 Password Anda Telah Direset</h2>
+      </div>
+      <div style="background:#f9fafb;padding:20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
+        <p style="color:#374151">Halo <strong>${user.name}</strong>, password akun Anda telah direset oleh administrator (<strong>${user.resetBy}</strong>).</p>
+        <table style="width:100%;border-collapse:collapse;margin:12px 0">
+          <tr><td style="padding:8px;color:#6b7280;width:40%">NIK (Username)</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${user.nik}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Password Baru</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${user.newPassword}</td></tr>
+        </table>
+        <div style="margin-top:12px;padding:12px;background:#fef3c7;border-radius:6px;border-left:4px solid #f59e0b">
+          <p style="margin:0;color:#92400e;font-size:13px">⚠️ Harap segera login dan ganti password Anda ke password yang lebih aman.</p>
+        </div>
+        <p style="margin-top:20px;color:#9ca3af;font-size:12px">Jika Anda tidak merasa mereset password, segera hubungi administrator.</p>
+      </div>
+    </div>
+  `;
+}
+
 export function scheduleReminderHtml(schedule: {
   id: number; templateName?: string; plantName?: string;
   frequency: string; groupName?: string; supervisorName?: string;
