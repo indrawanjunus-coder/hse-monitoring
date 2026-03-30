@@ -204,8 +204,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
   onUpdate: (data: Record<string, unknown>) => Promise<void>;
   actions: Action[]; preventiveActions: PreventiveAction[];
 }) {
-  const { user } = useAuth();
-  const canUpdate = user?.role === "admin" || user?.role === "supervisor";
+  const canUpdate = incident.status !== "closed";
   const { data: incidentTypes = [] } = useQuery<ApiIncidentType[]>({ queryKey: ["incident-types"], queryFn: () => api.get("/incident-types") });
   const [incidentType, setIncidentType] = useState(incident.incidentType ?? "none");
   const [actionId, setActionId] = useState(String(incident.actionId ?? "none"));

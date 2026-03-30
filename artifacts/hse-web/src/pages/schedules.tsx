@@ -323,6 +323,7 @@ export default function SchedulesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editSchedule, setEditSchedule] = useState<Schedule | undefined>();
   const [filterActive, setFilterActive] = useState<"all" | "active" | "inactive">("all");
+  const [filterGroupId, setFilterGroupId] = useState<string>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -362,8 +363,14 @@ export default function SchedulesPage() {
   };
 
   const filtered = schedules.filter(s => {
-    if (filterActive === "active") return s.isActive === 1;
-    if (filterActive === "inactive") return s.isActive === 0;
+    if (filterActive === "active" && s.isActive !== 1) return false;
+    if (filterActive === "inactive" && s.isActive !== 0) return false;
+    if (filterGroupId !== "all") {
+      const gid = parseInt(filterGroupId);
+      const inGroups = s.groupIds?.includes(gid) ?? false;
+      const inLegacy = s.groupId === gid;
+      if (!inGroups && !inLegacy) return false;
+    }
     return true;
   });
 
@@ -391,17 +398,38 @@ export default function SchedulesPage() {
           }
         />
 
-        <div className="flex gap-2 mb-4">
-          {(["all", "active", "inactive"] as const).map(f => (
-            <Button
-              key={f}
-              variant={filterActive === f ? "default" : "outline"}
-              size="sm"
-              onClick={() => { setFilterActive(f); setPage(1); }}
-            >
-              {f === "all" ? "Semua" : f === "active" ? "Aktif" : "Nonaktif"}
-            </Button>
-          ))}
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <div className="flex gap-2">
+            {(["all", "active", "inactive"] as const).map(f => (
+              <Button
+                key={f}
+                variant={filterActive === f ? "default" : "outline"}
+                size="sm"
+                onClick={() => { setFilterActive(f); setPage(1); }}
+              >
+                {f === "all" ? "Semua" : f === "active" ? "Aktif" : "Nonaktif"}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs text-gray-500 font-medium whitespace-nowrap">Filter Group:</span>
+            <Select value={filterGroupId} onValueChange={v => { setFilterGroupId(v); setPage(1); }}>
+              <SelectTrigger className="h-8 text-sm w-48">
+                <SelectValue placeholder="Semua Group" />
+              </SelectTrigger>
+              <SelectContent className="max-h-60 overflow-y-auto">
+                <SelectItem value="all">Semua Group</SelectItem>
+                {groups.map(g => (
+                  <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {filterGroupId !== "all" && (
+              <Button variant="ghost" size="sm" className="h-8 text-xs px-2 text-gray-500" onClick={() => { setFilterGroupId("all"); setPage(1); }}>
+                Reset
+              </Button>
+            )}
+          </div>
         </div>
 
         {isLoading ? (
