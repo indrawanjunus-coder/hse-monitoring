@@ -57,11 +57,16 @@ router.post("/", requireAdmin, async (req, res) => {
   if (!sanitizedCode) { res.status(400).json({ error: "Kode tidak valid setelah sanitasi" }); return; }
 
   try {
-    const existing = await db.select({ id: incidentTypesTable.id })
+    const existing = await db.select({ id: incidentTypesTable.id, code: incidentTypesTable.code, label: incidentTypesTable.label })
       .from(incidentTypesTable)
       .where(eq(incidentTypesTable.code, sanitizedCode));
     if (existing.length) {
-      res.status(409).json({ error: `Code "${sanitizedCode}" sudah digunakan, gunakan kode lain` }); return;
+      const ex = existing[0];
+      res.status(409).json({
+        error: `Code "${sanitizedCode}" sudah digunakan oleh "${ex.label}" (ID: ${ex.id}). Hapus ID #${ex.id} terlebih dahulu atau gunakan kode lain.`,
+        existingId: ex.id,
+        existingLabel: ex.label,
+      }); return;
     }
 
     const catId = categoryId != null && categoryId !== "" && categoryId !== "none"
