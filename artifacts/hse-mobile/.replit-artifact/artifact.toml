@@ -1,5 +1,5 @@
 kind = "mobile"
-previewPath = "/"
+previewPath = "/hse-mobile/"
 title = "HSE Mobile App"
 version = "1.0.0"
 id = "artifacts/hse-mobile"
@@ -12,7 +12,7 @@ version = "1.0.0"
 [[services]]
 ensurePreviewReachable = "/status"
 name = "expo"
-paths = [ "/" ]
+paths = [ "/hse-mobile" ]
 localPort = 23543
 
 [services.development]
@@ -24,4 +24,4 @@ run = [ "pnpm", "--filter", "@workspace/hse-mobile", "run", "serve" ]
 
 [services.env]
 PORT = "23543"
-BASE_PATH = "/"
+BASE_PATH = "/hse-mobile/"

@@ -1,5 +1,5 @@
 kind = "web"
-  previewPath = "/hse-web/"
+  previewPath = "/"
   title = "HSE Web Dashboard"
   version = "1.0.0"
   id = "artifacts/hse-web"
@@ -7,11 +7,11 @@ kind = "web"
 [[services]]
 localPort = 5174
 name = "HSE Web"
-paths = ["/hse-web"]
+paths = ["/"]
 
 [services.env]
 PORT = "5174"
-BASE_PATH = "/hse-web/"
+BASE_PATH = "/"
 
 [services.development]
 run = "pnpm --filter @workspace/hse-web run dev"
