@@ -549,6 +549,39 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
   const [followupNote, setFollowupNote] = useState(incident.followupNote ?? "");
   const [saving, setSaving] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
+  const [addUploadStatus, setAddUploadStatus] = useState("");
+  const [addUploadErrors, setAddUploadErrors] = useState<string[]>([]);
+  const [addUploading, setAddUploading] = useState(false);
+  const addFileRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const handleAddFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const fileArr = Array.from(files);
+    setAddUploading(true);
+    setAddUploadErrors([]);
+    const errs: string[] = [];
+    for (let i = 0; i < fileArr.length; i++) {
+      const f = fileArr[i]!;
+      if (f.size > 20 * 1024 * 1024) { errs.push(`${f.name}: ukuran melebihi 20MB`); continue; }
+      setAddUploadStatus(`Mengupload ${i + 1}/${fileArr.length}: ${f.name}`);
+      try {
+        await uploadAttachment(incident.id, f);
+      } catch (e: any) {
+        errs.push(`${f.name}: ${e.message ?? "gagal"}`);
+      }
+    }
+    setAddUploadStatus("");
+    setAddUploading(false);
+    if (errs.length > 0) {
+      setAddUploadErrors(errs);
+    } else {
+      toast({ title: `${fileArr.length} lampiran berhasil diupload` });
+    }
+    queryClient.invalidateQueries({ queryKey: ["incidents"] });
+    if (addFileRef.current) addFileRef.current.value = "";
+  };
 
   const handleResolve = async (status: string) => {
     setSaving(true);
@@ -638,12 +671,46 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
         </div>
       )}
 
-      {incident.attachments && incident.attachments.length > 0 && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+        <div className="flex items-center justify-between">
           <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
             <Paperclip className="w-3.5 h-3.5" />
-            Lampiran ({incident.attachments.length})
+            Lampiran {incident.attachments && incident.attachments.length > 0 ? `(${incident.attachments.length})` : ""}
           </p>
+          <button
+            onClick={() => addFileRef.current?.click()}
+            disabled={addUploading}
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 font-medium"
+          >
+            {addUploading
+              ? <><Cloud className="w-3.5 h-3.5 animate-pulse" /> Mengupload...</>
+              : <><Upload className="w-3.5 h-3.5" /> Tambah Lampiran</>
+            }
+          </button>
+          <input
+            ref={addFileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/jpg,application/pdf"
+            multiple
+            className="hidden"
+            onChange={e => handleAddFiles(e.target.files)}
+          />
+        </div>
+
+        {addUploadStatus && (
+          <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-2 py-1.5">
+            <Cloud className="w-3.5 h-3.5 animate-pulse shrink-0" />
+            {addUploadStatus}
+          </div>
+        )}
+        {addUploadErrors.length > 0 && (
+          <div className="space-y-0.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5">
+            <p className="font-medium">Gagal upload:</p>
+            {addUploadErrors.map((e, i) => <p key={i}>{e}</p>)}
+          </div>
+        )}
+
+        {incident.attachments && incident.attachments.length > 0 ? (
           <div className="space-y-1.5">
             {incident.attachments.map((a) => {
               const isImage = a.mimeType.startsWith("image/");
@@ -664,8 +731,12 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
               );
             })}
           </div>
-        </div>
-      )}
+        ) : (
+          !addUploading && (
+            <p className="text-xs text-gray-400 text-center py-2">Belum ada lampiran</p>
+          )
+        )}
+      </div>
 
       {previewAttachment && (
         <Dialog open onOpenChange={() => setPreviewAttachment(null)}>
