@@ -8,16 +8,44 @@ const INDONESIAN_MONTHS = [
   "Juli", "Agustus", "September", "Oktober", "November", "Desember",
 ];
 
-async function getGdriveAuth() {
+function normalizePrivateKey(raw: string): string {
+  let key = raw.trim();
+  key = key.replace(/\\n/g, "\n");
+  if (!key.includes("\n") && key.includes("-----")) {
+    const begin = "-----BEGIN PRIVATE KEY-----";
+    const end = "-----END PRIVATE KEY-----";
+    const bi = key.indexOf(begin);
+    const ei = key.indexOf(end);
+    if (bi !== -1 && ei !== -1) {
+      const body = key.slice(bi + begin.length, ei).replace(/\s+/g, "");
+      const wrapped = body.match(/.{1,64}/g)?.join("\n") ?? body;
+      key = `${begin}\n${wrapped}\n${end}\n`;
+    }
+  }
+  return key;
+}
+
+async function getGdriveSettings() {
   const [settings] = await db.select().from(gdriveSettingsTable);
   if (!settings || !settings.privateKey || !settings.clientEmail) {
     throw new Error("Google Drive belum dikonfigurasi. Silakan isi pengaturan GDrive terlebih dahulu.");
   }
-  const auth = new google.auth.JWT({
-    email: settings.clientEmail,
-    key: settings.privateKey.replace(/\\n/g, "\n"),
+  return settings;
+}
+
+async function getGdriveAuth() {
+  const settings = await getGdriveSettings();
+  const privateKey = normalizePrivateKey(settings.privateKey);
+
+  const auth = new google.auth.GoogleAuth({
+    credentials: {
+      type: "service_account",
+      client_email: settings.clientEmail,
+      private_key: privateKey,
+    },
     scopes: ["https://www.googleapis.com/auth/drive"],
   });
+
   return { auth, rootFolderId: settings.rootFolderId };
 }
 
@@ -25,6 +53,8 @@ async function getOrCreateFolder(drive: ReturnType<typeof google.drive>, parentI
   const res = await drive.files.list({
     q: `'${parentId}' in parents and name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
     fields: "files(id,name)",
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
   if (res.data.files && res.data.files.length > 0) {
     return res.data.files[0].id!;
@@ -36,6 +66,7 @@ async function getOrCreateFolder(drive: ReturnType<typeof google.drive>, parentI
       parents: [parentId],
     },
     fields: "id",
+    supportsAllDrives: true,
   });
   return folder.data.id!;
 }
@@ -76,8 +107,10 @@ export async function uploadToDrive(
   const day = String(now.getDate()).padStart(2, "0");
   const monthStr = String(month).padStart(2, "0");
 
+  logger.info({ rootFolderId, year, month }, "Creating/finding year folder on GDrive");
   const yearFolder = await getOrCreateFolder(drive, rootFolderId, String(year));
   const monthFolderName = `${monthStr} - ${INDONESIAN_MONTHS[month - 1]}`;
+  logger.info({ yearFolder, monthFolderName }, "Creating/finding month folder on GDrive");
   const monthFolder = await getOrCreateFolder(drive, yearFolder, monthFolderName);
 
   const sequence = await getNextMonthlySequence(year, month);
@@ -90,6 +123,7 @@ export async function uploadToDrive(
   stream.push(fileBuffer);
   stream.push(null);
 
+  logger.info({ storedName, monthFolder }, "Uploading file to GDrive");
   const uploaded = await drive.files.create({
     requestBody: {
       name: storedName,
@@ -100,14 +134,16 @@ export async function uploadToDrive(
       body: stream,
     },
     fields: "id,webViewLink",
+    supportsAllDrives: true,
   });
 
   const fileId = uploaded.data.id!;
-  const webViewLink = uploaded.data.webViewLink!;
+  const webViewLink = uploaded.data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`;
 
   await drive.permissions.create({
     fileId,
     requestBody: { role: "reader", type: "anyone" },
+    supportsAllDrives: true,
   });
 
   logger.info({ fileId, storedName, incidentId }, "File uploaded to Google Drive");
@@ -118,7 +154,7 @@ export async function deleteFromDrive(driveFileId: string): Promise<void> {
   try {
     const { auth } = await getGdriveAuth();
     const drive = google.drive({ version: "v3", auth });
-    await drive.files.delete({ fileId: driveFileId });
+    await drive.files.delete({ fileId: driveFileId, supportsAllDrives: true });
     logger.info({ driveFileId }, "File deleted from Google Drive");
   } catch (err) {
     logger.warn({ err, driveFileId }, "Failed to delete file from Google Drive");

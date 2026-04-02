@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RiskBadge, StatusBadge, IncidentTypeBadge } from "@/components/badges";
 import {
   Plus, AlertTriangle, MapPin, User, Calendar, ChevronDown, Users,
-  ArrowUpDown, ShieldAlert, Mail, Ticket, X, Search, Paperclip, FileImage, FileText, Trash2, ExternalLink, Upload, Cloud,
+  ArrowUpDown, ShieldAlert, Mail, Ticket, X, Search, Paperclip, FileImage, FileText, Trash2, ExternalLink, Upload, Cloud, Eye,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -246,6 +246,7 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
   const [saving, setSaving] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadStatus, setUploadStatus] = useState<string>("");
+  const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [recipientGroupIds, setRecipientGroupIds] = useState<number[]>([]);
@@ -300,14 +301,21 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
       });
 
       if (pendingFiles.length > 0) {
+        const errs: string[] = [];
         for (let i = 0; i < pendingFiles.length; i++) {
-          setUploadStatus(`Mengupload file ${i + 1}/${pendingFiles.length}...`);
+          const f = pendingFiles[i]!;
+          setUploadStatus(`Mengupload file ${i + 1}/${pendingFiles.length}: ${f.name}`);
           try {
-            await uploadAttachment(created.id, pendingFiles[i]!);
-          } catch {
+            await uploadAttachment(created.id, f);
+          } catch (e: any) {
+            errs.push(`${f.name}: ${e.message ?? "gagal"}`);
           }
         }
         setUploadStatus("");
+        if (errs.length > 0) {
+          setUploadErrors(errs);
+          return;
+        }
       }
       onDone();
     } finally {
@@ -506,6 +514,14 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
             {uploadStatus}
           </div>
         )}
+        {uploadErrors.length > 0 && (
+          <div className="space-y-1 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+            <p className="font-medium">Beberapa file gagal diupload ke Google Drive:</p>
+            {uploadErrors.map((e, i) => <p key={i} className="text-xs">{e}</p>)}
+            <p className="text-xs text-red-500 mt-1">Pastikan pengaturan Google Drive sudah dikonfigurasi di halaman Pengaturan.</p>
+            <button className="text-xs underline text-red-600 mt-1" onClick={onDone}>Tutup tanpa menunggu</button>
+          </div>
+        )}
       </div>
 
       <DialogFooter>
@@ -532,6 +548,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
   const [targetDate, setTargetDate] = useState(incident.targetDate ?? "");
   const [followupNote, setFollowupNote] = useState(incident.followupNote ?? "");
   const [saving, setSaving] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
 
   const handleResolve = async (status: string) => {
     setSaving(true);
@@ -628,22 +645,62 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
             Lampiran ({incident.attachments.length})
           </p>
           <div className="space-y-1.5">
-            {incident.attachments.map((a) => (
-              <a
-                key={a.id}
-                href={a.viewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-md px-3 py-2 text-sm transition-colors group"
-              >
-                <AttachmentIcon mimeType={a.mimeType} />
-                <span className="flex-1 truncate font-medium text-gray-800 group-hover:text-blue-700">{a.fileName}</span>
-                <span className="text-xs text-gray-400 shrink-0">{formatBytes(a.fileSize)}</span>
-                <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
-              </a>
-            ))}
+            {incident.attachments.map((a) => {
+              const isImage = a.mimeType.startsWith("image/");
+              return (
+                <div
+                  key={a.id}
+                  onClick={() => isImage ? setPreviewAttachment(a) : window.open(a.viewUrl, "_blank")}
+                  className="flex items-center gap-2.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-md px-3 py-2 text-sm transition-colors group cursor-pointer"
+                >
+                  <AttachmentIcon mimeType={a.mimeType} />
+                  <span className="flex-1 truncate font-medium text-gray-800 group-hover:text-blue-700">{a.fileName}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{formatBytes(a.fileSize)}</span>
+                  {isImage
+                    ? <Eye className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
+                    : <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
+                  }
+                </div>
+              );
+            })}
           </div>
         </div>
+      )}
+
+      {previewAttachment && (
+        <Dialog open onOpenChange={() => setPreviewAttachment(null)}>
+          <DialogContent className="max-w-3xl p-0 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+              <p className="text-sm font-medium truncate">{previewAttachment.fileName}</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <a href={previewAttachment.viewUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
+                  <ExternalLink className="w-3 h-3" /> Buka di Drive
+                </a>
+                <button onClick={() => setPreviewAttachment(null)} className="text-gray-400 hover:text-gray-700 ml-2">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="bg-black flex items-center justify-center" style={{ minHeight: 400 }}>
+              <img
+                src={(() => {
+                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
+                  return fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : previewAttachment.viewUrl;
+                })()}
+                alt={previewAttachment.fileName}
+                className="max-h-[70vh] max-w-full object-contain"
+                onError={(e) => {
+                  const img = e.currentTarget as HTMLImageElement;
+                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
+                  if (fileId && !img.src.includes("drive.google.com")) {
+                    img.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                  }
+                }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       {incident.needsFurtherAction && (
