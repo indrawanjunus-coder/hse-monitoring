@@ -2,9 +2,11 @@ import { Router } from "express";
 import {
   db, inspectionsTable, inspectionAnswersTable, schedulesTable,
   usersTable, templatesTable, plantsTable, questionsTable, categoriesTable, incidentsTable,
+  categoryGroupsTable, categoryUsersTable, groupMembersTable,
 } from "@workspace/db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
+import { sendEmail, incidentEmailHtml } from "../lib/email";
 
 const router = Router();
 router.use(authMiddleware);
@@ -124,7 +126,63 @@ router.post("/", async (req, res) => {
             status: "open",
             needsFurtherAction: true,
           }).returning();
-          if (incident) autoIncidents.push(incident.id);
+          if (incident) {
+            autoIncidents.push(incident.id);
+
+            // Send email notification to PIC configured for this category
+            const incidentCategoryId = q.categoryId ?? 1;
+            try {
+              const [cat] = await db.select().from(categoriesTable).where(eq(categoriesTable.id, incidentCategoryId));
+              const catGroups = await db.select({ groupId: categoryGroupsTable.groupId })
+                .from(categoryGroupsTable).where(eq(categoryGroupsTable.categoryId, incidentCategoryId));
+              const catUsers = await db.select({ userId: categoryUsersTable.userId })
+                .from(categoryUsersTable).where(eq(categoryUsersTable.categoryId, incidentCategoryId));
+
+              const groupEmails: string[] = [];
+              for (const cg of catGroups) {
+                const members = await db.select({ email: usersTable.email })
+                  .from(groupMembersTable)
+                  .innerJoin(usersTable, eq(groupMembersTable.userId, usersTable.id))
+                  .where(eq(groupMembersTable.groupId, cg.groupId));
+                groupEmails.push(...members.map(m => m.email).filter(Boolean) as string[]);
+              }
+
+              const directEmails: string[] = [];
+              if (catUsers.length > 0) {
+                const userRows = await db.select({ email: usersTable.email })
+                  .from(usersTable).where(inArray(usersTable.id, catUsers.map(u => u.userId)));
+                directEmails.push(...userRows.map(u => u.email).filter(Boolean) as string[]);
+              }
+
+              const emails = [...new Set([...groupEmails, ...directEmails])];
+              if (emails.length === 0) {
+                console.warn(`[Email] No PIC recipients for category ${incidentCategoryId} (auto-incident #${incident.id})`);
+              } else {
+                const [plant] = plantId ? await db.select().from(plantsTable).where(eq(plantsTable.id, plantId)) : [undefined];
+                const [supervisor] = await db.select().from(usersTable).where(eq(usersTable.id, supervisorId));
+                sendEmail(
+                  emails,
+                  `[HSE] Incident Baru #${incident.id} - ${cat?.name ?? ""}`,
+                  incidentEmailHtml({
+                    id: incident.id,
+                    detail: incident.detail,
+                    categoryName: cat?.name,
+                    plantName: plant?.name,
+                    incidentDate: incident.incidentDate,
+                    reporterName: supervisor?.name,
+                  })
+                ).then((result) => {
+                  if (!result.success) {
+                    console.error(`[Email] Failed to send email for auto-incident #${incident.id}:`, result.error);
+                  }
+                }).catch((err: unknown) => {
+                  console.error(`[Email] Unexpected error sending email for auto-incident #${incident.id}:`, err);
+                });
+              }
+            } catch (err: unknown) {
+              console.error(`[Email] Error preparing email for auto-incident #${incident.id}:`, err);
+            }
+          }
         }
       }
     }

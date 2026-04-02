@@ -154,7 +154,9 @@ router.post("/", async (req, res) => {
     }
 
     const emails = [...new Set([...groupEmailSets, ...directEmails])];
-    if (emails.length) {
+    if (emails.length === 0) {
+      console.warn(`[Email] No PIC recipients found for category ${categoryId} (incident #${inc.id})`);
+    } else {
       sendEmail(
         emails,
         `[HSE] Incident Baru #${inc.id} - ${formatted.categoryName}`,
@@ -166,9 +168,17 @@ router.post("/", async (req, res) => {
           reporterName: formatted.reporterName,
           assignedGroupName: formatted.assignedGroupName ?? undefined,
         })
-      ).catch(() => {});
+      ).then((result) => {
+        if (!result.success) {
+          console.error(`[Email] Failed to send email for incident #${inc.id}:`, result.error);
+        }
+      }).catch((err: unknown) => {
+        console.error(`[Email] Unexpected error sending email for incident #${inc.id}:`, err);
+      });
     }
-  } catch { /* ignore email errors */ }
+  } catch (err: unknown) {
+    console.error(`[Email] Error preparing email for incident #${inc.id}:`, err);
+  }
 
   res.status(201).json(formatted);
 });
