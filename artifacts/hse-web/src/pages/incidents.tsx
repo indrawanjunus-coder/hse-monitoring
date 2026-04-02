@@ -914,6 +914,11 @@ export default function IncidentsPage() {
     return list;
   }, [incidents, filterStatus, sortMode, dateFrom, dateTo, filterCategory, filterRisk, filterType]);
 
+  // Always derive the detail panel data from fresh query results so it auto-updates after uploads/changes
+  const liveDetailIncident = detailIncident
+    ? (incidents.find(i => i.id === detailIncident.id) ?? detailIncident)
+    : null;
+
   const clearDashboardFilter = () => {
     setFilterCategory(""); setFilterRisk(""); setFilterType("");
     setFilterStatus("open"); setDateFrom(twoMonthsAgo());
@@ -1061,16 +1066,16 @@ export default function IncidentsPage() {
         </DialogContent>
       </Dialog>
 
-      {detailIncident && (
+      {liveDetailIncident && (
         <Dialog open={true} onOpenChange={() => setDetailIncident(null)}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Incident #{detailIncident.id}{detailIncident.incidentType ? ` — ${typeMap[detailIncident.incidentType] ?? detailIncident.incidentType}` : ""}</DialogTitle>
+              <DialogTitle>Incident #{liveDetailIncident.id}{liveDetailIncident.incidentType ? ` — ${typeMap[liveDetailIncident.incidentType] ?? liveDetailIncident.incidentType}` : ""}</DialogTitle>
             </DialogHeader>
             <IncidentDetail
-              incident={detailIncident}
+              incident={liveDetailIncident}
               onClose={() => setDetailIncident(null)}
-              onUpdate={(d) => updateIncident(detailIncident.id, d)}
+              onUpdate={(d) => updateIncident(liveDetailIncident.id, d)}
               actions={actions}
               preventiveActions={preventiveActions}
             />
