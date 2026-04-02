@@ -26,6 +26,7 @@ export const incidentsTable = pgTable("incidents", {
   assignedGroupId: integer("assigned_group_id").references(() => groupsTable.id),
   followupNote: text("followup_note"),
   closedAt: text("closed_at"),
+  escalationLevel: integer("escalation_level").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

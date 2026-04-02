@@ -179,3 +179,49 @@ export function incidentTargetReminderHtml(incident: {
     </div>
   `;
 }
+
+export function incidentEscalationHtml(incident: {
+  id: number;
+  detail: string;
+  categoryName?: string;
+  plantName?: string;
+  reporterName?: string;
+  assignedGroupName?: string;
+  createdAt: string;
+  hoursOpen: number;
+}) {
+  const h = incident.hoursOpen;
+  const level = h >= 72 ? 3 : h >= 48 ? 2 : 1;
+  const colors: Record<number, string> = { 1: "#d97706", 2: "#dc2626", 3: "#7f1d1d" };
+  const color = colors[level]!;
+  const labels: Record<number, string> = { 1: "24 Jam", 2: "48 Jam", 3: "72 Jam" };
+  const urgency = level === 3 ? "🚨 KRITIS" : level === 2 ? "🔴 Mendesak" : "⚠️ Perhatian";
+  return `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:${color};color:white;padding:20px;border-radius:8px 8px 0 0">
+        <h2 style="margin:0">${urgency} Incident Belum Ditindak — ${labels[level]}</h2>
+        <p style="margin:6px 0 0;opacity:0.9;font-size:14px">Incident #${incident.id} telah terbuka selama lebih dari ${labels[level]} tanpa penyelesaian</p>
+      </div>
+      <div style="background:#f9fafb;padding:20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
+        <table style="width:100%;border-collapse:collapse">
+          <tr><td style="padding:8px;color:#6b7280;width:40%">Dibuat Pada</td><td style="padding:8px;font-weight:600">${incident.createdAt}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Sudah Terbuka</td><td style="padding:8px;font-weight:700;color:${color}">${Math.floor(incident.hoursOpen)} jam</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Kategori</td><td style="padding:8px;font-weight:600">${incident.categoryName ?? "-"}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Plant</td><td style="padding:8px;font-weight:600">${incident.plantName ?? "-"}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Dilaporkan Oleh</td><td style="padding:8px;font-weight:600">${incident.reporterName ?? "-"}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">PIC Group</td><td style="padding:8px;font-weight:600;color:#1e3a5f">${incident.assignedGroupName ?? "-"}</td></tr>
+        </table>
+        <div style="margin-top:16px;padding:12px;background:white;border-radius:6px;border-left:4px solid ${color}">
+          <p style="margin:0;color:#374151"><strong>Detail Incident:</strong></p>
+          <p style="margin:8px 0 0;color:#4b5563">${incident.detail}</p>
+        </div>
+        <div style="margin-top:16px;padding:12px;background:#fef2f2;border-radius:6px">
+          <p style="margin:0;color:#991b1b;font-weight:700;font-size:14px">
+            🚫 Harap segera tindak lanjuti dan selesaikan incident ini. Incident yang dibiarkan terlalu lama dapat berdampak pada keselamatan kerja.
+          </p>
+        </div>
+        <p style="margin-top:20px;color:#9ca3af;font-size:12px">Notifikasi eskalasi otomatis dari Sistem HSE.</p>
+      </div>
+    </div>
+  `;
+}

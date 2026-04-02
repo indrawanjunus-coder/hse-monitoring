@@ -42,6 +42,9 @@ interface Incident {
   status: "open" | "in_progress" | "closed";
   closedAt?: string | null;
   assignedGroupName?: string | null;
+  picMembers?: { name: string; email: string }[];
+  escalationLevel?: number;
+  createdAt?: string;
 }
 
 interface Plant { id: number; name: string }
@@ -468,6 +471,44 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
           </div>
         )}
       </div>
+
+      {incident.picMembers && incident.picMembers.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <p className="text-xs font-semibold text-blue-700 mb-2 flex items-center gap-1">
+            <Mail className="w-3.5 h-3.5" />Email PIC Follow-up
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {incident.picMembers.map((m) => (
+              <span key={m.email} className="inline-flex items-center gap-1 text-xs bg-white border border-blue-200 text-blue-800 px-2 py-1 rounded-full">
+                <User className="w-3 h-3 text-blue-400" />
+                <span className="font-medium">{m.name}</span>
+                <span className="text-blue-500">·</span>
+                <a href={`mailto:${m.email}`} className="text-blue-600 hover:underline">{m.email}</a>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(!incident.picMembers || incident.picMembers.length === 0) && incident.assignedGroupName && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+          <Mail className="w-3.5 h-3.5 inline mr-1" />
+          Anggota group PIC belum memiliki email — eskalasi tidak dapat dikirim.
+        </div>
+      )}
+
+      {incident.escalationLevel !== undefined && incident.escalationLevel > 0 && incident.status !== "closed" && (
+        <div className={`rounded-lg p-3 text-xs font-semibold flex items-center gap-2 ${
+          incident.escalationLevel >= 3 ? "bg-red-900 text-white" :
+          incident.escalationLevel === 2 ? "bg-red-100 text-red-800 border border-red-300" :
+          "bg-amber-100 text-amber-800 border border-amber-300"
+        }`}>
+          {incident.escalationLevel >= 3 ? "🚨 Eskalasi level 3 — Incident belum ditutup > 72 jam" :
+           incident.escalationLevel === 2 ? "🔴 Eskalasi level 2 — Incident belum ditutup > 48 jam" :
+           "⚠️ Eskalasi level 1 — Incident belum ditutup > 24 jam"}
+        </div>
+      )}
+
       {incident.needsFurtherAction && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
           ⚠️ Perlu tindak lanjut{incident.assignedGroupName ? ` · PIC: ${incident.assignedGroupName}` : ""}

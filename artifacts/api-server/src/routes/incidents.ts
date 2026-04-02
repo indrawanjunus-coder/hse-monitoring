@@ -18,6 +18,15 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
   const [preventiveAction] = inc.preventiveActionId ? await db.select().from(preventiveActionsTable).where(eq(preventiveActionsTable.id, inc.preventiveActionId)) : [undefined];
   const [assignedGroup] = inc.assignedGroupId ? await db.select().from(groupsTable).where(eq(groupsTable.id, inc.assignedGroupId)) : [undefined];
 
+  let picMembers: { name: string; email: string }[] = [];
+  if (inc.assignedGroupId) {
+    const rows = await db.select({ name: usersTable.name, email: usersTable.email })
+      .from(groupMembersTable)
+      .innerJoin(usersTable, eq(groupMembersTable.userId, usersTable.id))
+      .where(eq(groupMembersTable.groupId, inc.assignedGroupId));
+    picMembers = rows.filter(r => r.email).map(r => ({ name: r.name, email: r.email! }));
+  }
+
   return {
     ...inc,
     reporterName: reporter?.name ?? "",
@@ -27,6 +36,7 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
     actionName: action?.name ?? null,
     preventiveActionName: preventiveAction?.name ?? null,
     assignedGroupName: assignedGroup?.name ?? null,
+    picMembers,
     createdAt: inc.createdAt.toISOString(),
   };
 }
