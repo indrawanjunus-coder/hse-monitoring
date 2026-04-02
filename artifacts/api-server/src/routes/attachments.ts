@@ -63,7 +63,15 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     res.json({ success: true, attachment: saved });
   } catch (err: any) {
     logger.error({ err }, "Upload to GDrive failed");
-    res.status(500).json({ error: err.message ?? "Upload gagal" });
+    let message = err.message ?? "Upload gagal";
+    if (message.includes("SERVICE_DISABLED") || message.includes("has not been used") || message.includes("is disabled")) {
+      message = "Google Drive API belum diaktifkan. Buka Google Cloud Console → APIs & Services → aktifkan 'Google Drive API' untuk project Anda, lalu coba lagi.";
+    } else if (message.includes("invalid_grant") || message.includes("Invalid JWT")) {
+      message = "Autentikasi Google Drive gagal. Pastikan client_email dan private_key di pengaturan sudah benar.";
+    } else if (message.includes("insufficientPermissions") || message.includes("403")) {
+      message = "Service account tidak memiliki akses ke folder Google Drive. Pastikan folder sudah di-share ke email service account dengan izin 'Editor'.";
+    }
+    res.status(500).json({ error: message });
   }
 });
 
