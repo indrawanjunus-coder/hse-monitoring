@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, questionsTable, categoriesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, inArray, max } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 
 const router = Router();
@@ -20,13 +20,28 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
-  const { templateId, text, answerType, isMandatory, requiresPhoto, categoryId, orderIndex, expectedAnswer, questionType } = req.body;
+  const { templateId, text, answerType, isMandatory, requiresPhoto, categoryId, expectedAnswer, questionType } = req.body;
+  const [maxRow] = await db.select({ m: max(questionsTable.orderIndex) })
+    .from(questionsTable).where(eq(questionsTable.templateId, templateId));
+  const nextIndex = (maxRow?.m ?? 0) + 1;
   const [q] = await db.insert(questionsTable).values({
-    templateId, text, answerType, isMandatory, requiresPhoto, categoryId, orderIndex, expectedAnswer,
+    templateId, text, answerType, isMandatory, requiresPhoto, categoryId,
+    orderIndex: nextIndex, expectedAnswer,
     questionType: questionType ?? null,
   }).returning();
   if (!q) { res.status(500).json({ message: "Failed" }); return; }
   res.status(201).json({ ...q, createdAt: q.createdAt.toISOString() });
+});
+
+router.patch("/reorder", async (req, res) => {
+  const items: { id: number; orderIndex: number }[] = req.body;
+  if (!Array.isArray(items) || items.length === 0) { res.status(400).json({ error: "Invalid payload" }); return; }
+  await db.transaction(async (tx) => {
+    for (const { id, orderIndex } of items) {
+      await tx.update(questionsTable).set({ orderIndex }).where(eq(questionsTable.id, id));
+    }
+  });
+  res.json({ ok: true });
 });
 
 router.put("/:id", async (req, res) => {

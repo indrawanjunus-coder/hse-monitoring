@@ -217,7 +217,6 @@ function AddQuestionForm({ templateId, categories, onAdded, onCancel }: {
         templateId, text: text.trim(), answerType, isMandatory, requiresPhoto,
         categoryId: (categoryId && categoryId !== "none") ? parseInt(categoryId) : undefined,
         expectedAnswer: answerType === "yes_no" ? (expectedAnswer !== "none" ? expectedAnswer : null) : null,
-        orderIndex: 999,
       });
       onAdded(q);
       setText(""); setAnswerType("yes_no"); setIsMandatory(true);
@@ -323,15 +322,11 @@ function TemplateBuilder({ template, categories, canEdit, onClose }: {
     const idx = sorted.findIndex(x => x.id === q.id);
     const targetIdx = direction === "up" ? idx - 1 : idx + 1;
     if (targetIdx < 0 || targetIdx >= sorted.length) return;
-    const target = sorted[targetIdx]!;
-    await api.put(`/questions/${q.id}`, { orderIndex: target.orderIndex });
-    await api.put(`/questions/${target.id}`, { orderIndex: q.orderIndex });
-    const newSorted = sorted.map(x =>
-      x.id === q.id ? { ...x, orderIndex: target.orderIndex }
-        : x.id === target.id ? { ...x, orderIndex: q.orderIndex }
-        : x
-    ).sort((a, b) => a.orderIndex - b.orderIndex);
-    setCache(() => newSorted);
+    const reordered = [...sorted];
+    [reordered[idx], reordered[targetIdx]] = [reordered[targetIdx]!, reordered[idx]!];
+    const normalized = reordered.map((x, i) => ({ ...x, orderIndex: i + 1 }));
+    setCache(() => normalized);
+    await api.patch("/questions/reorder", normalized.map(x => ({ id: x.id, orderIndex: x.orderIndex })));
   };
 
   return (
