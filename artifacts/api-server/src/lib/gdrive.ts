@@ -1,5 +1,5 @@
 import { google } from "googleapis";
-import { webcrypto } from "node:crypto";
+import { createPrivateKey, sign as cryptoSign } from "node:crypto";
 import { db, gdriveSettingsTable, incidentAttachmentsTable } from "@workspace/db";
 import { and, eq, gte, lt, count } from "drizzle-orm";
 import { logger } from "./logger";
@@ -30,28 +30,22 @@ function normalizePrivateKey(raw: string): string {
 }
 
 /**
- * Uses WebCrypto (subtle) API to sign JWT — avoids Node.js crypto/OpenSSL 3
- * issues with PKCS#8 RSA keys on Node 24.
+ * Signs a JWT using RSA-SHA256.
+ * Bypasses OpenSSL 3 PEM decoder issues by extracting the DER binary from the
+ * PEM base64 body and passing it directly to createPrivateKey({ format: "der" }).
+ * This avoids the "DECODER routines::unsupported" error in Node.js 24 / OpenSSL 3.
  */
-async function signJwt(payload: object, pemPrivateKey: string): Promise<string> {
-  const { subtle } = webcrypto as Crypto;
-
-  // Strip PEM header/footer and decode base64 → DER buffer
+function signJwt(payload: object, pemPrivateKey: string): string {
+  // Extract base64 body, decode to DER binary — no PEM decoder involved
   const pemBody = pemPrivateKey
-    .replace(/-----BEGIN [^-]+-----/, "")
-    .replace(/-----END [^-]+-----/, "")
+    .replace(/-----BEGIN [^-]+-----/g, "")
+    .replace(/-----END [^-]+-----/g, "")
     .replace(/\s/g, "");
   const derBuffer = Buffer.from(pemBody, "base64");
 
-  let cryptoKey: CryptoKey;
+  let keyObject: ReturnType<typeof createPrivateKey>;
   try {
-    cryptoKey = await subtle.importKey(
-      "pkcs8",
-      derBuffer,
-      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
+    keyObject = createPrivateKey({ key: derBuffer, format: "der", type: "pkcs8" });
   } catch (e: any) {
     throw new Error(
       `Private key tidak dapat diparse: ${e.message}. ` +
@@ -63,10 +57,7 @@ async function signJwt(payload: object, pemPrivateKey: string): Promise<string> 
   const claim = Buffer.from(JSON.stringify(payload)).toString("base64url");
   const toSign = `${header}.${claim}`;
 
-  const encoder = new TextEncoder();
-  const sigBuffer = await subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, encoder.encode(toSign));
-  const sig = Buffer.from(sigBuffer).toString("base64url");
-
+  const sig = cryptoSign("RSA-SHA256", Buffer.from(toSign), keyObject).toString("base64url");
   return `${toSign}.${sig}`;
 }
 
@@ -74,7 +65,7 @@ async function getAccessToken(clientEmail: string, rawPrivateKey: string): Promi
   const privateKey = normalizePrivateKey(rawPrivateKey);
   const now = Math.floor(Date.now() / 1000);
 
-  const jwt = await signJwt({
+  const jwt = signJwt({
     iss: clientEmail,
     scope: "https://www.googleapis.com/auth/drive",
     aud: "https://oauth2.googleapis.com/token",
