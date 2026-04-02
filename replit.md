@@ -143,6 +143,7 @@ React + Vite web dashboard for HSE monitoring. Uses shadcn/ui, Recharts, wouter,
 - Inspeksi Saya (/my-inspections): personal inspection task list for the logged-in user; shows pending/completed schedules and allows filling inspection template inline
 - Riwayat Inspeksi (/history): table of all submitted inspections; click row to view answer detail including expected vs actual answer comparison
 - Laporan Followup H&I (/reports/followup): incidents bucketed by time since creation (< 24h, 24–48h, 48–72h, > 72h) with recharts bar chart and per-bucket detail table
+- Laporan Kepatuhan Jadwal (/reports/schedule-compliance): per-schedule compliance report showing expected vs actual inspection count, assignee, frequency, and compliance %; filterable by status/frequency/search
 - Master Data (admin only): Users (CRUD + password reset), Categories (CRUD + PIC Group assignment), Groups (CRUD + member/PIC management), Templates with Question Builder (full CRUD with type/mandatory/photo/category/expectedAnswer/order), Plants (CRUD), Actions (CRUD)
 - Profile: view info + self-service change password
 
@@ -156,6 +157,7 @@ React + Vite web dashboard for HSE monitoring. Uses shadcn/ui, Recharts, wouter,
 - `GET /api/inspections` — all inspections with supervisor/template/plant names
 - `POST /api/inspections` — submit inspection, auto-creates incidents for wrong answers
 - `GET /api/reports/followup` — time-bucketed incident report
+- `GET /api/reports/schedule-compliance?to=YYYY-MM-DD` — per-schedule compliance: expected count (from createdAt to `to`) vs actual inspections count
 - `GET/PUT /api/settings/gdrive` — Google Drive service account settings (admin only)
 - `GET /api/attachments?incidentId=X` — list attachments for an incident
 - `POST /api/attachments/upload` — upload file (multipart/form-data) to Google Drive, saves record in DB

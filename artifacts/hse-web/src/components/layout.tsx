@@ -46,7 +46,15 @@ const navItems: NavItem[] = [
   { label: "Dashboard", href: "/", icon: <LayoutDashboard className="w-4 h-4" /> },
   { label: "Inspeksi Saya", href: "/my-inspections", icon: <ClipboardList className="w-4 h-4" /> },
   { label: "Riwayat Inspeksi", href: "/history", icon: <ClipboardCheck className="w-4 h-4" /> },
-  { label: "Jadwal Inspeksi", href: "/schedules", icon: <Calendar className="w-4 h-4" /> },
+  {
+    label: "Jadwal Inspeksi",
+    href: "/schedules",
+    icon: <Calendar className="w-4 h-4" />,
+    children: [
+      { label: "Daftar Jadwal", href: "/schedules", icon: <Calendar className="w-4 h-4" /> },
+      { label: "Kepatuhan Jadwal", href: "/reports/schedule-compliance", icon: <ClipboardCheck className="w-4 h-4" /> },
+    ],
+  },
   {
     label: "Hazard & Incident",
     href: "/incidents",

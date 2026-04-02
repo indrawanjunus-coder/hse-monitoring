@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, incidentsTable, usersTable, categoriesTable, actionsTable, groupsTable, plantsTable, indicatorsTable, indicatorQuestionsTable, questionsTable, inspectionAnswersTable, inspectionsTable } from "@workspace/db";
-import { eq, desc, gte, lte, and, inArray, sql } from "drizzle-orm";
+import { db, incidentsTable, usersTable, categoriesTable, actionsTable, groupsTable, plantsTable, indicatorsTable, indicatorQuestionsTable, questionsTable, inspectionAnswersTable, inspectionsTable, schedulesTable, scheduleGroupsTable, scheduleUsersTable, templatesTable } from "@workspace/db";
+import { eq, desc, gte, lte, and, inArray, sql, count } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 
 const router = Router();
@@ -403,6 +403,154 @@ router.get("/indicators", async (req, res) => {
       notMet: totalWithData.length - metTarget,
     },
   });
+});
+
+// ─── Schedule Compliance Report ─────────────────────────────────────────────
+router.get("/schedule-compliance", async (req, res) => {
+  const toDate = req.query.to ? new Date(String(req.query.to) + "T23:59:59") : new Date();
+
+  // Helper: count weekday occurrences between two dates (inclusive)
+  function countWeekday(from: Date, to: Date, dow: number): number {
+    const diffDays = Math.max(0, Math.round((to.getTime() - from.getTime()) / 86400000));
+    const firstOcc = (dow - from.getDay() + 7) % 7;
+    if (firstOcc > diffDays) return 0;
+    return Math.floor((diffDays - firstOcc) / 7) + 1;
+  }
+
+  // Helper: count how many times dayOfMonth occurred from start to end
+  function countMonthDay(from: Date, to: Date, dom: number): number {
+    let cnt = 0;
+    const d = new Date(from.getFullYear(), from.getMonth(), dom);
+    if (d < from) d.setMonth(d.getMonth() + 1);
+    while (d <= to) { cnt++; d.setMonth(d.getMonth() + 1); }
+    return cnt;
+  }
+
+  function calcExpected(freq: string, createdAt: Date, dayOfWeek: number | null, dayOfMonth: number | null, customDays: string | null): number {
+    const from = new Date(createdAt);
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(toDate);
+    if (to < from) return 0;
+    const diffDays = Math.round((to.getTime() - from.getTime()) / 86400000);
+    switch (freq) {
+      case "daily": return diffDays + 1;
+      case "weekly":
+        return dayOfWeek != null ? countWeekday(from, to, dayOfWeek) : Math.floor(diffDays / 7) + 1;
+      case "biweekly": return Math.floor(diffDays / 14) + 1;
+      case "monthly":
+        return dayOfMonth != null ? countMonthDay(from, to, dayOfMonth) : Math.floor(diffDays / 30) + 1;
+      case "custom": {
+        if (!customDays) return 0;
+        const days = customDays.split(",").map(d => parseInt(d.trim())).filter(d => !isNaN(d) && d >= 0 && d <= 6);
+        return days.reduce((sum, dow) => sum + countWeekday(from, to, dow), 0);
+      }
+      default: return 0;
+    }
+  }
+
+  const FREQ_LABELS: Record<string, string> = {
+    daily: "Harian", weekly: "Mingguan", biweekly: "2 Mingguan", monthly: "Bulanan", custom: "Custom",
+  };
+
+  // Load all schedules
+  const schedules = await db.select().from(schedulesTable);
+
+  // Load templates, plants
+  const [templates, plants] = await Promise.all([
+    db.select().from(templatesTable),
+    db.select().from(plantsTable),
+  ]);
+  const tmplMap = Object.fromEntries(templates.map(t => [t.id, t.name]));
+  const plantMap = Object.fromEntries(plants.map(p => [p.id, p.name]));
+
+  // Load all inspections grouped by scheduleId
+  const allInspections = await db.select({
+    scheduleId: inspectionsTable.scheduleId,
+    inspectedAt: inspectionsTable.inspectedAt,
+  }).from(inspectionsTable);
+
+  const inspBySchedule: Record<number, string[]> = {};
+  for (const insp of allInspections) {
+    if (!inspBySchedule[insp.scheduleId]) inspBySchedule[insp.scheduleId] = [];
+    inspBySchedule[insp.scheduleId].push(insp.inspectedAt);
+  }
+
+  // Load schedule users and groups
+  const allSchedUsers = await db.select({
+    scheduleId: scheduleUsersTable.scheduleId,
+    userId: scheduleUsersTable.userId,
+    userName: usersTable.name,
+    userNik: usersTable.nik,
+  }).from(scheduleUsersTable).innerJoin(usersTable, eq(scheduleUsersTable.userId, usersTable.id));
+
+  const allSchedGroups = await db.select({
+    scheduleId: scheduleGroupsTable.scheduleId,
+    groupName: groupsTable.name,
+  }).from(scheduleGroupsTable).innerJoin(groupsTable, eq(scheduleGroupsTable.groupId, groupsTable.id));
+
+  // Also load legacy supervisor column
+  const supervisors = await db.select({ id: usersTable.id, name: usersTable.name, nik: usersTable.nik }).from(usersTable);
+  const supervisorMap = Object.fromEntries(supervisors.map(u => [u.id, u]));
+
+  const schedUserMap: Record<number, { type: "user"; name: string; nik?: string }[]> = {};
+  for (const su of allSchedUsers) {
+    if (!schedUserMap[su.scheduleId]) schedUserMap[su.scheduleId] = [];
+    schedUserMap[su.scheduleId].push({ type: "user", name: su.userName, nik: su.userNik ?? undefined });
+  }
+
+  const schedGroupMap: Record<number, { type: "group"; name: string }[]> = {};
+  for (const sg of allSchedGroups) {
+    if (!schedGroupMap[sg.scheduleId]) schedGroupMap[sg.scheduleId] = [];
+    schedGroupMap[sg.scheduleId].push({ type: "group", name: sg.groupName });
+  }
+
+  const rows = schedules.map(s => {
+    const inspDates = (inspBySchedule[s.id] ?? []).filter(d => new Date(d) <= toDate);
+    const actualCount = inspDates.length;
+    const lastInspectedAt = inspDates.length > 0 ? inspDates.sort().at(-1)! : null;
+
+    const expected = calcExpected(s.frequency, s.createdAt, s.dayOfWeek, s.dayOfMonth, s.customDays);
+
+    // Assigned to: combine groups + users + legacy supervisorId
+    const assigned: { type: "user" | "group"; name: string; nik?: string }[] = [
+      ...(schedGroupMap[s.id] ?? []),
+      ...(schedUserMap[s.id] ?? []),
+    ];
+    if (s.supervisorId && !schedUserMap[s.id]?.length && !schedGroupMap[s.id]?.length) {
+      const sup = supervisorMap[s.supervisorId];
+      if (sup) assigned.push({ type: "user", name: sup.name, nik: sup.nik ?? undefined });
+    }
+
+    const complianceRate = expected === 0 ? 100 : Math.min(100, (actualCount / expected) * 100);
+    const status: "compliant" | "partial" | "none" =
+      actualCount >= expected ? "compliant" : actualCount > 0 ? "partial" : "none";
+
+    return {
+      scheduleId: s.id,
+      title: s.title ?? tmplMap[s.templateId] ?? `Jadwal #${s.id}`,
+      frequency: s.frequency,
+      frequencyLabel: FREQ_LABELS[s.frequency] ?? s.frequency,
+      plantName: plantMap[s.plantId] ?? "—",
+      templateName: tmplMap[s.templateId] ?? "—",
+      createdAt: s.createdAt.toISOString(),
+      isActive: s.isActive === 1,
+      assignedTo: assigned,
+      expectedCount: expected,
+      actualCount,
+      complianceRate,
+      lastInspectedAt,
+      status,
+    };
+  });
+
+  rows.sort((a, b) => a.complianceRate - b.complianceRate);
+
+  const compliant = rows.filter(r => r.status === "compliant").length;
+  const partial = rows.filter(r => r.status === "partial").length;
+  const none = rows.filter(r => r.status === "none").length;
+  const avgRate = rows.length > 0 ? rows.reduce((s, r) => s + r.complianceRate, 0) / rows.length : 0;
+
+  res.json({ rows, summary: { total: rows.length, compliant, partial, none, avgRate } });
 });
 
 export default router;
