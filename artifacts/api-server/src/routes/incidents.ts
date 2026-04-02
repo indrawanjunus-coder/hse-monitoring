@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   db, incidentsTable, usersTable, plantsTable, categoriesTable, actionsTable, groupsTable,
   groupMembersTable, preventiveActionsTable, categoryGroupsTable, categoryUsersTable,
+  incidentAttachmentsTable,
 } from "@workspace/db";
 import { eq, desc, inArray } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
@@ -27,6 +28,12 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
     picMembers = rows.filter(r => r.email).map(r => ({ name: r.name, email: r.email! }));
   }
 
+  const attachments = await db
+    .select()
+    .from(incidentAttachmentsTable)
+    .where(eq(incidentAttachmentsTable.incidentId, inc.id))
+    .orderBy(incidentAttachmentsTable.uploadedAt);
+
   return {
     ...inc,
     reporterName: reporter?.name ?? "",
@@ -37,6 +44,7 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
     preventiveActionName: preventiveAction?.name ?? null,
     assignedGroupName: assignedGroup?.name ?? null,
     picMembers,
+    attachments,
     createdAt: inc.createdAt.toISOString(),
   };
 }

@@ -14,11 +14,39 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RiskBadge, StatusBadge, IncidentTypeBadge } from "@/components/badges";
 import {
   Plus, AlertTriangle, MapPin, User, Calendar, ChevronDown, Users,
-  ArrowUpDown, ShieldAlert, Mail, Ticket, X, Search,
+  ArrowUpDown, ShieldAlert, Mail, Ticket, X, Search, Paperclip, FileImage, FileText, Trash2, ExternalLink, Upload, Cloud,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { Pagination } from "@/components/pagination";
+import { Badge } from "@/components/ui/badge";
+
+async function uploadAttachment(incidentId: number, file: File): Promise<void> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("incidentId", String(incidentId));
+  const token = localStorage.getItem("hse_token");
+  const res = await fetch("/api/attachments/upload", {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any).error ?? "Upload gagal");
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function AttachmentIcon({ mimeType }: { mimeType: string }) {
+  if (mimeType === "application/pdf") return <FileText className="w-4 h-4 text-red-500" />;
+  return <FileImage className="w-4 h-4 text-blue-500" />;
+}
 
 interface Incident {
   id: number;
@@ -45,6 +73,20 @@ interface Incident {
   picMembers?: { name: string; email: string }[];
   escalationLevel?: number;
   createdAt?: string;
+  attachments?: Attachment[];
+}
+
+interface Attachment {
+  id: number;
+  incidentId: number;
+  driveFileId: string;
+  fileName: string;
+  storedName: string;
+  viewUrl: string;
+  mimeType: string;
+  fileSize: number;
+  sequence: number;
+  uploadedAt: string;
 }
 
 interface Plant { id: number; name: string }
@@ -179,8 +221,9 @@ function RecipientPicker({ allUsers, allGroups, recipientUserIds, recipientGroup
   );
 }
 
-function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiveActions, reporterId }: {
-  onSave: (data: Record<string, unknown>) => Promise<void>;
+function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, preventiveActions, reporterId }: {
+  onSave: (data: Record<string, unknown>) => Promise<{ id: number }>;
+  onDone: () => void;
   onCancel: () => void;
   plants: Plant[]; categories: Category[]; actions: Action[]; preventiveActions: PreventiveAction[];
   reporterId: number;
@@ -201,6 +244,9 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
   const [targetDate, setTargetDate] = useState("");
   const [needsFurtherAction, setNeedsFurtherAction] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadStatus, setUploadStatus] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [recipientGroupIds, setRecipientGroupIds] = useState<number[]>([]);
   const [recipientUserIds, setRecipientUserIds] = useState<number[]>([]);
@@ -237,7 +283,7 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
     if (!plantId || !categoryId || !detail.trim()) return;
     setSaving(true);
     try {
-      await onSave({
+      const created = await onSave({
         reporterId,
         plantId: parseInt(plantId),
         categoryId: parseInt(categoryId),
@@ -252,10 +298,33 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
         recipientUserIds,
         recipientGroupIds,
       });
+
+      if (pendingFiles.length > 0) {
+        for (let i = 0; i < pendingFiles.length; i++) {
+          setUploadStatus(`Mengupload file ${i + 1}/${pendingFiles.length}...`);
+          try {
+            await uploadAttachment(created.id, pendingFiles[i]!);
+          } catch {
+          }
+        }
+        setUploadStatus("");
+      }
+      onDone();
     } finally {
       setSaving(false);
     }
   };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    setPendingFiles(prev => {
+      const existing = new Set(prev.map(f => f.name + f.size));
+      return [...prev, ...files.filter(f => !existing.has(f.name + f.size))];
+    });
+    e.target.value = "";
+  };
+
+  const removeFile = (idx: number) => setPendingFiles(prev => prev.filter((_, i) => i !== idx));
 
   const picGroupName = selectedCategory?.picGroupName;
   const totalRecipients = recipientGroups.length + recipientUsers.length;
@@ -396,10 +465,53 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
         <Label htmlFor="furtherAction">Perlu tindak lanjut lebih lanjut</Label>
       </div>
 
+      <div className="space-y-2">
+        <Label className="flex items-center gap-1.5">
+          <Paperclip className="w-3.5 h-3.5 text-gray-400" />
+          Lampiran Foto / PDF
+          <span className="text-xs text-gray-400 font-normal">(opsional, maks 20MB per file)</span>
+        </Label>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/jpg,application/pdf"
+          multiple
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <div
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center justify-center gap-2 border-2 border-dashed border-gray-200 hover:border-blue-300 rounded-lg p-4 cursor-pointer transition-colors bg-gray-50 hover:bg-blue-50 text-sm text-gray-500 hover:text-blue-600"
+        >
+          <Upload className="w-4 h-4" />
+          Klik untuk pilih foto atau PDF
+        </div>
+        {pendingFiles.length > 0 && (
+          <div className="space-y-1.5">
+            {pendingFiles.map((f, i) => (
+              <div key={i} className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-3 py-2 text-sm">
+                {f.type === "application/pdf" ? <FileText className="w-4 h-4 text-red-500 shrink-0" /> : <FileImage className="w-4 h-4 text-blue-500 shrink-0" />}
+                <span className="truncate flex-1">{f.name}</span>
+                <span className="text-xs text-gray-400 shrink-0">{formatBytes(f.size)}</span>
+                <button onClick={() => removeFile(i)} className="text-gray-400 hover:text-red-500">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {uploadStatus && (
+          <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 rounded-md px-3 py-2">
+            <Cloud className="w-4 h-4 animate-pulse" />
+            {uploadStatus}
+          </div>
+        )}
+      </div>
+
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>Batal</Button>
         <Button onClick={handleSave} disabled={saving || !plantId || !categoryId || !detail.trim()}>
-          {saving ? "Menyimpan..." : "Kirim Laporan"}
+          {saving ? (uploadStatus || "Menyimpan...") : "Kirim Laporan"}
         </Button>
       </DialogFooter>
     </div>
@@ -506,6 +618,31 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
           {incident.escalationLevel >= 3 ? "🚨 Eskalasi level 3 — Incident belum ditutup > 72 jam" :
            incident.escalationLevel === 2 ? "🔴 Eskalasi level 2 — Incident belum ditutup > 48 jam" :
            "⚠️ Eskalasi level 1 — Incident belum ditutup > 24 jam"}
+        </div>
+      )}
+
+      {incident.attachments && incident.attachments.length > 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+          <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+            <Paperclip className="w-3.5 h-3.5" />
+            Lampiran ({incident.attachments.length})
+          </p>
+          <div className="space-y-1.5">
+            {incident.attachments.map((a) => (
+              <a
+                key={a.id}
+                href={a.viewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-md px-3 py-2 text-sm transition-colors group"
+              >
+                <AttachmentIcon mimeType={a.mimeType} />
+                <span className="flex-1 truncate font-medium text-gray-800 group-hover:text-blue-700">{a.fileName}</span>
+                <span className="text-xs text-gray-400 shrink-0">{formatBytes(a.fileSize)}</span>
+                <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
+              </a>
+            ))}
+          </div>
         </div>
       )}
 
@@ -621,8 +758,8 @@ export default function IncidentsPage() {
   const { data: incidentTypesMaster = [] } = useQuery<ApiIncidentType[]>({ queryKey: ["incident-types"], queryFn: () => api.get("/incident-types") });
 
   const createMutation = useMutation({
-    mutationFn: (data: Record<string, unknown>) => api.post("/incidents", data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["incidents"] }); setNewOpen(false); toast({ title: "Laporan berhasil dikirim" }); },
+    mutationFn: (data: Record<string, unknown>) => api.post<{ id: number }>("/incidents", data),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["incidents"] }); },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
@@ -788,6 +925,7 @@ export default function IncidentsPage() {
           {user && (
             <IncidentForm
               onSave={(d) => createMutation.mutateAsync(d)}
+              onDone={() => { setNewOpen(false); toast({ title: "Laporan berhasil dikirim" }); }}
               onCancel={() => setNewOpen(false)}
               plants={plants} categories={categories} actions={actions} preventiveActions={preventiveActions}
               reporterId={user.id}

@@ -16,3 +16,5 @@ export * from "./indicators";
 export * from "./preventive-actions";
 export * from "./incident-types";
 export * from "./system-logs";
+export * from "./gdrive-settings";
+export * from "./incident-attachments";

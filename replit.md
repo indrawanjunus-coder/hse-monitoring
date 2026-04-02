@@ -138,7 +138,8 @@ React + Vite web dashboard for HSE monitoring. Uses shadcn/ui, Recharts, wouter,
 - Login page (NIK + password, same auth as mobile)
 - Dashboard: monthly incident charts (daily bar, open/closed stacked bar, risk matrix table, category trend bar)
 - Schedules: CRUD for inspection schedules with frequency (daily/weekly/biweekly/monthly/custom), assign to Group or User
-- Incidents: list with status filter, new incident form, detail view with status update
+- Incidents: list with status filter, new incident form (with file upload: photo/PDF), detail view with status update + attachment viewer
+- Attachments: upload foto (JPG/PNG/WEBP) atau PDF saat lapor H&I — disimpan ke Google Drive dengan struktur folder Tahun/Bulan, nama file format `{incidentId}-YYYY-MM-DD-{increment}`
 - Inspeksi Saya (/my-inspections): personal inspection task list for the logged-in user; shows pending/completed schedules and allows filling inspection template inline
 - Riwayat Inspeksi (/history): table of all submitted inspections; click row to view answer detail including expected vs actual answer comparison
 - Laporan Followup H&I (/reports/followup): incidents bucketed by time since creation (< 24h, 24–48h, 48–72h, > 72h) with recharts bar chart and per-bucket detail table
@@ -155,6 +156,18 @@ React + Vite web dashboard for HSE monitoring. Uses shadcn/ui, Recharts, wouter,
 - `GET /api/inspections` — all inspections with supervisor/template/plant names
 - `POST /api/inspections` — submit inspection, auto-creates incidents for wrong answers
 - `GET /api/reports/followup` — time-bucketed incident report
+- `GET/PUT /api/settings/gdrive` — Google Drive service account settings (admin only)
+- `GET /api/attachments?incidentId=X` — list attachments for an incident
+- `POST /api/attachments/upload` — upload file (multipart/form-data) to Google Drive, saves record in DB
+- `DELETE /api/attachments/:id` — delete attachment from Drive + DB
+
+**Google Drive Attachment System:**
+- Service account: configured via /settings/gdrive (admin only)
+- Folder structure: `{rootFolderId}/{year}/{MM - MonthName}/`
+- File naming: `{incidentId}-YYYY-MM-DD-{00001}.ext`
+- Increment counter is per-month (resets to 1 each month), max file size 20MB
+- Accepted types: JPG, PNG, WEBP, PDF
+- New DB tables: `gdrive_settings`, `incident_attachments`
 
 **Key files:**
 - `src/App.tsx` — router setup with auth guard

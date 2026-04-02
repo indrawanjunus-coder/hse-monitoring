@@ -14,6 +14,7 @@ import FollowupReportPage from "@/pages/reports/followup-report";
 import MonthlyReportPage from "@/pages/reports/monthly-report";
 import ActionMatrixPage from "@/pages/reports/action-matrix";
 import SmtpSettingsPage from "@/pages/settings/smtp";
+import GdriveSettingsPage from "@/pages/settings/gdrive";
 import UsersPage from "@/pages/master/users";
 import CategoriesPage from "@/pages/master/categories";
 import GroupsPage from "@/pages/master/groups";
@@ -50,6 +51,7 @@ function AppRoutes() {
           <Route path="/reports/monthly" component={MonthlyReportPage} />
           <Route path="/reports/action-matrix" component={ActionMatrixPage} />
           <Route path="/settings/smtp" component={SmtpSettingsPage} />
+          <Route path="/settings/gdrive" component={GdriveSettingsPage} />
           <Route path="/profile" component={ProfilePage} />
           <Route path="/master/users" component={UsersPage} />
           <Route path="/master/categories" component={CategoriesPage} />
