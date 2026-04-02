@@ -130,3 +130,52 @@ export function scheduleReminderHtml(schedule: {
     </div>
   `;
 }
+
+export function incidentTargetReminderHtml(incident: {
+  id: number;
+  detail: string;
+  categoryName?: string;
+  plantName?: string;
+  targetDate: string;
+  reporterName?: string;
+  assignedGroupName?: string;
+  type: "H-1" | "H";
+}) {
+  const isH = incident.type === "H";
+  const headerColor = isH ? "#dc2626" : "#d97706";
+  const icon = isH ? "🔴" : "⏰";
+  const title = isH
+    ? `${icon} Hari Ini Batas Penyelesaian Incident #${incident.id}`
+    : `${icon} Pengingat H-1: Besok Batas Penyelesaian Incident #${incident.id}`;
+  const subtitle = isH
+    ? `Incident berikut harus diselesaikan <strong>hari ini</strong> (${incident.targetDate}):`
+    : `Incident berikut harus diselesaikan <strong>besok</strong> (${incident.targetDate}):`;
+
+  return `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:${headerColor};color:white;padding:20px;border-radius:8px 8px 0 0">
+        <h2 style="margin:0">${title}</h2>
+      </div>
+      <div style="background:#f9fafb;padding:20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
+        <p style="color:#374151">${subtitle}</p>
+        <table style="width:100%;border-collapse:collapse">
+          <tr><td style="padding:8px;color:#6b7280;width:40%">Target Penyelesaian</td><td style="padding:8px;font-weight:700;color:${headerColor}">${incident.targetDate}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Kategori</td><td style="padding:8px;font-weight:600">${incident.categoryName ?? "-"}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Plant</td><td style="padding:8px;font-weight:600">${incident.plantName ?? "-"}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Dilaporkan Oleh</td><td style="padding:8px;font-weight:600">${incident.reporterName ?? "-"}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">PIC Group</td><td style="padding:8px;font-weight:600;color:#1e3a5f">${incident.assignedGroupName ?? "-"}</td></tr>
+        </table>
+        <div style="margin-top:16px;padding:12px;background:white;border-radius:6px;border-left:4px solid ${headerColor}">
+          <p style="margin:0;color:#374151"><strong>Detail Incident:</strong></p>
+          <p style="margin:8px 0 0;color:#4b5563">${incident.detail}</p>
+        </div>
+        <div style="margin-top:16px;padding:12px;background:${isH ? "#fee2e2" : "#fef3c7"};border-radius:6px">
+          <p style="margin:0;color:${isH ? "#991b1b" : "#92400e"};font-weight:600;font-size:13px">
+            ${isH ? "⚠️ Harap segera selesaikan dan tutup incident ini hari ini." : "⚠️ Harap persiapkan penyelesaian incident ini sebelum batas waktu besok."}
+          </p>
+        </div>
+        <p style="margin-top:20px;color:#9ca3af;font-size:12px">Notifikasi otomatis dari Sistem HSE.</p>
+      </div>
+    </div>
+  `;
+}
