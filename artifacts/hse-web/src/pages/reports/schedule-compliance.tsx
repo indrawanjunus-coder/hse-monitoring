@@ -44,6 +44,7 @@ const STATUS_META = {
   none: { label: "Tidak Ada", icon: XCircle, cls: "text-red-600 bg-red-50 border-red-200" },
 };
 const MONTHS = [
+  { v: "all", l: "Semua Bulan (Per Tahun)" },
   { v: "01", l: "Januari" }, { v: "02", l: "Februari" }, { v: "03", l: "Maret" },
   { v: "04", l: "April" }, { v: "05", l: "Mei" }, { v: "06", l: "Juni" },
   { v: "07", l: "Juli" }, { v: "08", l: "Agustus" }, { v: "09", l: "September" },
@@ -55,31 +56,65 @@ function lastDayOfMonth(year: number, month: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function exportToCSV(rows: ScheduleCompliance[], label: string) {
-  const header = ["No", "Jadwal Inspeksi", "Template", "Frekuensi", "Plant", "PIC / Group", "Dibuat Tgl", "Seharusnya (kali)", "Terlaksana (kali)", "Kepatuhan (%)", "Terakhir Dikerjakan", "Status"];
-  const csvRows = rows.map((r, i) => [
+async function exportToExcel(rows: ScheduleCompliance[], label: string) {
+  const XLSX = await import("xlsx");
+
+  const compliant = rows.filter(r => r.status === "compliant").length;
+  const partial = rows.filter(r => r.status === "partial").length;
+  const none = rows.filter(r => r.status === "none").length;
+  const avgRate = rows.length > 0 ? rows.reduce((s, r) => s + r.complianceRate, 0) / rows.length : 0;
+
+  // Sheet 1: Ringkasan
+  const summaryData: (string | number)[][] = [
+    ["Laporan Kepatuhan Jadwal Inspeksi", ""],
+    ["Periode", label],
+    ["Dicetak", new Date().toLocaleDateString("id-ID", { day: "2-digit", month: "long", year: "numeric" })],
+    ["", ""],
+    ["RINGKASAN", ""],
+    ["Total Jadwal", rows.length],
+    ["Sesuai Target", compliant],
+    ["Sebagian", partial],
+    ["Tidak Ada / Belum", none],
+    ["Rata-rata Kepatuhan (%)", parseFloat(avgRate.toFixed(1))],
+  ];
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+  wsSummary["!cols"] = [{ wch: 28 }, { wch: 30 }];
+
+  // Sheet 2: Data detail
+  const headers = [
+    "No", "Jadwal Inspeksi", "Template", "Frekuensi", "Plant",
+    "PIC / Group", "Dibuat Tgl", "Seharusnya (kali)", "Terlaksana (kali)",
+    "Kepatuhan (%)", "Terakhir Dikerjakan", "Status",
+  ];
+  const dataRows = rows.map((r, i) => [
     i + 1,
-    `"${r.title.replace(/"/g, '""')}"`,
-    `"${r.templateName.replace(/"/g, '""')}"`,
+    r.title,
+    r.templateName,
     r.frequencyLabel,
-    `"${r.plantName.replace(/"/g, '""')}"`,
-    `"${r.assignedTo.map(a => `${a.name}${a.nik ? ` (${a.nik})` : ""}`).join("; ").replace(/"/g, '""')}"`,
+    r.plantName,
+    r.assignedTo.map(a => `${a.name}${a.nik ? ` (${a.nik})` : ""}`).join("; "),
     new Date(r.createdAt).toLocaleDateString("id-ID"),
     r.expectedCount,
     r.actualCount,
-    r.complianceRate.toFixed(1),
+    parseFloat(r.complianceRate.toFixed(1)),
     r.lastInspectedAt ? new Date(r.lastInspectedAt).toLocaleDateString("id-ID") : "Belum pernah",
     STATUS_META[r.status].label,
   ]);
 
-  const content = [header.join(","), ...csvRows.map(r => r.join(","))].join("\n");
-  const blob = new Blob(["\uFEFF" + content], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `kepatuhan-jadwal-${label}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+  ws["!cols"] = [
+    { wch: 5 }, { wch: 38 }, { wch: 30 }, { wch: 13 }, { wch: 22 },
+    { wch: 35 }, { wch: 14 }, { wch: 17 }, { wch: 16 }, { wch: 14 },
+    { wch: 22 }, { wch: 13 },
+  ];
+  // Freeze header row
+  ws["!freeze"] = { xSplit: 0, ySplit: 1, topLeftCell: "A2", activePane: "bottomLeft" };
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, wsSummary, "Ringkasan");
+  XLSX.utils.book_append_sheet(wb, ws, "Data Kepatuhan");
+
+  XLSX.writeFile(wb, `kepatuhan-jadwal-${label}.xlsx`);
 }
 
 export default function ScheduleCompliancePage() {
@@ -127,15 +162,22 @@ export default function ScheduleCompliancePage() {
 
   const handleApply = () => {
     const yr = parseInt(selYear);
-    const mo = parseInt(selMonth);
-    const to = lastDayOfMonth(yr, mo);
-    const label = `${MONTHS.find(m => m.v === selMonth)?.l}-${selYear}`;
+    let to: string;
+    let label: string;
+    if (selMonth === "all") {
+      to = `${yr}-12-31`;
+      label = `Tahun-${selYear}`;
+    } else {
+      const mo = parseInt(selMonth);
+      to = lastDayOfMonth(yr, mo);
+      label = `${MONTHS.find(m => m.v === selMonth)?.l}-${selYear}`;
+    }
     setAppliedTo(to);
     setAppliedLabel(label);
     setPage(1);
   };
 
-  const handleExport = () => exportToCSV(filteredRows, appliedLabel);
+  const handleExport = () => exportToExcel(filteredRows, appliedLabel);
 
   const s = data?.summary;
 

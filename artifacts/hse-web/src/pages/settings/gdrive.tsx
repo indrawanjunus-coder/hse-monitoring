@@ -15,6 +15,7 @@ interface GdriveSettings {
   clientEmail: string;
   privateKeySet: boolean;
   rootFolderId: string;
+  maxAttachmentSizeMb: number;
   updatedAt: string | null;
 }
 
@@ -24,6 +25,7 @@ export default function GdriveSettingsPage() {
   const [clientEmail, setClientEmail] = useState("");
   const [privateKey, setPrivateKey] = useState("");
   const [rootFolderId, setRootFolderId] = useState("0AIi51ZRCyt6JUk9PVA");
+  const [maxAttachmentSizeMb, setMaxAttachmentSizeMb] = useState(1);
   const [jsonInput, setJsonInput] = useState("");
   const [jsonError, setJsonError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -34,6 +36,7 @@ export default function GdriveSettingsPage() {
       setSettings(s);
       setClientEmail(s.clientEmail || "");
       setRootFolderId(s.rootFolderId || "0AIi51ZRCyt6JUk9PVA");
+      setMaxAttachmentSizeMb(s.maxAttachmentSizeMb ?? 1);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -57,7 +60,7 @@ export default function GdriveSettingsPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      const body: Record<string, string> = { clientEmail, rootFolderId };
+      const body: Record<string, string | number> = { clientEmail, rootFolderId, maxAttachmentSizeMb };
       if (privateKey.trim()) body.privateKey = privateKey.trim();
       await api.put("/settings/gdrive", body);
       toast({ title: "Pengaturan Google Drive berhasil disimpan" });
@@ -65,6 +68,7 @@ export default function GdriveSettingsPage() {
       const refreshed = await api.get<GdriveSettings>("/settings/gdrive");
       setSettings(refreshed);
       setClientEmail(refreshed.clientEmail || "");
+      setMaxAttachmentSizeMb(refreshed.maxAttachmentSizeMb ?? 1);
     } catch (e: any) {
       toast({ title: "Gagal menyimpan", description: e.message, variant: "destructive" });
     } finally {
@@ -233,6 +237,32 @@ export default function GdriveSettingsPage() {
           />
           <p className="text-xs text-gray-400">
             ID folder Google Drive. Bisa dilihat dari URL folder: <code>https://drive.google.com/drive/folders/<strong>[ID-FOLDER]</strong></code>
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Cloud className="w-4 h-4" />Batas Ukuran Lampiran
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label htmlFor="max-size">Ukuran Maksimum per File (MB)</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="max-size"
+              type="number"
+              min={1}
+              max={50}
+              value={maxAttachmentSizeMb}
+              onChange={e => setMaxAttachmentSizeMb(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+              className="w-32"
+            />
+            <span className="text-sm text-gray-500">MB</span>
+          </div>
+          <p className="text-xs text-gray-400">
+            Gambar yang melebihi batas ini akan dikompres otomatis sebelum diupload. PDF yang melebihi batas akan ditolak. Minimal 1 MB, maksimal 50 MB.
           </p>
         </CardContent>
       </Card>

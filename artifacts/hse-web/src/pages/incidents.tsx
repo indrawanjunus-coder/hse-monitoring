@@ -21,6 +21,50 @@ import { useAuth } from "@/lib/auth-context";
 import { Pagination } from "@/components/pagination";
 import { Badge } from "@/components/ui/badge";
 
+async function compressImage(file: File, maxSizeBytes: number, onStatus?: (s: string) => void): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const canvas = document.createElement("canvas");
+      let { width, height } = img;
+      // Step 1: shrink dimensions if image is very large
+      const MAX_DIM = 2400;
+      if (width > MAX_DIM || height > MAX_DIM) {
+        const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      const targetMime = "image/jpeg";
+      let quality = 0.85;
+      const tryCompress = () => {
+        canvas.toBlob(blob => {
+          if (!blob) { reject(new Error("Kompresi gagal")); return; }
+          if (blob.size <= maxSizeBytes || quality < 0.1) {
+            const ext = "jpg";
+            const baseName = file.name.replace(/\.[^.]+$/, "");
+            resolve(new File([blob], `${baseName}_compressed.${ext}`, { type: targetMime }));
+          } else {
+            quality = Math.max(0.1, quality - 0.1);
+            onStatus?.(`Mengurangi kualitas (${Math.round(quality * 100)}%)...`);
+            tryCompress();
+          }
+        }, targetMime, quality);
+      };
+      tryCompress();
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("Gagal membaca gambar")); };
+    img.src = objectUrl;
+  });
+}
+
 async function uploadAttachment(incidentId: number, file: File): Promise<void> {
   const fd = new FormData();
   fd.append("file", file);
@@ -566,6 +610,13 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
     queryFn: () => api.get(`/incidents/${incident.id}/comments`),
   });
 
+  const { data: attachmentCfg } = useQuery<{ maxAttachmentSizeMb: number }>({
+    queryKey: ["attachment-size-cfg"],
+    queryFn: () => api.get("/settings/gdrive/public"),
+    staleTime: 5 * 60_000,
+  });
+  const maxSizeBytes = (attachmentCfg?.maxAttachmentSizeMb ?? 1) * 1024 * 1024;
+
   const handleSendComment = async () => {
     if (!commentText.trim()) return;
     setSendingComment(true);
@@ -595,9 +646,31 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
     setAddUploading(true);
     setAddUploadErrors([]);
     const errs: string[] = [];
+    const maxMb = attachmentCfg?.maxAttachmentSizeMb ?? 1;
     for (let i = 0; i < fileArr.length; i++) {
-      const f = fileArr[i]!;
+      let f = fileArr[i]!;
+      // Hard limit: 20MB (server-side)
       if (f.size > 20 * 1024 * 1024) { errs.push(`${f.name}: ukuran melebihi 20MB`); continue; }
+      // Soft limit: maxSizeBytes — compress images automatically
+      if (f.size > maxSizeBytes) {
+        if (f.type.startsWith("image/")) {
+          toast({
+            title: `Ukuran melebihi ${maxMb}MB — mengompresi kualitas`,
+            description: `${f.name} (${formatBytes(f.size)}) akan dikurangi kualitasnya sebelum diupload`,
+          });
+          setAddUploadStatus(`Mengompresi ${f.name}...`);
+          try {
+            f = await compressImage(f, maxSizeBytes, setAddUploadStatus);
+          } catch (e: any) {
+            errs.push(`${f.name}: gagal kompresi — ${e.message}`);
+            continue;
+          }
+        } else {
+          // PDF — cannot compress
+          errs.push(`${f.name}: ukuran melebihi batas ${maxMb}MB. PDF tidak bisa dikecilkan otomatis.`);
+          continue;
+        }
+      }
       setAddUploadStatus(`Mengupload ${i + 1}/${fileArr.length}: ${f.name}`);
       try {
         await uploadAttachment(incident.id, f);
