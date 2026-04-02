@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { createPrivateKey, sign as cryptoSign } from "node:crypto";
 import { db, gdriveSettingsTable, incidentAttachmentsTable } from "@workspace/db";
 import { and, eq, gte, lt, count } from "drizzle-orm";
 import { logger } from "./logger";
@@ -9,8 +10,11 @@ const INDONESIAN_MONTHS = [
 ];
 
 function normalizePrivateKey(raw: string): string {
-  let key = raw.trim();
-  key = key.replace(/\\n/g, "\n");
+  let key = raw.trim()
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\\n/g, "\n");
+
   if (!key.includes("\n") && key.includes("-----")) {
     const begin = "-----BEGIN PRIVATE KEY-----";
     const end = "-----END PRIVATE KEY-----";
@@ -25,6 +29,56 @@ function normalizePrivateKey(raw: string): string {
   return key;
 }
 
+/**
+ * Create a signed JWT using Node.js native crypto.sign() which properly
+ * supports OpenSSL 3 / Node.js 24+, bypassing the broken jwa/jws libraries.
+ */
+async function getAccessToken(clientEmail: string, rawPrivateKey: string): Promise<string> {
+  const privateKey = normalizePrivateKey(rawPrivateKey);
+  const now = Math.floor(Date.now() / 1000);
+
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const claim = Buffer.from(JSON.stringify({
+    iss: clientEmail,
+    scope: "https://www.googleapis.com/auth/drive",
+    aud: "https://oauth2.googleapis.com/token",
+    exp: now + 3600,
+    iat: now,
+  })).toString("base64url");
+
+  const toSign = `${header}.${claim}`;
+
+  let keyObj;
+  try {
+    keyObj = createPrivateKey({ key: privateKey, format: "pem" });
+  } catch (e: any) {
+    throw new Error(`Private key tidak valid: ${e.message}. Pastikan Anda paste seluruh isi file JSON service account dengan benar.`);
+  }
+
+  const signature = cryptoSign("RSA-SHA256", Buffer.from(toSign), keyObj).toString("base64url");
+  const jwt = `${toSign}.${signature}`;
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Gagal mendapatkan token Google: ${body}`);
+  }
+
+  const data = await res.json() as { access_token: string; error?: string };
+  if (!data.access_token) {
+    throw new Error(`Respons token tidak mengandung access_token: ${JSON.stringify(data)}`);
+  }
+  return data.access_token;
+}
+
 async function getGdriveSettings() {
   const [settings] = await db.select().from(gdriveSettingsTable);
   if (!settings || !settings.privateKey || !settings.clientEmail) {
@@ -33,20 +87,14 @@ async function getGdriveSettings() {
   return settings;
 }
 
-async function getGdriveAuth() {
+async function getGdriveClient() {
   const settings = await getGdriveSettings();
-  const privateKey = normalizePrivateKey(settings.privateKey);
+  const accessToken = await getAccessToken(settings.clientEmail, settings.privateKey);
 
-  const auth = new google.auth.GoogleAuth({
-    credentials: {
-      type: "service_account",
-      client_email: settings.clientEmail,
-      private_key: privateKey,
-    },
-    scopes: ["https://www.googleapis.com/auth/drive"],
-  });
+  const auth = new google.auth.OAuth2();
+  auth.setCredentials({ access_token: accessToken });
 
-  return { auth, rootFolderId: settings.rootFolderId };
+  return { drive: google.drive({ version: "v3", auth }), rootFolderId: settings.rootFolderId };
 }
 
 async function getOrCreateFolder(drive: ReturnType<typeof google.drive>, parentId: string, name: string): Promise<string> {
@@ -98,8 +146,7 @@ export async function uploadToDrive(
   viewUrl: string;
   sequence: number;
 }> {
-  const { auth, rootFolderId } = await getGdriveAuth();
-  const drive = google.drive({ version: "v3", auth });
+  const { drive, rootFolderId } = await getGdriveClient();
 
   const now = new Date();
   const year = now.getFullYear();
@@ -152,8 +199,7 @@ export async function uploadToDrive(
 
 export async function deleteFromDrive(driveFileId: string): Promise<void> {
   try {
-    const { auth } = await getGdriveAuth();
-    const drive = google.drive({ version: "v3", auth });
+    const { drive } = await getGdriveClient();
     await drive.files.delete({ fileId: driveFileId, supportsAllDrives: true });
     logger.info({ driveFileId }, "File deleted from Google Drive");
   } catch (err) {
