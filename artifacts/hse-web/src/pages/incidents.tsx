@@ -516,9 +516,8 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
         )}
         {uploadErrors.length > 0 && (
           <div className="space-y-1 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-            <p className="font-medium">Beberapa file gagal diupload ke Google Drive:</p>
+            <p className="font-medium">Beberapa file gagal diupload:</p>
             {uploadErrors.map((e, i) => <p key={i} className="text-xs">{e}</p>)}
-            <p className="text-xs text-red-500 mt-1">Pastikan pengaturan Google Drive sudah dikonfigurasi di halaman Pengaturan.</p>
             <button className="text-xs underline text-red-600 mt-1" onClick={onDone}>Tutup tanpa menunggu</button>
           </div>
         )}
@@ -746,7 +745,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
               <div className="flex items-center gap-2 shrink-0">
                 <a href={previewAttachment.viewUrl} target="_blank" rel="noopener noreferrer"
                   className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
-                  <ExternalLink className="w-3 h-3" /> Buka di Drive
+                  <ExternalLink className="w-3 h-3" /> Unduh / Buka
                 </a>
                 <button onClick={() => setPreviewAttachment(null)} className="text-gray-400 hover:text-gray-700 ml-2">
                   <X className="w-4 h-4" />
@@ -755,19 +754,9 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
             </div>
             <div className="bg-black flex items-center justify-center" style={{ minHeight: 400 }}>
               <img
-                src={(() => {
-                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
-                  return fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : previewAttachment.viewUrl;
-                })()}
+                src={previewAttachment.viewUrl}
                 alt={previewAttachment.fileName}
                 className="max-h-[70vh] max-w-full object-contain"
-                onError={(e) => {
-                  const img = e.currentTarget as HTMLImageElement;
-                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
-                  if (fileId && !img.src.includes("drive.google.com")) {
-                    img.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
-                  }
-                }}
               />
             </div>
           </DialogContent>
