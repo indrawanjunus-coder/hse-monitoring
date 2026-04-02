@@ -704,157 +704,11 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
         </div>
       )}
 
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
-            <Paperclip className="w-3.5 h-3.5" />
-            Lampiran {incident.attachments && incident.attachments.length > 0 ? `(${incident.attachments.length})` : ""}
-          </p>
-          <button
-            onClick={() => addFileRef.current?.click()}
-            disabled={addUploading}
-            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 font-medium"
-          >
-            {addUploading
-              ? <><Cloud className="w-3.5 h-3.5 animate-pulse" /> Mengupload...</>
-              : <><Upload className="w-3.5 h-3.5" /> Tambah Lampiran</>
-            }
-          </button>
-          <input
-            ref={addFileRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/jpg,application/pdf"
-            multiple
-            className="hidden"
-            onChange={e => handleAddFiles(e.target.files)}
-          />
-        </div>
-
-        {addUploadStatus && (
-          <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-2 py-1.5">
-            <Cloud className="w-3.5 h-3.5 animate-pulse shrink-0" />
-            {addUploadStatus}
-          </div>
-        )}
-        {addUploadErrors.length > 0 && (
-          <div className="space-y-0.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5">
-            <p className="font-medium">Gagal upload:</p>
-            {addUploadErrors.map((e, i) => <p key={i}>{e}</p>)}
-          </div>
-        )}
-
-        {incident.attachments && incident.attachments.length > 0 ? (
-          <div className="space-y-1.5">
-            {incident.attachments.map((a) => {
-              const isImage = a.mimeType.startsWith("image/");
-              return (
-                <div
-                  key={a.id}
-                  onClick={() => isImage ? setPreviewAttachment(a) : window.open(a.viewUrl, "_blank")}
-                  className="flex items-center gap-2.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-md px-3 py-2 text-sm transition-colors group cursor-pointer"
-                >
-                  <AttachmentIcon mimeType={a.mimeType} />
-                  <span className="flex-1 truncate font-medium text-gray-800 group-hover:text-blue-700">{a.fileName}</span>
-                  <span className="text-xs text-gray-400 shrink-0">{formatBytes(a.fileSize)}</span>
-                  {isImage
-                    ? <Eye className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
-                    : <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
-                  }
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          !addUploading && (
-            <p className="text-xs text-gray-400 text-center py-2">Belum ada lampiran</p>
-          )
-        )}
-      </div>
-
-      {previewAttachment && (
-        <Dialog open onOpenChange={() => setPreviewAttachment(null)}>
-          <DialogContent className="max-w-3xl p-0 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-              <p className="text-sm font-medium truncate">{previewAttachment.fileName}</p>
-              <div className="flex items-center gap-2 shrink-0">
-                <a href={previewAttachment.viewUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
-                  <ExternalLink className="w-3 h-3" /> Buka di Drive
-                </a>
-                <button onClick={() => setPreviewAttachment(null)} className="text-gray-400 hover:text-gray-700 ml-2">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <div className="bg-black flex items-center justify-center" style={{ minHeight: 400 }}>
-              <img
-                src={(() => {
-                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
-                  return fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : previewAttachment.viewUrl;
-                })()}
-                alt={previewAttachment.fileName}
-                className="max-h-[70vh] max-w-full object-contain"
-                onError={(e) => {
-                  const img = e.currentTarget as HTMLImageElement;
-                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
-                  if (fileId && !img.src.includes("drive.google.com")) {
-                    img.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
-                  }
-                }}
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-
       {incident.needsFurtherAction && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
           ⚠️ Perlu tindak lanjut{incident.assignedGroupName ? ` · PIC: ${incident.assignedGroupName}` : ""}
         </div>
       )}
-      {/* Comment Thread — Catatan Tindak Lanjut */}
-      <div className="border-t pt-3 space-y-2">
-        <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
-          <MessageSquare className="w-4 h-4 text-blue-500" />
-          Catatan Tindak Lanjut {comments.length > 0 && <span className="text-xs font-normal text-gray-500">({comments.length} komentar)</span>}
-        </p>
-        {comments.length === 0 && (
-          <p className="text-xs text-gray-400 italic py-1">Belum ada catatan. Tambahkan update perkembangan di bawah.</p>
-        )}
-        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
-          {comments.map(c => (
-            <div key={c.id} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm relative group">
-              <div className="flex items-center justify-between mb-0.5">
-                <span className="font-medium text-gray-800">{c.userName ?? "—"}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-                  {(c.userId === user?.id || user?.role === "admin") && (
-                    <button onClick={() => handleDeleteComment(c.id)}
-                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              </div>
-              <p className="text-gray-700 whitespace-pre-wrap">{c.content}</p>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2 pt-1">
-          <Textarea
-            value={commentText}
-            onChange={e => setCommentText(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
-            placeholder="Tulis update perkembangan... (Enter untuk kirim, Shift+Enter baris baru)"
-            rows={2}
-            className="flex-1 text-sm resize-none"
-            disabled={sendingComment}
-          />
-          <Button size="sm" onClick={handleSendComment} disabled={sendingComment || !commentText.trim()} className="self-end">
-            <Send className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
 
       {canUpdate && incident.status !== "closed" && (
         <div className="space-y-3 border-t pt-3">
@@ -909,6 +763,150 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
       {(!canUpdate || incident.status === "closed") && (
         <DialogFooter><Button variant="outline" onClick={onClose}>Tutup</Button></DialogFooter>
       )}
+
+      {/* Lampiran */}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+            <Paperclip className="w-3.5 h-3.5" />
+            Lampiran {incident.attachments && incident.attachments.length > 0 ? `(${incident.attachments.length})` : ""}
+          </p>
+          <button
+            onClick={() => addFileRef.current?.click()}
+            disabled={addUploading}
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50 font-medium"
+          >
+            {addUploading
+              ? <><Cloud className="w-3.5 h-3.5 animate-pulse" /> Mengupload...</>
+              : <><Upload className="w-3.5 h-3.5" /> Tambah Lampiran</>
+            }
+          </button>
+          <input
+            ref={addFileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/jpg,application/pdf"
+            multiple
+            className="hidden"
+            onChange={e => handleAddFiles(e.target.files)}
+          />
+        </div>
+        {addUploadStatus && (
+          <div className="flex items-center gap-2 text-xs text-blue-600 bg-blue-50 rounded px-2 py-1.5">
+            <Cloud className="w-3.5 h-3.5 animate-pulse shrink-0" />
+            {addUploadStatus}
+          </div>
+        )}
+        {addUploadErrors.length > 0 && (
+          <div className="space-y-0.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded px-2 py-1.5">
+            <p className="font-medium">Gagal upload:</p>
+            {addUploadErrors.map((e, i) => <p key={i}>{e}</p>)}
+          </div>
+        )}
+        {incident.attachments && incident.attachments.length > 0 ? (
+          <div className="space-y-1.5">
+            {incident.attachments.map((a) => {
+              const isImage = a.mimeType.startsWith("image/");
+              return (
+                <div
+                  key={a.id}
+                  onClick={() => isImage ? setPreviewAttachment(a) : window.open(a.viewUrl, "_blank")}
+                  className="flex items-center gap-2.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-md px-3 py-2 text-sm transition-colors group cursor-pointer"
+                >
+                  <AttachmentIcon mimeType={a.mimeType} />
+                  <span className="flex-1 truncate font-medium text-gray-800 group-hover:text-blue-700">{a.fileName}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{formatBytes(a.fileSize)}</span>
+                  {isImage
+                    ? <Eye className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
+                    : <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
+                  }
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          !addUploading && <p className="text-xs text-gray-400 text-center py-2">Belum ada lampiran</p>
+        )}
+      </div>
+
+      {previewAttachment && (
+        <Dialog open onOpenChange={() => setPreviewAttachment(null)}>
+          <DialogContent className="max-w-3xl p-0 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
+              <p className="text-sm font-medium truncate">{previewAttachment.fileName}</p>
+              <div className="flex items-center gap-2 shrink-0">
+                <a href={previewAttachment.viewUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
+                  <ExternalLink className="w-3 h-3" /> Buka di Drive
+                </a>
+                <button onClick={() => setPreviewAttachment(null)} className="text-gray-400 hover:text-gray-700 ml-2">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="bg-black flex items-center justify-center" style={{ minHeight: 400 }}>
+              <img
+                src={(() => {
+                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
+                  return fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : previewAttachment.viewUrl;
+                })()}
+                alt={previewAttachment.fileName}
+                className="max-h-[70vh] max-w-full object-contain"
+                onError={(e) => {
+                  const img = e.currentTarget as HTMLImageElement;
+                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
+                  if (fileId && !img.src.includes("drive.google.com")) {
+                    img.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                  }
+                }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Comment Thread — Catatan Tindak Lanjut */}
+      <div className="border-t pt-3 space-y-2">
+        <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+          <MessageSquare className="w-4 h-4 text-blue-500" />
+          Catatan Tindak Lanjut {comments.length > 0 && <span className="text-xs font-normal text-gray-500">({comments.length} komentar)</span>}
+        </p>
+        {comments.length === 0 && (
+          <p className="text-xs text-gray-400 italic py-1">Belum ada catatan. Tambahkan update perkembangan di bawah.</p>
+        )}
+        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+          {comments.map(c => (
+            <div key={c.id} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm relative group">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="font-medium text-gray-800">{c.userName ?? "—"}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                  {(c.userId === user?.id || user?.role === "admin") && (
+                    <button onClick={() => handleDeleteComment(c.id)}
+                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="text-gray-700 whitespace-pre-wrap">{c.content}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 pt-1">
+          <Textarea
+            value={commentText}
+            onChange={e => setCommentText(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
+            placeholder="Tulis update perkembangan... (Enter untuk kirim, Shift+Enter baris baru)"
+            rows={2}
+            className="flex-1 text-sm resize-none"
+            disabled={sendingComment}
+          />
+          <Button size="sm" onClick={handleSendComment} disabled={sendingComment || !commentText.trim()} className="self-end">
+            <Send className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
 
       {/* Konfirmasi tutup incident */}
       {showCloseConfirm && (
