@@ -23,6 +23,7 @@ export const inspectionAnswersTable = pgTable("inspection_answers", {
   questionId: integer("question_id").notNull().references(() => questionsTable.id),
   answerYesNo: boolean("answer_yes_no"),
   answerText: text("answer_text"),
+  answerRefId: integer("answer_ref_id"),
   photoUrl: text("photo_url"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

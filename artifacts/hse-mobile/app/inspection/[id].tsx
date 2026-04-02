@@ -6,6 +6,8 @@ import React, { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -20,11 +22,13 @@ import Colors from "@/constants/colors";
 import { useApi } from "@/hooks/useApi";
 import { useAuth } from "@/context/AuthContext";
 
+type AnswerType = "yes_no" | "text" | "master_user" | "master_group" | "master_action";
+
 interface Question {
   id: number;
   templateId: number;
   text: string;
-  answerType: "yes_no" | "text";
+  answerType: AnswerType;
   isMandatory: boolean;
   requiresPhoto: boolean;
   categoryId?: number;
@@ -51,14 +55,110 @@ interface TemplateWithQuestions {
   questions: Question[];
 }
 
-type AnswerMap = Record<number, { answerYesNo?: boolean; answerText?: string }>;
+interface MasterItem { id: number; name: string; nik?: string }
 
-function QuestionCard({ q, answer, onChange }: {
+type AnswerValue = { answerYesNo?: boolean; answerText?: string; answerRefId?: number };
+type AnswerMap = Record<number, AnswerValue>;
+
+function MasterPicker({
+  items, value, onSelect, placeholder, visible, onClose, searchLabel,
+}: {
+  items: MasterItem[];
+  value: number | undefined;
+  onSelect: (item: MasterItem) => void;
+  placeholder: string;
+  visible: boolean;
+  onClose: () => void;
+  searchLabel: string;
+}) {
+  const [search, setSearch] = useState("");
+  const c = Colors.light;
+  const filtered = items.filter(item =>
+    item.name.toLowerCase().includes(search.toLowerCase()) ||
+    (item.nik && item.nik.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={[picker.container, { backgroundColor: c.background }]}>
+        <View style={[picker.header, { backgroundColor: c.card, borderBottomColor: c.border }]}>
+          <Text style={[picker.title, { color: c.text, fontFamily: "Inter_600SemiBold" }]}>{searchLabel}</Text>
+          <TouchableOpacity onPress={onClose} style={picker.closeBtn}>
+            <Feather name="x" size={22} color={c.textMuted} />
+          </TouchableOpacity>
+        </View>
+        <View style={[picker.searchRow, { backgroundColor: c.card, borderBottomColor: c.border }]}>
+          <Feather name="search" size={16} color={c.textMuted} style={{ marginRight: 8 }} />
+          <TextInput
+            style={[picker.searchInput, { color: c.text, fontFamily: "Inter_400Regular" }]}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Cari..."
+            placeholderTextColor={c.textMuted}
+          />
+        </View>
+        <FlatList
+          data={filtered}
+          keyExtractor={item => String(item.id)}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={[picker.item, { borderBottomColor: c.border }, item.id === value && { backgroundColor: c.primaryLight }]}
+              onPress={() => { onSelect(item); onClose(); setSearch(""); }}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={[picker.itemName, { color: item.id === value ? c.primary : c.text, fontFamily: "Inter_500Medium" }]}>
+                  {item.name}
+                </Text>
+                {item.nik && (
+                  <Text style={[picker.itemSub, { color: c.textMuted, fontFamily: "Inter_400Regular" }]}>{item.nik}</Text>
+                )}
+              </View>
+              {item.id === value && <Feather name="check" size={18} color={c.primary} />}
+            </TouchableOpacity>
+          )}
+          ListEmptyComponent={
+            <Text style={[picker.emptyText, { color: c.textMuted, fontFamily: "Inter_400Regular" }]}>
+              Tidak ada data ditemukan
+            </Text>
+          }
+        />
+      </View>
+    </Modal>
+  );
+}
+
+function QuestionCard({ q, answer, onChange, masterData }: {
   q: Question;
-  answer?: { answerYesNo?: boolean; answerText?: string };
-  onChange: (qId: number, ans: { answerYesNo?: boolean; answerText?: string }) => void;
+  answer?: AnswerValue;
+  onChange: (qId: number, ans: AnswerValue) => void;
+  masterData: { users: MasterItem[]; groups: MasterItem[]; actions: MasterItem[] };
 }) {
   const c = Colors.light;
+  const [pickerVisible, setPickerVisible] = useState(false);
+
+  const isMasterType = q.answerType === "master_user" || q.answerType === "master_group" || q.answerType === "master_action";
+
+  const getMasterItems = (): MasterItem[] => {
+    if (q.answerType === "master_user") return masterData.users;
+    if (q.answerType === "master_group") return masterData.groups;
+    if (q.answerType === "master_action") return masterData.actions;
+    return [];
+  };
+
+  const getMasterLabel = (): string => {
+    if (q.answerType === "master_user") return "Pilih User";
+    if (q.answerType === "master_group") return "Pilih Grup";
+    if (q.answerType === "master_action") return "Pilih Tindakan";
+    return "Pilih";
+  };
+
+  const getMasterIcon = (): string => {
+    if (q.answerType === "master_user") return "user";
+    if (q.answerType === "master_group") return "users";
+    if (q.answerType === "master_action") return "zap";
+    return "list";
+  };
+
   return (
     <View style={[styles.questionCard, { backgroundColor: c.card }]}>
       <View style={styles.questionHeader}>
@@ -121,7 +221,7 @@ function QuestionCard({ q, answer, onChange }: {
             </Text>
           </TouchableOpacity>
         </View>
-      ) : (
+      ) : q.answerType === "text" ? (
         <TextInput
           style={[styles.textAnswer, { borderColor: c.border, backgroundColor: c.backgroundSecondary, color: c.text, fontFamily: "Inter_400Regular" }]}
           value={answer?.answerText ?? ""}
@@ -131,7 +231,38 @@ function QuestionCard({ q, answer, onChange }: {
           multiline
           numberOfLines={3}
         />
-      )}
+      ) : isMasterType ? (
+        <>
+          <TouchableOpacity
+            style={[
+              styles.masterPickerBtn,
+              { borderColor: answer?.answerRefId ? c.primary : c.border, backgroundColor: answer?.answerRefId ? c.primaryLight : c.backgroundSecondary },
+            ]}
+            onPress={() => setPickerVisible(true)}
+          >
+            <Feather name={getMasterIcon() as "user" | "users" | "zap" | "list"} size={16} color={answer?.answerRefId ? c.primary : c.textMuted} />
+            <Text style={[
+              styles.masterPickerText,
+              { color: answer?.answerText ? (answer.answerRefId ? c.primary : c.text) : c.textMuted, fontFamily: "Inter_500Medium" },
+            ]}>
+              {answer?.answerText ?? getMasterLabel()}
+            </Text>
+            <Feather name="chevron-down" size={16} color={answer?.answerRefId ? c.primary : c.textMuted} />
+          </TouchableOpacity>
+          <MasterPicker
+            items={getMasterItems()}
+            value={answer?.answerRefId}
+            onSelect={(item) => {
+              Haptics.selectionAsync();
+              onChange(q.id, { answerRefId: item.id, answerText: item.name });
+            }}
+            placeholder={getMasterLabel()}
+            visible={pickerVisible}
+            onClose={() => setPickerVisible(false)}
+            searchLabel={getMasterLabel()}
+          />
+        </>
+      ) : null}
     </View>
   );
 }
@@ -160,7 +291,30 @@ export default function InspectionScreen() {
     enabled: !!schedule?.templateId,
   });
 
-  const handleAnswer = (qId: number, ans: { answerYesNo?: boolean; answerText?: string }) => {
+  const { data: users = [] } = useQuery<MasterItem[]>({
+    queryKey: ["master-users"],
+    queryFn: () => get("/users").then((list: Array<{ id: number; name: string; nik: string }>) =>
+      list.map(u => ({ id: u.id, name: u.name, nik: u.nik }))
+    ),
+  });
+
+  const { data: groups = [] } = useQuery<MasterItem[]>({
+    queryKey: ["master-groups"],
+    queryFn: () => get("/groups").then((list: Array<{ id: number; name: string }>) =>
+      list.map(g => ({ id: g.id, name: g.name }))
+    ),
+  });
+
+  const { data: actions = [] } = useQuery<MasterItem[]>({
+    queryKey: ["master-actions"],
+    queryFn: () => get("/actions").then((list: Array<{ id: number; name: string }>) =>
+      list.map(a => ({ id: a.id, name: a.name }))
+    ),
+  });
+
+  const masterData = { users, groups, actions };
+
+  const handleAnswer = (qId: number, ans: AnswerValue) => {
     setAnswers(prev => ({ ...prev, [qId]: ans }));
   };
 
@@ -170,6 +324,10 @@ export default function InspectionScreen() {
     const unanswered = mandatory.filter(q => {
       const ans = answers[q.id];
       if (q.answerType === "yes_no") return ans?.answerYesNo === undefined;
+      if (q.answerType === "text") return !ans?.answerText?.trim();
+      if (q.answerType === "master_user" || q.answerType === "master_group" || q.answerType === "master_action") {
+        return ans?.answerRefId === undefined;
+      }
       return !ans?.answerText?.trim();
     });
     if (unanswered.length > 0) {
@@ -188,6 +346,7 @@ export default function InspectionScreen() {
           questionId: q.id,
           answerYesNo: answers[q.id]?.answerYesNo,
           answerText: answers[q.id]?.answerText,
+          answerRefId: answers[q.id]?.answerRefId,
         })),
       };
       await post("/inspections", payload);
@@ -220,7 +379,13 @@ export default function InspectionScreen() {
     );
   }
 
-  const answeredCount = template?.questions.filter(q => answers[q.id] !== undefined).length ?? 0;
+  const answeredCount = template?.questions.filter(q => {
+    const ans = answers[q.id];
+    if (!ans) return false;
+    if (q.answerType === "yes_no") return ans.answerYesNo !== undefined;
+    if (q.answerType === "text") return !!ans.answerText?.trim();
+    return ans.answerRefId !== undefined;
+  }).length ?? 0;
   const totalCount = template?.questions.length ?? 0;
 
   return (
@@ -270,6 +435,7 @@ export default function InspectionScreen() {
             q={q}
             answer={answers[q.id]}
             onChange={handleAnswer}
+            masterData={masterData}
           />
         ))}
       </ScrollView>
@@ -295,6 +461,28 @@ export default function InspectionScreen() {
     </View>
   );
 }
+
+const picker = StyleSheet.create({
+  container: { flex: 1 },
+  header: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 16, paddingVertical: 16, borderBottomWidth: 1,
+  },
+  title: { fontSize: 17 },
+  closeBtn: { padding: 4 },
+  searchRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1,
+  },
+  searchInput: { flex: 1, fontSize: 15, height: 36 },
+  item: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  itemName: { fontSize: 15 },
+  itemSub: { fontSize: 12, marginTop: 2 },
+  emptyText: { textAlign: "center", padding: 24, fontSize: 14 },
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -339,6 +527,11 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderRadius: 10, padding: 12, fontSize: 14,
     minHeight: 80, textAlignVertical: "top",
   },
+  masterPickerBtn: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    borderWidth: 1.5, borderRadius: 10, padding: 12, minHeight: 48,
+  },
+  masterPickerText: { flex: 1, fontSize: 14 },
   footer: {
     padding: 16, paddingHorizontal: 20, borderTopWidth: 1,
   },

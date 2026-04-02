@@ -95,11 +95,12 @@ router.post("/", async (req, res) => {
 
   if (answers?.length) {
     await db.insert(inspectionAnswersTable).values(
-      answers.map((a: { questionId: number; answerYesNo?: boolean; answerText?: string; photoUrl?: string }) => ({
+      answers.map((a: { questionId: number; answerYesNo?: boolean; answerText?: string; answerRefId?: number; photoUrl?: string }) => ({
         inspectionId: inspection.id,
         questionId: a.questionId,
         answerYesNo: a.answerYesNo,
         answerText: a.answerText,
+        answerRefId: a.answerRefId ?? null,
         photoUrl: a.photoUrl,
       }))
     );

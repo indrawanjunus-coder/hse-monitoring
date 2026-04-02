@@ -85,7 +85,7 @@ router.get("/:id", async (req, res) => {
 
 router.post("/", async (req, res) => {
   const user = (req as typeof req & { user: { id: number } }).user;
-  const { plantId, categoryId, incidentDate, reportedDate, detail, actionId, preventiveActionId, targetDate, rootCause, needsFurtherAction, incidentType } = req.body;
+  const { plantId, categoryId, incidentDate, reportedDate, detail, actionId, preventiveActionId, targetDate, rootCause, needsFurtherAction, incidentType, extraUserIds, extraGroupIds } = req.body;
   const reporterId = req.body.reporterId ?? user.id;
 
   const [cat] = await db.select().from(categoriesTable).where(eq(categoriesTable.id, categoryId));
@@ -123,15 +123,29 @@ router.post("/", async (req, res) => {
       .where(eq(categoryUsersTable.categoryId, categoryId));
 
     const groupEmailSets: string[] = [];
-    for (const cg of catGroups) {
+    const allGroupIds = [
+      ...catGroups.map(cg => cg.groupId),
+      ...(Array.isArray(extraGroupIds) ? extraGroupIds.map((id: number) => Number(id)) : []),
+    ];
+    for (const gid of [...new Set(allGroupIds)]) {
       const members = await db.select({ email: usersTable.email })
         .from(groupMembersTable)
         .innerJoin(usersTable, eq(groupMembersTable.userId, usersTable.id))
-        .where(eq(groupMembersTable.groupId, cg.groupId));
+        .where(eq(groupMembersTable.groupId, gid));
       groupEmailSets.push(...members.map(m => m.email).filter(Boolean) as string[]);
     }
     const directEmails = catUsers.map(u => u.email).filter(Boolean) as string[];
-    const emails = [...new Set([...groupEmailSets, ...directEmails])];
+
+    const extraUserEmails: string[] = [];
+    if (Array.isArray(extraUserIds) && extraUserIds.length > 0) {
+      const { inArray } = await import("drizzle-orm");
+      const extras = await db.select({ email: usersTable.email })
+        .from(usersTable)
+        .where(inArray(usersTable.id, extraUserIds.map((id: number) => Number(id))));
+      extraUserEmails.push(...extras.map(u => u.email).filter(Boolean) as string[]);
+    }
+
+    const emails = [...new Set([...groupEmailSets, ...directEmails, ...extraUserEmails])];
     if (emails.length) {
       sendEmail(
         emails,

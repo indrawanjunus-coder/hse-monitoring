@@ -13,20 +13,34 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus, Edit, Trash2, LayoutTemplate, HelpCircle, ChevronUp, ChevronDown,
-  Camera, Star, CheckSquare, AlignLeft, Lock, Search,
+  Camera, Star, CheckSquare, AlignLeft, Lock, Search, Users, User, Zap,
 } from "lucide-react";
 import { Pagination } from "@/components/pagination";
 import { useToast } from "@/hooks/use-toast";
 
+type AnswerType = "yes_no" | "text" | "master_user" | "master_group" | "master_action";
+
 interface Question {
   id: number; templateId: number; text: string;
-  answerType: "yes_no" | "text"; isMandatory: boolean; requiresPhoto: boolean;
+  answerType: AnswerType; isMandatory: boolean; requiresPhoto: boolean;
   categoryId?: number; categoryName?: string; orderIndex: number;
   expectedAnswer?: string | null;
   questionType?: string | null;
 }
 interface Template { id: number; name: string; description?: string; questionCount?: number }
 interface Category { id: number; name: string }
+
+const ANSWER_TYPE_OPTIONS: { value: AnswerType; label: string; icon: React.ReactNode; hint: string }[] = [
+  { value: "yes_no", label: "Ya / Tidak", icon: <CheckSquare className="w-3.5 h-3.5" />, hint: "Jawaban berupa Ya atau Tidak. Bisa otomatis trigger hazard jika jawaban tidak sesuai." },
+  { value: "text", label: "Teks Bebas", icon: <AlignLeft className="w-3.5 h-3.5" />, hint: "Responden mengisi teks bebas sebagai jawaban." },
+  { value: "master_user", label: "Pilih User", icon: <User className="w-3.5 h-3.5" />, hint: "Responden memilih salah satu user dari daftar user yang terdaftar di sistem." },
+  { value: "master_group", label: "Pilih Grup", icon: <Users className="w-3.5 h-3.5" />, hint: "Responden memilih salah satu grup dari daftar grup yang ada." },
+  { value: "master_action", label: "Pilih Tindakan", icon: <Zap className="w-3.5 h-3.5" />, hint: "Responden memilih tindakan penanganan dari daftar tindakan yang terdaftar." },
+];
+
+function getAnswerTypeMeta(type: AnswerType) {
+  return ANSWER_TYPE_OPTIONS.find(o => o.value === type) ?? ANSWER_TYPE_OPTIONS[0]!;
+}
 
 function QuestionRow({ q, categories, onUpdate, onDelete, onMoveUp, onMoveDown, canEdit }: {
   q: Question; categories: Category[];
@@ -38,7 +52,7 @@ function QuestionRow({ q, categories, onUpdate, onDelete, onMoveUp, onMoveDown, 
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(q.text);
-  const [answerType, setAnswerType] = useState(q.answerType);
+  const [answerType, setAnswerType] = useState<AnswerType>(q.answerType);
   const [isMandatory, setIsMandatory] = useState(q.isMandatory);
   const [requiresPhoto, setRequiresPhoto] = useState(q.requiresPhoto);
   const [categoryId, setCategoryId] = useState(q.categoryId ? String(q.categoryId) : "none");
@@ -52,6 +66,8 @@ function QuestionRow({ q, categories, onUpdate, onDelete, onMoveUp, onMoveDown, 
     setEditing(false);
   };
 
+  const meta = getAnswerTypeMeta(answerType);
+
   if (editing) {
     return (
       <div className="border rounded-lg p-4 bg-blue-50 border-blue-200 space-y-3">
@@ -62,13 +78,17 @@ function QuestionRow({ q, categories, onUpdate, onDelete, onMoveUp, onMoveDown, 
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <Label className="text-xs">Tipe Jawaban</Label>
-            <Select value={answerType} onValueChange={(v: "yes_no" | "text") => setAnswerType(v)}>
+            <Select value={answerType} onValueChange={(v) => setAnswerType(v as AnswerType)}>
               <SelectTrigger className="h-8 bg-white"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="yes_no">Ya / Tidak</SelectItem>
-                <SelectItem value="text">Teks Bebas</SelectItem>
+                {ANSWER_TYPE_OPTIONS.map(o => (
+                  <SelectItem key={o.value} value={o.value}>
+                    <span className="flex items-center gap-1.5">{o.icon}{o.label}</span>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
+            {meta.hint && <p className="text-xs text-gray-400 leading-relaxed">{meta.hint}</p>}
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Kategori</Label>
@@ -113,6 +133,15 @@ function QuestionRow({ q, categories, onUpdate, onDelete, onMoveUp, onMoveDown, 
     );
   }
 
+  const typeMeta = getAnswerTypeMeta(q.answerType);
+  const typeColorMap: Record<AnswerType, string> = {
+    yes_no: "bg-purple-50 text-purple-700",
+    text: "bg-orange-50 text-orange-700",
+    master_user: "bg-cyan-50 text-cyan-700",
+    master_group: "bg-indigo-50 text-indigo-700",
+    master_action: "bg-amber-50 text-amber-700",
+  };
+
   return (
     <div className="border rounded-lg p-3 flex items-start gap-3 hover:bg-gray-50 group">
       {canEdit && (
@@ -128,10 +157,8 @@ function QuestionRow({ q, categories, onUpdate, onDelete, onMoveUp, onMoveDown, 
       <div className="flex-1 min-w-0">
         <p className="text-sm text-gray-900 leading-relaxed">{q.text}</p>
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-          <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium ${
-            q.answerType === "yes_no" ? "bg-purple-50 text-purple-700" : "bg-orange-50 text-orange-700"
-          }`}>
-            {q.answerType === "yes_no" ? <><CheckSquare className="w-3 h-3" />Ya/Tidak</> : <><AlignLeft className="w-3 h-3" />Teks</>}
+          <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium ${typeColorMap[q.answerType]}`}>
+            {typeMeta.icon}{typeMeta.label}
           </span>
           {q.answerType === "yes_no" && q.expectedAnswer && (
             <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded font-medium bg-green-50 text-green-700 border border-green-200">
@@ -173,12 +200,14 @@ function AddQuestionForm({ templateId, categories, onAdded, onCancel }: {
   onAdded: (q: Question) => void; onCancel: () => void;
 }) {
   const [text, setText] = useState("");
-  const [answerType, setAnswerType] = useState<"yes_no" | "text">("yes_no");
+  const [answerType, setAnswerType] = useState<AnswerType>("yes_no");
   const [isMandatory, setIsMandatory] = useState(true);
   const [requiresPhoto, setRequiresPhoto] = useState(false);
   const [categoryId, setCategoryId] = useState("none");
   const [expectedAnswer, setExpectedAnswer] = useState("none");
   const [saving, setSaving] = useState(false);
+
+  const meta = getAnswerTypeMeta(answerType);
 
   const handleAdd = async () => {
     if (!text.trim()) return;
@@ -203,13 +232,17 @@ function AddQuestionForm({ templateId, categories, onAdded, onCancel }: {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label className="text-xs">Tipe Jawaban</Label>
-          <Select value={answerType} onValueChange={(v: "yes_no" | "text") => setAnswerType(v)}>
+          <Select value={answerType} onValueChange={(v) => setAnswerType(v as AnswerType)}>
             <SelectTrigger className="h-8 bg-white"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="yes_no">Ya / Tidak</SelectItem>
-              <SelectItem value="text">Teks Bebas</SelectItem>
+              {ANSWER_TYPE_OPTIONS.map(o => (
+                <SelectItem key={o.value} value={o.value}>
+                  <span className="flex items-center gap-1.5">{o.icon}{o.label}</span>
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
+          {meta.hint && <p className="text-xs text-gray-400 leading-relaxed">{meta.hint}</p>}
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Kategori</Label>
@@ -262,12 +295,11 @@ function TemplateBuilder({ template, categories, canEdit, onClose }: {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // FIX: use data from useQuery directly (not local state) to avoid cache-vs-state mismatch
   const { data: questions = [], isLoading } = useQuery<Question[]>({
     queryKey: ["questions", template.id],
     queryFn: () => api.get<Question[]>(`/questions?templateId=${template.id}`)
       .then(qs => [...qs].sort((a, b) => a.orderIndex - b.orderIndex)),
-    staleTime: 0, // always re-fetch when dialog opens
+    staleTime: 0,
   });
 
   const setCache = (updater: (prev: Question[]) => Question[]) => {
@@ -439,6 +471,8 @@ export default function TemplatesPage() {
     setBuilderDialog(true);
   };
 
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
+
   return (
     <div className="p-6">
       <PageHeader
@@ -470,90 +504,85 @@ export default function TemplatesPage() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-12">
           <LayoutTemplate className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">{search ? `Tidak ada template cocok dengan "${search}"` : "Belum ada template"}</p>
-          {!search && canManage && (
-            <Button className="mt-4" onClick={() => { setEditTemplate(undefined); setFormDialog(true); }}>
-              <Plus className="w-4 h-4 mr-2" />Tambah Template
-            </Button>
-          )}
+          <p className="text-gray-500">{search ? "Tidak ada template yang cocok" : "Belum ada template"}</p>
         </div>
       ) : (
         <>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.slice((page - 1) * pageSize, page * pageSize).map(t => (
-            <Card key={t.id} className="hover:shadow-md transition-shadow">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <LayoutTemplate className="w-4 h-4 text-amber-600" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900 text-sm">{t.name}</p>
-                      <div className="flex items-center gap-1 mt-0.5">
-                        <HelpCircle className="w-3 h-3 text-gray-400" />
-                        <span className="text-xs text-gray-500">{t.questionCount ?? 0} pertanyaan</span>
+          <div className="space-y-3">
+            {paginated.map(t => (
+              <Card key={t.id}>
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <LayoutTemplate className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                        <p className="font-semibold text-gray-900">{t.name}</p>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
+                          {t.questionCount ?? 0} pertanyaan
+                        </span>
                       </div>
+                      {t.description && <p className="text-sm text-gray-500 ml-6">{t.description}</p>}
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <Button variant="outline" size="sm" onClick={() => openBuilder(t)}>
+                        <HelpCircle className="w-3.5 h-3.5 mr-1" />
+                        {canManage ? "Edit Pertanyaan" : "Lihat Pertanyaan"}
+                      </Button>
+                      {canManage && (
+                        <>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
+                            onClick={() => { setEditTemplate(t); setFormDialog(true); }}>
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                            onClick={() => { if (confirm("Hapus template ini?")) deleteMutation.mutate(t.id); }}>
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
-                  {canManage && (
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0"
-                        onClick={() => { setEditTemplate(t); setFormDialog(true); }}>
-                        <Edit className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                        onClick={() => { if (confirm(`Hapus template "${t.name}"?`)) deleteMutation.mutate(t.id); }}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                {t.description && (
-                  <p className="text-xs text-gray-500 mb-3 line-clamp-2">{t.description}</p>
-                )}
-                <Button variant="outline" size="sm" className="w-full text-xs" onClick={() => openBuilder(t)}>
-                  <HelpCircle className="w-3.5 h-3.5 mr-1.5" />
-                  {canManage ? "Kelola Pertanyaan" : "Lihat Pertanyaan"}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <Pagination page={page} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <Pagination page={page} total={filtered.length} pageSize={pageSize} onPage={setPage} onPageSize={setPageSize} />
         </>
       )}
 
       <Dialog open={formDialog} onOpenChange={setFormDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editTemplate ? "Edit Template" : "Tambah Template"}</DialogTitle>
+            <DialogTitle>{editTemplate ? "Edit Template" : "Tambah Template Baru"}</DialogTitle>
           </DialogHeader>
           <TemplateForm
             template={editTemplate}
-            onSave={(data) => saveMutation.mutateAsync(data)}
+            onSave={data => saveMutation.mutateAsync(data)}
             onCancel={() => setFormDialog(false)}
           />
         </DialogContent>
       </Dialog>
 
-      <Dialog open={builderDialog} onOpenChange={setBuilderDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {canManage ? "Kelola Pertanyaan" : "Pertanyaan"}: {builderTemplate?.name}
-            </DialogTitle>
-          </DialogHeader>
-          {builderTemplate && (
+      {builderTemplate && (
+        <Dialog open={builderDialog} onOpenChange={setBuilderDialog}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>
+                <span className="flex items-center gap-2">
+                  <LayoutTemplate className="w-5 h-5 text-blue-500" />
+                  {builderTemplate.name}
+                </span>
+              </DialogTitle>
+            </DialogHeader>
             <TemplateBuilder
               template={builderTemplate}
               categories={categories}
               canEdit={canManage}
               onClose={() => setBuilderDialog(false)}
             />
-          )}
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
