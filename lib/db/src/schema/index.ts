@@ -18,3 +18,4 @@ export * from "./incident-types";
 export * from "./system-logs";
 export * from "./gdrive-settings";
 export * from "./incident-attachments";
+export * from "./incident-comments";

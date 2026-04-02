@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RiskBadge, StatusBadge, IncidentTypeBadge } from "@/components/badges";
 import {
   Plus, AlertTriangle, MapPin, User, Calendar, ChevronDown, Users,
-  ArrowUpDown, ShieldAlert, Mail, Ticket, X, Search, Paperclip, FileImage, FileText, Trash2, ExternalLink, Upload, Cloud, Eye,
+  ArrowUpDown, ShieldAlert, Mail, Ticket, X, Search, Paperclip, FileImage, FileText, Trash2, ExternalLink, Upload, Cloud, Eye, Send, MessageSquare,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -552,8 +552,42 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
   const [addUploadErrors, setAddUploadErrors] = useState<string[]>([]);
   const [addUploading, setAddUploading] = useState(false);
   const addFileRef = useRef<HTMLInputElement>(null);
+  const [commentText, setCommentText] = useState("");
+  const [sendingComment, setSendingComment] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  const { data: comments = [], refetch: refetchComments } = useQuery<{
+    id: number; incidentId: number; userId: number | null; userName: string | null; content: string; createdAt: string;
+  }[]>({
+    queryKey: ["incident-comments", incident.id],
+    queryFn: () => api.get(`/incidents/${incident.id}/comments`),
+  });
+
+  const handleSendComment = async () => {
+    if (!commentText.trim()) return;
+    setSendingComment(true);
+    try {
+      await api.post(`/incidents/${incident.id}/comments`, { content: commentText.trim() });
+      setCommentText("");
+      refetchComments();
+    } catch (e: any) {
+      toast({ title: "Gagal kirim komentar", description: e.message, variant: "destructive" });
+    } finally {
+      setSendingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId: number) => {
+    try {
+      await api.del(`/incidents/${incident.id}/comments/${commentId}`);
+      refetchComments();
+    } catch (e: any) {
+      toast({ title: "Gagal hapus komentar", description: e.message, variant: "destructive" });
+    }
+  };
 
   const handleAddFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -778,12 +812,50 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
           ⚠️ Perlu tindak lanjut{incident.assignedGroupName ? ` · PIC: ${incident.assignedGroupName}` : ""}
         </div>
       )}
-      {incident.followupNote && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
-          <p className="font-medium text-blue-800 mb-1">Catatan Followup</p>
-          <p className="text-blue-700">{incident.followupNote}</p>
+      {/* Comment Thread — Catatan Tindak Lanjut */}
+      <div className="border-t pt-3 space-y-2">
+        <p className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+          <MessageSquare className="w-4 h-4 text-blue-500" />
+          Catatan Tindak Lanjut {comments.length > 0 && <span className="text-xs font-normal text-gray-500">({comments.length} komentar)</span>}
+        </p>
+        {comments.length === 0 && (
+          <p className="text-xs text-gray-400 italic py-1">Belum ada catatan. Tambahkan update perkembangan di bawah.</p>
+        )}
+        <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+          {comments.map(c => (
+            <div key={c.id} className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm relative group">
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="font-medium text-gray-800">{c.userName ?? "—"}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400">{new Date(c.createdAt).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                  {(c.userId === user?.id || user?.role === "admin") && (
+                    <button onClick={() => handleDeleteComment(c.id)}
+                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="text-gray-700 whitespace-pre-wrap">{c.content}</p>
+            </div>
+          ))}
         </div>
-      )}
+        <div className="flex gap-2 pt-1">
+          <Textarea
+            value={commentText}
+            onChange={e => setCommentText(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
+            placeholder="Tulis update perkembangan... (Enter untuk kirim, Shift+Enter baris baru)"
+            rows={2}
+            className="flex-1 text-sm resize-none"
+            disabled={sendingComment}
+          />
+          <Button size="sm" onClick={handleSendComment} disabled={sendingComment || !commentText.trim()} className="self-end">
+            <Send className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
       {canUpdate && incident.status !== "closed" && (
         <div className="space-y-3 border-t pt-3">
           <p className="text-sm font-medium text-gray-700">Resolusi Incident</p>
@@ -823,24 +895,45 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
             <Label>Target Tanggal Penyelesaian</Label>
             <Input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} />
           </div>
-          <div className="space-y-2">
-            <Label>Catatan Tindak Lanjut</Label>
-            <Textarea value={followupNote} onChange={e => setFollowupNote(e.target.value)}
-              placeholder="Deskripsikan tindakan yang sudah/akan dilakukan..." rows={3} />
-          </div>
           <DialogFooter className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>Tutup</Button>
+            <Button variant="outline" onClick={onClose}>Batal</Button>
             {incident.status === "open" && (
               <Button variant="outline" className="text-amber-600 border-amber-300"
                 disabled={saving} onClick={() => handleResolve("in_progress")}>Tandai Proses</Button>
             )}
             <Button className="bg-green-600 hover:bg-green-700"
-              disabled={saving} onClick={() => handleResolve("closed")}>Tutup Incident</Button>
+              disabled={saving} onClick={() => setShowCloseConfirm(true)}>Tutup Incident</Button>
           </DialogFooter>
         </div>
       )}
       {(!canUpdate || incident.status === "closed") && (
         <DialogFooter><Button variant="outline" onClick={onClose}>Tutup</Button></DialogFooter>
+      )}
+
+      {/* Konfirmasi tutup incident */}
+      {showCloseConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                <ShieldAlert className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Tutup Incident?</p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Pastikan semua pekerjaan dan tindakan perbaikan sudah benar-benar selesai dilaksanakan sebelum menutup incident ini.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setShowCloseConfirm(false)} disabled={saving}>Batal</Button>
+              <Button className="bg-green-600 hover:bg-green-700" disabled={saving}
+                onClick={() => { setShowCloseConfirm(false); handleResolve("closed"); }}>
+                Ya, Tutup Incident
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
