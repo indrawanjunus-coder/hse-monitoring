@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearch } from "wouter";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
@@ -12,7 +12,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RiskBadge, StatusBadge, IncidentTypeBadge } from "@/components/badges";
-import { Plus, AlertTriangle, MapPin, User, Calendar, ChevronDown, Users, ChevronLeft, ChevronRight, ArrowUpDown, ShieldAlert, Mail, Ticket, ChevronUp } from "lucide-react";
+import {
+  Plus, AlertTriangle, MapPin, User, Calendar, ChevronDown, Users,
+  ArrowUpDown, ShieldAlert, Mail, Ticket, X, Search,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { Pagination } from "@/components/pagination";
@@ -56,92 +59,115 @@ interface UserItem { id: number; name: string; nik: string; email?: string }
 interface GroupItem { id: number; name: string }
 
 type SortMode = "reportedDate" | "aging";
+interface ApiIncidentType { id: number; code: string; label: string; isActive: boolean; categoryId?: number | null; }
 
 function agingDays(reportedDate: string): number {
   return Math.floor((Date.now() - new Date(reportedDate).getTime()) / (1000 * 60 * 60 * 24));
 }
-
 function twoMonthsAgo(): string {
   const d = new Date();
   d.setMonth(d.getMonth() - 2);
   return d.toISOString().slice(0, 10);
 }
 
-interface ApiIncidentType { id: number; code: string; label: string; isActive: boolean; categoryId?: number | null; }
+function RecipientChip({ label, type, onRemove }: { label: string; type: "group" | "user"; onRemove: () => void }) {
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium border
+      ${type === "group" ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}>
+      {type === "group" ? <Users className="w-3 h-3 flex-shrink-0" /> : <User className="w-3 h-3 flex-shrink-0" />}
+      <span>{label}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className={`ml-0.5 rounded-full p-0.5 hover:bg-opacity-20 transition-colors
+          ${type === "group" ? "hover:bg-indigo-700 text-indigo-500 hover:text-indigo-800" : "hover:bg-blue-700 text-blue-500 hover:text-blue-800"}`}
+      >
+        <X className="w-2.5 h-2.5" />
+      </button>
+    </span>
+  );
+}
 
-function MultiRecipientPicker({
-  label, users, groups, selectedUserIds, selectedGroupIds,
-  onUserChange, onGroupChange,
-}: {
-  label: string;
-  users: UserItem[]; groups: GroupItem[];
-  selectedUserIds: number[]; selectedGroupIds: number[];
-  onUserChange: (ids: number[]) => void;
-  onGroupChange: (ids: number[]) => void;
+function RecipientPicker({ allUsers, allGroups, recipientUserIds, recipientGroupIds, onAddUser, onAddGroup }: {
+  allUsers: UserItem[];
+  allGroups: GroupItem[];
+  recipientUserIds: number[];
+  recipientGroupIds: number[];
+  onAddUser: (u: UserItem) => void;
+  onAddGroup: (g: GroupItem) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const totalSelected = selectedUserIds.length + selectedGroupIds.length;
+  const ref = useRef<HTMLDivElement>(null);
 
-  const filteredUsers = users.filter(u =>
-    u.name.toLowerCase().includes(search.toLowerCase()) || u.nik.toLowerCase().includes(search.toLowerCase())
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const filteredGroups = allGroups.filter(g =>
+    !recipientGroupIds.includes(g.id) && g.name.toLowerCase().includes(search.toLowerCase())
   );
-  const filteredGroups = groups.filter(g => g.name.toLowerCase().includes(search.toLowerCase()));
-
-  const toggleUser = (id: number) => {
-    onUserChange(selectedUserIds.includes(id) ? selectedUserIds.filter(x => x !== id) : [...selectedUserIds, id]);
-  };
-  const toggleGroup = (id: number) => {
-    onGroupChange(selectedGroupIds.includes(id) ? selectedGroupIds.filter(x => x !== id) : [...selectedGroupIds, id]);
-  };
+  const filteredUsers = allUsers.filter(u =>
+    !recipientUserIds.includes(u.id) &&
+    (u.name.toLowerCase().includes(search.toLowerCase()) || u.nik.toLowerCase().includes(search.toLowerCase()))
+  );
+  const hasResults = filteredGroups.length > 0 || filteredUsers.length > 0;
 
   return (
-    <div className="space-y-1">
-      <Label className="text-sm">{label}</Label>
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2 border rounded-md text-sm bg-white hover:bg-gray-50 text-left"
-      >
-        <span className={totalSelected === 0 ? "text-gray-400" : "text-gray-900"}>
-          {totalSelected === 0 ? "Tidak ada tambahan" : `${totalSelected} dipilih`}
-        </span>
-        {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
-      </button>
+    <div className="relative" ref={ref}>
+      <Button type="button" variant="outline" size="sm" className="h-7 text-xs gap-1 border-dashed"
+        onClick={() => { setOpen(!open); setSearch(""); }}>
+        <Plus className="w-3 h-3" />Tambah Penerima
+      </Button>
       {open && (
-        <div className="border rounded-md bg-white shadow-sm">
-          <div className="p-2 border-b">
-            <Input
-              value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Cari user atau grup..." className="h-7 text-xs"
+        <div className="absolute left-0 top-8 z-50 w-72 border rounded-lg bg-white shadow-lg">
+          <div className="p-2 border-b flex items-center gap-2">
+            <Search className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Cari user atau grup..."
+              className="text-sm flex-1 outline-none"
             />
           </div>
-          <div className="max-h-52 overflow-y-auto">
+          <div className="max-h-56 overflow-y-auto">
             {filteredGroups.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 px-3 py-1.5 bg-gray-50 border-b">Grup</p>
+                <p className="text-xs font-semibold text-gray-500 px-3 py-1.5 bg-gray-50 sticky top-0">Grup</p>
                 {filteredGroups.map(g => (
-                  <label key={`g-${g.id}`} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
-                    <Checkbox checked={selectedGroupIds.includes(g.id)} onCheckedChange={() => toggleGroup(g.id)} />
-                    <span className="text-sm text-gray-800">{g.name}</span>
-                  </label>
+                  <button key={g.id} type="button"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 transition-colors"
+                    onClick={() => { onAddGroup(g); if (filteredGroups.length + filteredUsers.length === 1) setOpen(false); }}>
+                    <Users className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                    <span className="text-gray-800">{g.name}</span>
+                  </button>
                 ))}
               </div>
             )}
             {filteredUsers.length > 0 && (
               <div>
-                <p className="text-xs font-semibold text-gray-500 px-3 py-1.5 bg-gray-50 border-b">Users</p>
+                <p className="text-xs font-semibold text-gray-500 px-3 py-1.5 bg-gray-50 sticky top-0">Users</p>
                 {filteredUsers.map(u => (
-                  <label key={`u-${u.id}`} className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer">
-                    <Checkbox checked={selectedUserIds.includes(u.id)} onCheckedChange={() => toggleUser(u.id)} />
-                    <span className="text-sm text-gray-800">{u.name}</span>
-                    <span className="text-xs text-gray-400">{u.nik}</span>
-                  </label>
+                  <button key={u.id} type="button"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 transition-colors"
+                    onClick={() => { onAddUser(u); if (filteredGroups.length + filteredUsers.length === 1) setOpen(false); }}>
+                    <User className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                    <span className="text-gray-800">{u.name}</span>
+                    <span className="text-xs text-gray-400 ml-auto">{u.nik}</span>
+                  </button>
                 ))}
               </div>
             )}
-            {filteredGroups.length === 0 && filteredUsers.length === 0 && (
-              <p className="text-xs text-gray-400 text-center py-4">Tidak ditemukan</p>
+            {!hasResults && (
+              <p className="text-xs text-gray-400 text-center py-4">
+                {search ? "Tidak ditemukan" : "Semua sudah ditambahkan"}
+              </p>
             )}
           </div>
         </div>
@@ -172,23 +198,37 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
   const [targetDate, setTargetDate] = useState("");
   const [needsFurtherAction, setNeedsFurtherAction] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [extraUserIds, setExtraUserIds] = useState<number[]>([]);
-  const [extraGroupIds, setExtraGroupIds] = useState<number[]>([]);
+
+  const [recipientGroupIds, setRecipientGroupIds] = useState<number[]>([]);
+  const [recipientUserIds, setRecipientUserIds] = useState<number[]>([]);
 
   const availableTypes = incidentTypes.filter(t => t.isActive && (categoryId ? t.categoryId === parseInt(categoryId) : !t.categoryId));
-
   const selectedCategory = categories.find(c => c.id === parseInt(categoryId));
 
   useEffect(() => {
     if (!availableTypes.find(t => t.code === incidentType)) {
       setIncidentType(availableTypes[0]?.code ?? "");
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId, incidentTypes]);
 
   useEffect(() => {
-    setExtraUserIds([]);
-    setExtraGroupIds([]);
+    if (selectedCategory) {
+      setRecipientGroupIds(selectedCategory.groupIds ?? []);
+      setRecipientUserIds(selectedCategory.userIds ?? []);
+    } else {
+      setRecipientGroupIds([]);
+      setRecipientUserIds([]);
+    }
   }, [categoryId]);
+
+  const recipientGroups = allGroups.filter(g => recipientGroupIds.includes(g.id));
+  const recipientUsers = allUsers.filter(u => recipientUserIds.includes(u.id));
+
+  const removeGroup = (id: number) => setRecipientGroupIds(prev => prev.filter(x => x !== id));
+  const removeUser = (id: number) => setRecipientUserIds(prev => prev.filter(x => x !== id));
+  const addGroup = (g: GroupItem) => setRecipientGroupIds(prev => prev.includes(g.id) ? prev : [...prev, g.id]);
+  const addUser = (u: UserItem) => setRecipientUserIds(prev => prev.includes(u.id) ? prev : [...prev, u.id]);
 
   const handleSave = async () => {
     if (!plantId || !categoryId || !detail.trim()) return;
@@ -206,18 +246,16 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
         preventiveActionId: preventiveActionId !== "none" ? parseInt(preventiveActionId) : undefined,
         targetDate: targetDate || undefined,
         needsFurtherAction,
-        extraUserIds: extraUserIds.length ? extraUserIds : undefined,
-        extraGroupIds: extraGroupIds.length ? extraGroupIds : undefined,
+        recipientUserIds,
+        recipientGroupIds,
       });
     } finally {
       setSaving(false);
     }
   };
 
-  const catGroups = selectedCategory?.groups ?? [];
-  const catUsers = selectedCategory?.users ?? [];
   const picGroupName = selectedCategory?.picGroupName;
-  const notifyCount = catGroups.length + catUsers.length;
+  const totalRecipients = recipientGroups.length + recipientUsers.length;
 
   return (
     <div className="space-y-4">
@@ -239,39 +277,51 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
       </div>
 
       {selectedCategory && (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2 text-sm">
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3 text-sm">
           <div className="flex items-start gap-2">
             <Ticket className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
             <div>
               <span className="font-semibold text-blue-800">Tiket Incident</span>
               {picGroupName ? (
-                <p className="text-blue-700">Akan ditangani oleh Group PIC: <span className="font-semibold">{picGroupName}</span></p>
+                <p className="text-blue-700 mt-0.5">Akan ditangani oleh Group PIC: <span className="font-semibold">{picGroupName}</span></p>
               ) : (
-                <p className="text-blue-600 italic">Belum ada Group PIC untuk kategori ini</p>
+                <p className="text-blue-600 italic mt-0.5">Belum ada Group PIC untuk kategori ini</p>
               )}
             </div>
           </div>
-          <div className="flex items-start gap-2 border-t border-blue-200 pt-2">
-            <Mail className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-            <div>
-              <span className="font-semibold text-blue-800">Notifikasi Email Otomatis</span>
-              {notifyCount === 0 ? (
-                <p className="text-blue-600 italic">Belum ada penerima notifikasi untuk kategori ini</p>
-              ) : (
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {catGroups.map(g => (
-                    <span key={`cg-${g.id}`} className="inline-flex items-center gap-1 text-xs bg-indigo-100 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-full font-medium">
-                      <Users className="w-3 h-3" />{g.name}
-                    </span>
-                  ))}
-                  {catUsers.map(u => (
-                    <span key={`cu-${u.id}`} className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium">
-                      <User className="w-3 h-3" />{u.name}
-                    </span>
-                  ))}
-                </div>
-              )}
+
+          <div className="border-t border-blue-200 pt-2.5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-blue-600" />
+                <span className="font-semibold text-blue-800 text-sm">Penerima Email Notifikasi</span>
+                {totalRecipients > 0 && (
+                  <span className="text-xs text-blue-500">({totalRecipients} penerima)</span>
+                )}
+              </div>
+              <RecipientPicker
+                allUsers={allUsers}
+                allGroups={allGroups}
+                recipientUserIds={recipientUserIds}
+                recipientGroupIds={recipientGroupIds}
+                onAddUser={addUser}
+                onAddGroup={addGroup}
+              />
             </div>
+            {totalRecipients === 0 ? (
+              <p className="text-xs text-blue-500 italic py-1">
+                Tidak ada penerima — email tidak akan dikirim. Klik "Tambah Penerima" untuk menambahkan.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {recipientGroups.map(g => (
+                  <RecipientChip key={`g-${g.id}`} label={g.name} type="group" onRemove={() => removeGroup(g.id)} />
+                ))}
+                {recipientUsers.map(u => (
+                  <RecipientChip key={`u-${u.id}`} label={u.name} type="user" onRemove={() => removeUser(u.id)} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -301,6 +351,7 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
           )}
         </div>
       </div>
+
       <div className="space-y-2">
         <Label>Detail Kejadian *</Label>
         <Textarea value={detail} onChange={e => setDetail(e.target.value)} placeholder="Deskripsikan kejadian secara detail..." rows={3} />
@@ -309,6 +360,7 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
         <Label>Root Cause / Akar Masalah</Label>
         <Textarea value={rootCause} onChange={e => setRootCause(e.target.value)} placeholder="Analisa penyebab utama kejadian..." rows={2} />
       </div>
+
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Tindakan yang Dilakukan</Label>
@@ -331,6 +383,7 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
           </Select>
         </div>
       </div>
+
       <div className="space-y-2">
         <Label>Target Tanggal Penyelesaian</Label>
         <Input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} />
@@ -338,23 +391,6 @@ function IncidentForm({ onSave, onCancel, plants, categories, actions, preventiv
       <div className="flex items-center gap-2">
         <Checkbox id="furtherAction" checked={needsFurtherAction} onCheckedChange={v => setNeedsFurtherAction(v === true)} />
         <Label htmlFor="furtherAction">Perlu tindak lanjut lebih lanjut</Label>
-      </div>
-
-      <div className="border rounded-lg p-3 bg-gray-50 space-y-3">
-        <div className="flex items-center gap-2">
-          <Mail className="w-4 h-4 text-gray-500" />
-          <p className="text-sm font-semibold text-gray-700">Tambah Penerima Email (opsional)</p>
-        </div>
-        <p className="text-xs text-gray-500">Di luar penerima otomatis dari kategori, Anda dapat menambahkan user atau grup tambahan yang akan menerima email notifikasi incident ini.</p>
-        <MultiRecipientPicker
-          label="Pilih User / Grup Tambahan"
-          users={allUsers}
-          groups={allGroups}
-          selectedUserIds={extraUserIds}
-          selectedGroupIds={extraGroupIds}
-          onUserChange={setExtraUserIds}
-          onGroupChange={setExtraGroupIds}
-        />
       </div>
 
       <DialogFooter>
@@ -580,7 +616,6 @@ export default function IncidentsPage() {
   };
   const resetPage = () => setPage(1);
   const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
-
   const typeMap: Record<string, string> = incidentTypesMaster.reduce((m, t) => ({ ...m, [t.code]: t.label }), { near_miss: "Near Miss", accident: "Accident", unsafe_act: "Unsafe Act", unsafe_condition: "Unsafe Condition" });
 
   return (
@@ -622,9 +657,7 @@ export default function IncidentsPage() {
             <SelectTrigger className="h-7 text-xs w-48"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Semua Tipe</SelectItem>
-              {incidentTypesMaster.map(t => (
-                <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>
-              ))}
+              {incidentTypesMaster.map(t => <SelectItem key={t.code} value={t.code}>{t.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
