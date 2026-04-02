@@ -745,7 +745,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
               <div className="flex items-center gap-2 shrink-0">
                 <a href={previewAttachment.viewUrl} target="_blank" rel="noopener noreferrer"
                   className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
-                  <ExternalLink className="w-3 h-3" /> Unduh / Buka
+                  <ExternalLink className="w-3 h-3" /> Buka di Drive
                 </a>
                 <button onClick={() => setPreviewAttachment(null)} className="text-gray-400 hover:text-gray-700 ml-2">
                   <X className="w-4 h-4" />
@@ -754,9 +754,19 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
             </div>
             <div className="bg-black flex items-center justify-center" style={{ minHeight: 400 }}>
               <img
-                src={previewAttachment.viewUrl}
+                src={(() => {
+                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
+                  return fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : previewAttachment.viewUrl;
+                })()}
                 alt={previewAttachment.fileName}
                 className="max-h-[70vh] max-w-full object-contain"
+                onError={(e) => {
+                  const img = e.currentTarget as HTMLImageElement;
+                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
+                  if (fileId && !img.src.includes("drive.google.com")) {
+                    img.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                  }
+                }}
               />
             </div>
           </DialogContent>

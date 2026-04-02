@@ -1,5 +1,5 @@
 import { google } from "googleapis";
-import { createPrivateKey, sign as cryptoSign } from "node:crypto";
+import { webcrypto } from "node:crypto";
 import { db, gdriveSettingsTable, incidentAttachmentsTable } from "@workspace/db";
 import { and, eq, gte, lt, count } from "drizzle-orm";
 import { logger } from "./logger";
@@ -30,33 +30,57 @@ function normalizePrivateKey(raw: string): string {
 }
 
 /**
- * Create a signed JWT using Node.js native crypto.sign() which properly
- * supports OpenSSL 3 / Node.js 24+, bypassing the broken jwa/jws libraries.
+ * Uses WebCrypto (subtle) API to sign JWT — avoids Node.js crypto/OpenSSL 3
+ * issues with PKCS#8 RSA keys on Node 24.
  */
+async function signJwt(payload: object, pemPrivateKey: string): Promise<string> {
+  const { subtle } = webcrypto as Crypto;
+
+  // Strip PEM header/footer and decode base64 → DER buffer
+  const pemBody = pemPrivateKey
+    .replace(/-----BEGIN [^-]+-----/, "")
+    .replace(/-----END [^-]+-----/, "")
+    .replace(/\s/g, "");
+  const derBuffer = Buffer.from(pemBody, "base64");
+
+  let cryptoKey: CryptoKey;
+  try {
+    cryptoKey = await subtle.importKey(
+      "pkcs8",
+      derBuffer,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+  } catch (e: any) {
+    throw new Error(
+      `Private key tidak dapat diparse: ${e.message}. ` +
+      "Pastikan private_key dari file JSON service account sudah disalin lengkap dan benar.",
+    );
+  }
+
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const claim = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const toSign = `${header}.${claim}`;
+
+  const encoder = new TextEncoder();
+  const sigBuffer = await subtle.sign("RSASSA-PKCS1-v1_5", cryptoKey, encoder.encode(toSign));
+  const sig = Buffer.from(sigBuffer).toString("base64url");
+
+  return `${toSign}.${sig}`;
+}
+
 async function getAccessToken(clientEmail: string, rawPrivateKey: string): Promise<string> {
   const privateKey = normalizePrivateKey(rawPrivateKey);
   const now = Math.floor(Date.now() / 1000);
 
-  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
-  const claim = Buffer.from(JSON.stringify({
+  const jwt = await signJwt({
     iss: clientEmail,
     scope: "https://www.googleapis.com/auth/drive",
     aud: "https://oauth2.googleapis.com/token",
     exp: now + 3600,
     iat: now,
-  })).toString("base64url");
-
-  const toSign = `${header}.${claim}`;
-
-  let keyObj;
-  try {
-    keyObj = createPrivateKey({ key: privateKey, format: "pem" });
-  } catch (e: any) {
-    throw new Error(`Private key tidak valid: ${e.message}. Pastikan Anda paste seluruh isi file JSON service account dengan benar.`);
-  }
-
-  const signature = cryptoSign("RSA-SHA256", Buffer.from(toSign), keyObj).toString("base64url");
-  const jwt = `${toSign}.${signature}`;
+  }, privateKey);
 
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -69,12 +93,12 @@ async function getAccessToken(clientEmail: string, rawPrivateKey: string): Promi
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Gagal mendapatkan token Google: ${body}`);
+    throw new Error(`Gagal mendapatkan token Google Drive: ${body}`);
   }
 
-  const data = await res.json() as { access_token: string; error?: string };
+  const data = await res.json() as { access_token?: string; error?: string; error_description?: string };
   if (!data.access_token) {
-    throw new Error(`Respons token tidak mengandung access_token: ${JSON.stringify(data)}`);
+    throw new Error(`Token tidak diterima: ${data.error_description ?? data.error ?? JSON.stringify(data)}`);
   }
   return data.access_token;
 }
@@ -82,7 +106,7 @@ async function getAccessToken(clientEmail: string, rawPrivateKey: string): Promi
 async function getGdriveSettings() {
   const [settings] = await db.select().from(gdriveSettingsTable);
   if (!settings || !settings.privateKey || !settings.clientEmail) {
-    throw new Error("Google Drive belum dikonfigurasi. Silakan isi pengaturan GDrive terlebih dahulu.");
+    throw new Error("Google Drive belum dikonfigurasi. Silakan isi pengaturan GDrive di Pengaturan → Google Drive.");
   }
   return settings;
 }
@@ -90,10 +114,8 @@ async function getGdriveSettings() {
 async function getGdriveClient() {
   const settings = await getGdriveSettings();
   const accessToken = await getAccessToken(settings.clientEmail, settings.privateKey);
-
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: accessToken });
-
   return { drive: google.drive({ version: "v3", auth }), rootFolderId: settings.rootFolderId };
 }
 
@@ -104,15 +126,10 @@ async function getOrCreateFolder(drive: ReturnType<typeof google.drive>, parentI
     supportsAllDrives: true,
     includeItemsFromAllDrives: true,
   });
-  if (res.data.files && res.data.files.length > 0) {
-    return res.data.files[0].id!;
-  }
+  if (res.data.files && res.data.files.length > 0) return res.data.files[0].id!;
+
   const folder = await drive.files.create({
-    requestBody: {
-      name,
-      mimeType: "application/vnd.google-apps.folder",
-      parents: [parentId],
-    },
+    requestBody: { name, mimeType: "application/vnd.google-apps.folder", parents: [parentId] },
     fields: "id",
     supportsAllDrives: true,
   });
@@ -125,12 +142,10 @@ async function getNextMonthlySequence(year: number, month: number): Promise<numb
   const [result] = await db
     .select({ total: count() })
     .from(incidentAttachmentsTable)
-    .where(
-      and(
-        gte(incidentAttachmentsTable.uploadedAt, startOfMonth),
-        lt(incidentAttachmentsTable.uploadedAt, startOfNextMonth)
-      )
-    );
+    .where(and(
+      gte(incidentAttachmentsTable.uploadedAt, startOfMonth),
+      lt(incidentAttachmentsTable.uploadedAt, startOfNextMonth),
+    ));
   return (result?.total ?? 0) + 1;
 }
 
@@ -140,12 +155,7 @@ export async function uploadToDrive(
   mimeType: string,
   incidentId: number,
   uploadedById: number | null,
-): Promise<{
-  driveFileId: string;
-  storedName: string;
-  viewUrl: string;
-  sequence: number;
-}> {
+): Promise<{ driveFileId: string; storedName: string; viewUrl: string; sequence: number }> {
   const { drive, rootFolderId } = await getGdriveClient();
 
   const now = new Date();
@@ -157,7 +167,6 @@ export async function uploadToDrive(
   logger.info({ rootFolderId, year, month }, "Creating/finding year folder on GDrive");
   const yearFolder = await getOrCreateFolder(drive, rootFolderId, String(year));
   const monthFolderName = `${monthStr} - ${INDONESIAN_MONTHS[month - 1]}`;
-  logger.info({ yearFolder, monthFolderName }, "Creating/finding month folder on GDrive");
   const monthFolder = await getOrCreateFolder(drive, yearFolder, monthFolderName);
 
   const sequence = await getNextMonthlySequence(year, month);
@@ -172,14 +181,8 @@ export async function uploadToDrive(
 
   logger.info({ storedName, monthFolder }, "Uploading file to GDrive");
   const uploaded = await drive.files.create({
-    requestBody: {
-      name: storedName,
-      parents: [monthFolder],
-    },
-    media: {
-      mimeType,
-      body: stream,
-    },
+    requestBody: { name: storedName, parents: [monthFolder] },
+    media: { mimeType, body: stream },
     fields: "id,webViewLink",
     supportsAllDrives: true,
   });
@@ -203,7 +206,7 @@ export async function deleteFromDrive(driveFileId: string): Promise<void> {
     await drive.files.delete({ fileId: driveFileId, supportsAllDrives: true });
     logger.info({ driveFileId }, "File deleted from Google Drive");
   } catch (err) {
-    logger.warn({ err, driveFileId }, "Failed to delete file from Google Drive");
+    logger.warn({ err, driveFileId }, "Failed to delete from Google Drive");
   }
 }
 
