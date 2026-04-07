@@ -47,10 +47,6 @@ router.post("/", async (req, res) => {
   if (!incidentId) { res.status(400).json({ error: "incidentId diperlukan" }); return; }
 
   const user = req.user!;
-  if (user.role !== "admin" && user.role !== "supervisor") {
-    res.status(403).json({ error: "Hanya admin atau supervisor yang dapat mengeskalasi tiket" });
-    return;
-  }
 
   const { toGroupId, reason } = req.body as { toGroupId?: number; reason?: string };
   if (!toGroupId) { res.status(400).json({ error: "toGroupId diperlukan" }); return; }

@@ -826,7 +826,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
       )}
 
       {/* Tombol eskalasi ke group lain */}
-      {canManage && incident.status !== "closed" && (
+      {incident.status !== "closed" && (
         <div className="flex items-center justify-between">
           <span className="text-xs text-gray-400">Tidak mampu ditangani oleh group ini?</span>
           <Button
