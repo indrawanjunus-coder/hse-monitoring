@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RiskBadge, StatusBadge, IncidentTypeBadge } from "@/components/badges";
 import {
   Plus, AlertTriangle, MapPin, User, Calendar, ChevronDown, Users,
-  ArrowUpDown, ShieldAlert, Mail, Ticket, X, Search, Paperclip, FileImage, FileText, Trash2, ExternalLink, Upload, Cloud, Eye, Send, MessageSquare,
+  ArrowUpDown, ShieldAlert, Mail, Ticket, X, Search, Paperclip, FileImage, FileText, Trash2, ExternalLink, Upload, Cloud, Eye, Send, MessageSquare, ArrowRightLeft, History,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
@@ -113,11 +113,29 @@ interface Incident {
   needsFurtherAction: boolean;
   status: "open" | "in_progress" | "closed";
   closedAt?: string | null;
+  assignedGroupId?: number | null;
   assignedGroupName?: string | null;
   picMembers?: { name: string; email: string }[];
   escalationLevel?: number;
   createdAt?: string;
   attachments?: Attachment[];
+}
+
+interface EscalationRecord {
+  id: number;
+  incidentId: number;
+  fromGroupId: number | null;
+  fromGroupName: string | null;
+  toGroupId: number;
+  toGroupName: string;
+  reason: string;
+  escalatedByUserName: string;
+  escalatedAt: string;
+}
+
+interface Group {
+  id: number;
+  name: string;
 }
 
 interface Attachment {
@@ -617,6 +635,48 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
   });
   const maxSizeBytes = (attachmentCfg?.maxAttachmentSizeMb ?? 1) * 1024 * 1024;
 
+  // Escalation state
+  const [showEscalateDialog, setShowEscalateDialog] = useState(false);
+  const [escalateToGroupId, setEscalateToGroupId] = useState("none");
+  const [escalateReason, setEscalateReason] = useState("");
+  const [escalating, setEscalating] = useState(false);
+
+  const { data: allGroups = [] } = useQuery<Group[]>({
+    queryKey: ["groups"],
+    queryFn: () => api.get("/groups"),
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: escalationHistory = [], refetch: refetchEscalations } = useQuery<EscalationRecord[]>({
+    queryKey: ["incident-escalations", incident.id],
+    queryFn: () => api.get(`/incidents/${incident.id}/escalations`),
+  });
+
+  const canManage = user?.role === "admin" || user?.role === "supervisor";
+
+  const handleEscalate = async () => {
+    if (escalateToGroupId === "none" || !escalateReason.trim()) return;
+    setEscalating(true);
+    try {
+      await api.post(`/incidents/${incident.id}/escalations`, {
+        toGroupId: Number(escalateToGroupId),
+        reason: escalateReason.trim(),
+      });
+      toast({ title: "Tiket berhasil dieskalasi ke group baru" });
+      setShowEscalateDialog(false);
+      setEscalateToGroupId("none");
+      setEscalateReason("");
+      queryClient.invalidateQueries({ queryKey: ["incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["incident-escalations", incident.id] });
+      queryClient.invalidateQueries({ queryKey: ["incident-comments", incident.id] });
+      refetchEscalations();
+    } catch (e: any) {
+      toast({ title: "Gagal mengeskalasi", description: e.message, variant: "destructive" });
+    } finally {
+      setEscalating(false);
+    }
+  };
+
   const handleSendComment = async () => {
     if (!commentText.trim()) return;
     setSendingComment(true);
@@ -762,6 +822,46 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
           <Mail className="w-3.5 h-3.5 inline mr-1" />
           Anggota group PIC belum memiliki email — eskalasi tidak dapat dikirim.
+        </div>
+      )}
+
+      {/* Tombol eskalasi ke group lain */}
+      {canManage && incident.status !== "closed" && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-400">Tidak mampu ditangani oleh group ini?</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 text-orange-600 border-orange-300 hover:bg-orange-50 text-xs"
+            onClick={() => setShowEscalateDialog(true)}
+          >
+            <ArrowRightLeft className="w-3.5 h-3.5" />
+            Eskalasi ke Group Lain
+          </Button>
+        </div>
+      )}
+
+      {/* Riwayat eskalasi */}
+      {escalationHistory.length > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-2">
+          <p className="text-xs font-semibold text-orange-700 flex items-center gap-1.5">
+            <History className="w-3.5 h-3.5" />Riwayat Eskalasi ({escalationHistory.length})
+          </p>
+          <div className="space-y-2">
+            {escalationHistory.map((esc, i) => (
+              <div key={esc.id} className="text-xs bg-white border border-orange-100 rounded-md p-2.5 space-y-1">
+                <div className="flex items-center gap-1.5 text-orange-700">
+                  <span className="font-semibold">#{i + 1}</span>
+                  <span className="text-gray-400">·</span>
+                  <span className="text-gray-500 line-through">{esc.fromGroupName ?? "Tidak ada group"}</span>
+                  <ArrowRightLeft className="w-3 h-3 text-orange-500" />
+                  <span className="font-semibold text-orange-700">{esc.toGroupName}</span>
+                </div>
+                <p className="text-gray-600 italic">"{esc.reason}"</p>
+                <p className="text-gray-400">Oleh: {esc.escalatedByUserName} · {new Date(esc.escalatedAt).toLocaleString("id-ID")}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -980,6 +1080,67 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
           </Button>
         </div>
       </div>
+
+      {/* Dialog eskalasi ke group lain */}
+      {showEscalateDialog && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center shrink-0">
+                <ArrowRightLeft className="w-5 h-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">Eskalasi Tiket ke Group Lain</p>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  Group PIC saat ini: <span className="font-medium text-blue-700">{incident.assignedGroupName ?? "Tidak ada"}</span>
+                </p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>Eskalasi ke Group</Label>
+                <Select value={escalateToGroupId} onValueChange={setEscalateToGroupId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih group tujuan..." />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-60 overflow-y-auto">
+                    <SelectItem value="none">Pilih group...</SelectItem>
+                    {allGroups
+                      .filter(g => g.id !== incident.assignedGroupId)
+                      .map(g => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)
+                    }
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Alasan Eskalasi</Label>
+                <Textarea
+                  value={escalateReason}
+                  onChange={e => setEscalateReason(e.target.value)}
+                  placeholder="Jelaskan mengapa tiket ini perlu dieskalasi ke group lain..."
+                  rows={3}
+                  className="text-sm resize-none"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => { setShowEscalateDialog(false); setEscalateToGroupId("none"); setEscalateReason(""); }}
+                disabled={escalating}
+              >Batal</Button>
+              <Button
+                className="bg-orange-600 hover:bg-orange-700 gap-2"
+                disabled={escalating || escalateToGroupId === "none" || !escalateReason.trim()}
+                onClick={handleEscalate}
+              >
+                <ArrowRightLeft className="w-4 h-4" />
+                {escalating ? "Mengeskalasi..." : "Eskalasi Tiket"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Konfirmasi tutup incident */}
       {showCloseConfirm && (

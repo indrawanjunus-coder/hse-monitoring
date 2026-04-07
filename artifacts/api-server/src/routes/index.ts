@@ -21,6 +21,7 @@ import logsRouter from "./logs";
 import gdriveSettingsRouter from "./gdrive-settings";
 import attachmentsRouter from "./attachments";
 import incidentCommentsRouter from "./incident-comments";
+import incidentEscalationsRouter from "./incident-escalations";
 
 const router: IRouter = Router();
 
@@ -46,5 +47,6 @@ router.use("/logs", logsRouter);
 router.use("/settings/gdrive", gdriveSettingsRouter);
 router.use("/attachments", attachmentsRouter);
 router.use("/incidents/:incidentId/comments", incidentCommentsRouter);
+router.use("/incidents/:incidentId/escalations", incidentEscalationsRouter);
 
 export default router;
