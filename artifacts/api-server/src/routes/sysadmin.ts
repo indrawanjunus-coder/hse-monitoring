@@ -265,8 +265,7 @@ router.put("/payments/:id/approve", async (req, res) => {
   if (company) {
     const baseDate = company.subscriptionEndsAt && company.subscriptionEndsAt > new Date() ? company.subscriptionEndsAt : new Date();
     const newEnd = new Date(baseDate);
-    if (payment.plan === "monthly") newEnd.setMonth(newEnd.getMonth() + payment.periodMonths);
-    else if (payment.plan === "yearly") newEnd.setFullYear(newEnd.getFullYear() + payment.periodMonths);
+    newEnd.setMonth(newEnd.getMonth() + payment.periodMonths);
     await db.update(companiesTable).set({ status: "active", plan: payment.plan as any, subscriptionEndsAt: newEnd, activatedAt: new Date(), updatedAt: new Date() }).where(eq(companiesTable.id, company.id));
     // Enforce plan limits after plan change
     await enforcePlanLimits(company.id);

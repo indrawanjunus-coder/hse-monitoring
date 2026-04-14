@@ -60,7 +60,9 @@ router.post("/public-submit", upload.single("proof"), async (req, res) => {
   const planRecord = plans.find(p => p.slug === plan);
   let amount = 0;
   if (planRecord) {
-    amount = plan === "yearly" ? Number(planRecord.priceYearly ?? 0) : Number(planRecord.priceMonthly ?? 0) * months;
+    amount = months >= 12
+      ? Number(planRecord.priceYearly ?? 0)
+      : Number(planRecord.priceMonthly ?? 0) * months;
   }
   const planLabel = planRecord?.name ?? plan;
 
@@ -125,7 +127,9 @@ router.post("/submit", authMiddleware, upload.single("proof"), async (req, res) 
   const planRecord = plans.find(p => p.slug === plan);
   let amount = 0;
   if (planRecord) {
-    amount = plan === "yearly" ? Number(planRecord.priceYearly ?? 0) : Number(planRecord.priceMonthly ?? 0) * months;
+    amount = months >= 12
+      ? Number(planRecord.priceYearly ?? 0)
+      : Number(planRecord.priceMonthly ?? 0) * months;
   }
   const planLabel = planRecord?.name ?? plan;
   const companyName = company[0]?.name ?? `company-${user.companyId}`;

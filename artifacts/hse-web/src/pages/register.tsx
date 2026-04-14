@@ -30,23 +30,29 @@ interface PublicInfo {
   plans: Plan[];
 }
 
+type BillingPeriod = "monthly" | "yearly";
+
 function formatRp(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
 }
 
-function getPlanDisplayPrice(plan: Plan): { price: string; period: string } {
-  if (plan.priceMonthly === 0 && plan.priceYearly === 0) return { price: "Rp 0", period: "/bulan" };
-  if (plan.slug === "yearly") return { price: formatRp(plan.priceYearly), period: "/tahun" };
-  return { price: formatRp(plan.priceMonthly), period: "/bulan" };
-}
-
-function getPlanPeriodMonths(plan: Plan): number {
-  if (plan.slug === "yearly") return 12;
-  return 1;
-}
-
 function isFree(plan: Plan): boolean {
   return plan.priceMonthly === 0 && plan.priceYearly === 0;
+}
+
+function getActivePrice(plan: Plan, period: BillingPeriod): number {
+  return period === "yearly" ? plan.priceYearly : plan.priceMonthly;
+}
+
+function getPeriodMonths(period: BillingPeriod): number {
+  return period === "yearly" ? 12 : 1;
+}
+
+function calcSavingPct(plan: Plan): number {
+  if (plan.priceMonthly <= 0 || plan.priceYearly <= 0) return 0;
+  const monthly12 = plan.priceMonthly * 12;
+  if (monthly12 <= plan.priceYearly) return 0;
+  return Math.round((1 - plan.priceYearly / monthly12) * 100);
 }
 
 type Step = "plan" | "form" | "payment" | "success";
@@ -60,6 +66,7 @@ export default function RegisterPage() {
 
   const [step, setStep] = useState<Step>("plan");
   const [selectedPlanSlug, setSelectedPlanSlug] = useState<string>("");
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
   const [form, setForm] = useState({
     companyName: "", companySlug: "", contactName: "", contactEmail: "", contactPhone: "",
   });
@@ -143,7 +150,7 @@ export default function RegisterPage() {
       fd.append("proof", proofFile);
       fd.append("companyId", String(result.id));
       fd.append("plan", selectedPlanSlug);
-      fd.append("periodMonths", String(selectedPlan ? getPlanPeriodMonths(selectedPlan) : 1));
+      fd.append("periodMonths", String(selectedPlan && isFree(selectedPlan) ? 1 : getPeriodMonths(billingPeriod)));
       const r = await fetch(`${API_BASE}/payments/public-submit`, { method: "POST", body: fd });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "Gagal mengirim bukti");
@@ -159,9 +166,13 @@ export default function RegisterPage() {
 
   const getSelectedAmount = () => {
     if (!selectedPlan || !publicInfo) return "...";
-    if (selectedPlan.slug === "yearly") return formatRp(selectedPlan.priceYearly);
-    return formatRp(selectedPlan.priceMonthly);
+    if (isFree(selectedPlan)) return "Rp 0";
+    return formatRp(getActivePrice(selectedPlan, billingPeriod));
   };
+
+  const getPeriodLabel = (period: BillingPeriod) => period === "yearly" ? "/tahun" : "/bulan";
+
+  const otherPeriod: BillingPeriod = billingPeriod === "monthly" ? "yearly" : "monthly";
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -179,7 +190,32 @@ export default function RegisterPage() {
         {step === "plan" && (
           <div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Pilih Paket Langganan</h1>
-            <p className="text-gray-500 mb-8">Mulai kelola HSE perusahaan Anda dengan mudah</p>
+            <p className="text-gray-500 mb-6">Mulai kelola HSE perusahaan Anda dengan mudah</p>
+
+            {/* Billing period toggle */}
+            <div className="flex bg-gray-100 rounded-xl p-1 mb-6 max-w-xs">
+              <button
+                onClick={() => setBillingPeriod("monthly")}
+                className={`flex-1 py-2 px-4 text-sm font-semibold rounded-lg transition-all ${
+                  billingPeriod === "monthly"
+                    ? "bg-white shadow text-gray-900"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Bulanan
+              </button>
+              <button
+                onClick={() => setBillingPeriod("yearly")}
+                className={`flex-1 py-2 px-4 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${
+                  billingPeriod === "yearly"
+                    ? "bg-white shadow text-gray-900"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Tahunan
+                <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">Hemat</span>
+              </button>
+            </div>
 
             {plansLoading ? (
               <div className="flex items-center justify-center py-16 gap-3 text-gray-400">
@@ -187,21 +223,25 @@ export default function RegisterPage() {
               </div>
             ) : (
               <div className="grid gap-4 mb-8">
-                {plans.map((plan, idx) => {
-                  const { price, period } = getPlanDisplayPrice(plan);
+                {plans.map((plan) => {
+                  const activePrice = getActivePrice(plan, billingPeriod);
+                  const otherPrice = getActivePrice(plan, otherPeriod);
+                  const savingPct = calcSavingPct(plan);
                   const isRecommended = plan.slug === "monthly";
+                  const isSelected = selectedPlanSlug === plan.slug;
+
                   return (
                     <button
                       key={plan.id}
                       onClick={() => setSelectedPlanSlug(plan.slug)}
                       className={`text-left p-5 rounded-xl border-2 transition-all ${
-                        selectedPlanSlug === plan.slug
+                        isSelected
                           ? "border-blue-600 bg-blue-50"
                           : "border-gray-200 bg-white hover:border-gray-300"
                       }`}
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1 min-w-0 pr-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-semibold text-gray-900">{plan.name}</span>
                             {isRecommended && (
@@ -212,12 +252,44 @@ export default function RegisterPage() {
                             )}
                           </div>
                           {plan.description && (
-                            <p className="text-sm text-gray-500">{plan.description}</p>
+                            <p className="text-sm text-gray-500 mb-3">{plan.description}</p>
                           )}
                         </div>
-                        <div className="text-right shrink-0">
-                          <div className="font-bold text-gray-900 text-base">{price}</div>
-                          <div className="text-xs text-gray-400">{period}</div>
+
+                        {/* Price section */}
+                        <div className="text-right shrink-0 min-w-[120px]">
+                          {isFree(plan) ? (
+                            <div>
+                              <div className="font-bold text-gray-900 text-xl">Gratis</div>
+                              <div className="text-xs text-gray-400">Trial 1 bulan</div>
+                            </div>
+                          ) : (
+                            <div>
+                              {/* Active period price — large */}
+                              <div className={`font-bold text-xl ${isSelected ? "text-blue-700" : "text-gray-900"}`}>
+                                {formatRp(activePrice)}
+                              </div>
+                              <div className={`text-xs font-medium ${isSelected ? "text-blue-500" : "text-gray-400"}`}>
+                                {getPeriodLabel(billingPeriod)}
+                              </div>
+
+                              {/* Other period price — small */}
+                              <div className="text-xs text-gray-400 mt-1.5 border-t border-gray-100 pt-1.5">
+                                {otherPeriod === "yearly" ? "Tahunan:" : "Bulanan:"}{" "}
+                                <span className="font-medium text-gray-500">{formatRp(otherPrice)}</span>
+                                {getPeriodLabel(otherPeriod)}
+                              </div>
+
+                              {/* Savings badge for yearly */}
+                              {billingPeriod === "yearly" && savingPct > 0 && (
+                                <div className="mt-1">
+                                  <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                                    Hemat {savingPct}%
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </button>
@@ -302,15 +374,31 @@ export default function RegisterPage() {
               </div>
 
               {selectedPlan && (
-                <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-medium text-gray-900">Paket dipilih: {selectedPlan.name}</div>
-                    <div className="text-sm text-gray-500">
-                      {getPlanDisplayPrice(selectedPlan).price}{" "}
-                      {getPlanDisplayPrice(selectedPlan).period}
+                <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-semibold text-gray-900">Ringkasan Langganan</div>
+                    <button type="button" onClick={() => setStep("plan")} className="text-xs text-blue-600 hover:underline">Ubah</button>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm text-gray-700">{selectedPlan.name}</div>
+                      <div className="text-xs text-gray-500">
+                        {isFree(selectedPlan)
+                          ? "Trial 1 bulan"
+                          : billingPeriod === "yearly"
+                          ? "Berlangganan Tahunan (12 bulan)"
+                          : "Berlangganan Bulanan (1 bulan)"}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-blue-700 text-base">
+                        {isFree(selectedPlan) ? "Gratis" : formatRp(getActivePrice(selectedPlan, billingPeriod))}
+                      </div>
+                      {!isFree(selectedPlan) && (
+                        <div className="text-xs text-gray-400">{getPeriodLabel(billingPeriod)}</div>
+                      )}
                     </div>
                   </div>
-                  <button type="button" onClick={() => setStep("plan")} className="text-xs text-blue-600 hover:underline">Ubah</button>
                 </div>
               )}
 
@@ -336,8 +424,19 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-6 text-sm text-blue-800">
-              <strong>Paket:</strong> {selectedPlan.name} — <strong>{getSelectedAmount()}</strong>
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">{selectedPlan.name}</div>
+                  <div className="text-xs text-gray-500">
+                    {billingPeriod === "yearly" ? "Berlangganan Tahunan (12 bulan)" : "Berlangganan Bulanan (1 bulan)"}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-bold text-blue-700 text-lg">{getSelectedAmount()}</div>
+                  <div className="text-xs text-gray-400">{getPeriodLabel(billingPeriod)}</div>
+                </div>
+              </div>
             </div>
 
             {isQris && publicInfo?.qrisImageUrl && (
