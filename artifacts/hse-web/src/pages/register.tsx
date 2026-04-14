@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Shield, Building2, ChevronRight, CheckCircle, Mail, ExternalLink, Upload, CreditCard, QrCode } from "lucide-react";
+import { Shield, Building2, ChevronRight, CheckCircle, Mail, ExternalLink, Upload, CreditCard, QrCode, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,15 +7,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const API_BASE = "/api";
 
-const PLANS = [
-  { id: "free", label: "Gratis", price: "Rp 0", period: "/bulan", desc: "1 bulan trial, fitur dasar" },
-  { id: "monthly", label: "Bulanan", price: "Rp 250.000", period: "/bulan", desc: "Semua fitur, bayar bulanan", recommended: true },
-  { id: "yearly", label: "Tahunan", price: "Rp 2.250.000", period: "/tahun", desc: "Hemat 25%, bayar tahunan" },
-];
+interface Plan {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+  features: string;
+  priceMonthly: number;
+  priceYearly: number;
+  sortOrder: number;
+}
 
-const PLAN_MONTHS: Record<string, number> = { monthly: 1, yearly: 12, free: 1 };
-
-interface PaymentInfo {
+interface PublicInfo {
   paymentMethod: "qris" | "transfer";
   qrisImageUrl: string;
   bankName: string;
@@ -24,20 +27,39 @@ interface PaymentInfo {
   bankNote: string;
   priceMonthly: number;
   priceYearly: number;
+  plans: Plan[];
 }
 
 function formatRp(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
 }
 
+function getPlanDisplayPrice(plan: Plan): { price: string; period: string } {
+  if (plan.priceMonthly === 0 && plan.priceYearly === 0) return { price: "Rp 0", period: "/bulan" };
+  if (plan.slug === "yearly") return { price: formatRp(plan.priceYearly), period: "/tahun" };
+  return { price: formatRp(plan.priceMonthly), period: "/bulan" };
+}
+
+function getPlanPeriodMonths(plan: Plan): number {
+  if (plan.slug === "yearly") return 12;
+  return 1;
+}
+
+function isFree(plan: Plan): boolean {
+  return plan.priceMonthly === 0 && plan.priceYearly === 0;
+}
+
 type Step = "plan" | "form" | "payment" | "success";
 
 export default function RegisterPage() {
   const urlPlan = new URLSearchParams(window.location.search).get("plan");
-  const validPlanIds = PLANS.map(p => p.id);
-  const initialPlan = urlPlan && validPlanIds.includes(urlPlan) ? urlPlan : "monthly";
-  const [step, setStep] = useState<Step>(urlPlan && validPlanIds.includes(urlPlan) ? "form" : "plan");
-  const [selectedPlan, setSelectedPlan] = useState(initialPlan);
+
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [publicInfo, setPublicInfo] = useState<PublicInfo | null>(null);
+  const [plansLoading, setPlansLoading] = useState(true);
+
+  const [step, setStep] = useState<Step>("plan");
+  const [selectedPlanSlug, setSelectedPlanSlug] = useState<string>("");
   const [form, setForm] = useState({
     companyName: "", companySlug: "", contactName: "", contactEmail: "", contactPhone: "",
   });
@@ -45,19 +67,32 @@ export default function RegisterPage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ slug: string; name: string; contactEmail?: string; id?: number } | null>(null);
 
-  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState("");
 
   useEffect(() => {
-    if (step === "payment") {
-      fetch(`${API_BASE}/payments/public-info`)
-        .then(r => r.json())
-        .then(setPaymentInfo)
-        .catch(() => {});
-    }
-  }, [step]);
+    fetch(`${API_BASE}/payments/public-info`)
+      .then(r => r.json())
+      .then((data: PublicInfo) => {
+        setPublicInfo(data);
+        const activePlans: Plan[] = data.plans ?? [];
+        setPlans(activePlans);
+
+        const initialSlug = urlPlan && activePlans.some(p => p.slug === urlPlan)
+          ? urlPlan
+          : activePlans.find(p => p.slug === "monthly")?.slug ?? activePlans[0]?.slug ?? "";
+        setSelectedPlanSlug(initialSlug);
+
+        if (urlPlan && activePlans.some(p => p.slug === urlPlan)) {
+          setStep("form");
+        }
+      })
+      .catch(() => {})
+      .finally(() => setPlansLoading(false));
+  }, []);
+
+  const selectedPlan = plans.find(p => p.slug === selectedPlanSlug) ?? null;
 
   const handleSlugAuto = (name: string) => {
     const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 30);
@@ -78,14 +113,14 @@ export default function RegisterPage() {
           contactName: form.contactName,
           contactEmail: form.contactEmail,
           contactPhone: form.contactPhone,
-          plan: selectedPlan,
+          plan: selectedPlanSlug,
         }),
       });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "Gagal mendaftar");
       const company = data.company;
       setResult({ ...company, contactEmail: form.contactEmail });
-      if (selectedPlan === "free") {
+      if (!selectedPlan || isFree(selectedPlan)) {
         setStep("success");
       } else {
         setStep("payment");
@@ -107,8 +142,8 @@ export default function RegisterPage() {
       const fd = new FormData();
       fd.append("proof", proofFile);
       fd.append("companyId", String(result.id));
-      fd.append("plan", selectedPlan);
-      fd.append("periodMonths", String(PLAN_MONTHS[selectedPlan] ?? 1));
+      fd.append("plan", selectedPlanSlug);
+      fd.append("periodMonths", String(selectedPlan ? getPlanPeriodMonths(selectedPlan) : 1));
       const r = await fetch(`${API_BASE}/payments/public-submit`, { method: "POST", body: fd });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "Gagal mengirim bukti");
@@ -120,11 +155,13 @@ export default function RegisterPage() {
     }
   };
 
-  const planData = PLANS.find(p => p.id === selectedPlan);
-  const isQris = !paymentInfo || paymentInfo.paymentMethod === "qris";
-  const selectedAmount = paymentInfo
-    ? selectedPlan === "yearly" ? formatRp(paymentInfo.priceYearly) : formatRp(paymentInfo.priceMonthly)
-    : "...";
+  const isQris = !publicInfo || publicInfo.paymentMethod === "qris";
+
+  const getSelectedAmount = () => {
+    if (!selectedPlan || !publicInfo) return "...";
+    if (selectedPlan.slug === "yearly") return formatRp(selectedPlan.priceYearly);
+    return formatRp(selectedPlan.priceMonthly);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -144,39 +181,55 @@ export default function RegisterPage() {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Pilih Paket Langganan</h1>
             <p className="text-gray-500 mb-8">Mulai kelola HSE perusahaan Anda dengan mudah</p>
 
-            <div className="grid gap-4 mb-8">
-              {PLANS.map(plan => (
-                <button
-                  key={plan.id}
-                  onClick={() => setSelectedPlan(plan.id)}
-                  className={`text-left p-5 rounded-xl border-2 transition-all ${
-                    selectedPlan === plan.id
-                      ? "border-blue-600 bg-blue-50"
-                      : "border-gray-200 bg-white hover:border-gray-300"
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-gray-900">{plan.label}</span>
-                        {plan.recommended && (
-                          <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">Rekomendasi</span>
-                        )}
+            {plansLoading ? (
+              <div className="flex items-center justify-center py-16 gap-3 text-gray-400">
+                <Loader2 className="w-5 h-5 animate-spin" /> Memuat paket...
+              </div>
+            ) : (
+              <div className="grid gap-4 mb-8">
+                {plans.map((plan, idx) => {
+                  const { price, period } = getPlanDisplayPrice(plan);
+                  const isRecommended = plan.slug === "monthly";
+                  return (
+                    <button
+                      key={plan.id}
+                      onClick={() => setSelectedPlanSlug(plan.slug)}
+                      className={`text-left p-5 rounded-xl border-2 transition-all ${
+                        selectedPlanSlug === plan.slug
+                          ? "border-blue-600 bg-blue-50"
+                          : "border-gray-200 bg-white hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0 pr-4">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-gray-900">{plan.name}</span>
+                            {isRecommended && (
+                              <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full shrink-0">Rekomendasi</span>
+                            )}
+                            {isFree(plan) && (
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full shrink-0">Trial</span>
+                            )}
+                          </div>
+                          {plan.description && (
+                            <p className="text-sm text-gray-500">{plan.description}</p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <div className="font-bold text-gray-900 text-base">{price}</div>
+                          <div className="text-xs text-gray-400">{period}</div>
+                        </div>
                       </div>
-                      <p className="text-sm text-gray-500">{plan.desc}</p>
-                    </div>
-                    <div className="text-right shrink-0 ml-4">
-                      <div className="font-bold text-gray-900">{plan.price}</div>
-                      <div className="text-xs text-gray-400">{plan.period}</div>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             <Button
               onClick={() => setStep("form")}
-              className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium"
+              disabled={!selectedPlanSlug || plansLoading}
+              className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium disabled:opacity-50"
             >
               Lanjutkan <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
@@ -196,7 +249,7 @@ export default function RegisterPage() {
             </button>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Data Perusahaan</h1>
             <p className="text-gray-500 mb-6">
-              {selectedPlan === "free"
+              {selectedPlan && isFree(selectedPlan)
                 ? "Lengkapi informasi perusahaan. Akun admin akan dikirim ke email Anda setelah diaktivasi."
                 : "Lengkapi informasi perusahaan, lalu lanjutkan ke pembayaran."}
             </p>
@@ -248,23 +301,28 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-medium text-gray-900">Paket dipilih: {planData?.label}</div>
-                  <div className="text-sm text-gray-500">{planData?.price} {planData?.period}</div>
+              {selectedPlan && (
+                <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">Paket dipilih: {selectedPlan.name}</div>
+                    <div className="text-sm text-gray-500">
+                      {getPlanDisplayPrice(selectedPlan).price}{" "}
+                      {getPlanDisplayPrice(selectedPlan).period}
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => setStep("plan")} className="text-xs text-blue-600 hover:underline">Ubah</button>
                 </div>
-                <button type="button" onClick={() => setStep("plan")} className="text-xs text-blue-600 hover:underline">Ubah</button>
-              </div>
+              )}
 
               <Button type="submit" disabled={loading} className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium">
-                {loading ? "Mendaftarkan..." : selectedPlan === "free" ? "Daftar Sekarang" : "Lanjutkan ke Pembayaran →"}
+                {loading ? "Mendaftarkan..." : selectedPlan && isFree(selectedPlan) ? "Daftar Sekarang" : "Lanjutkan ke Pembayaran →"}
               </Button>
             </form>
           </div>
         )}
 
         {/* Step: payment */}
-        {step === "payment" && result && (
+        {step === "payment" && result && selectedPlan && (
           <div>
             <div className="flex items-center gap-2 mb-6">
               <CreditCard className="w-5 h-5 text-blue-600" />
@@ -279,20 +337,20 @@ export default function RegisterPage() {
             </div>
 
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-6 text-sm text-blue-800">
-              <strong>Paket:</strong> {planData?.label} — {selectedAmount}
+              <strong>Paket:</strong> {selectedPlan.name} — <strong>{getSelectedAmount()}</strong>
             </div>
 
-            {isQris && paymentInfo?.qrisImageUrl && (
+            {isQris && publicInfo?.qrisImageUrl && (
               <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
                 <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <QrCode className="w-4 h-4 text-blue-600" /> Scan QRIS
                 </h2>
                 <p className="text-sm text-gray-500 mb-4">
-                  Transfer <span className="font-semibold text-gray-800">{selectedAmount}</span> ke QRIS berikut:
+                  Transfer <span className="font-semibold text-gray-800">{getSelectedAmount()}</span> ke QRIS berikut:
                 </p>
                 <div className="flex justify-center">
                   <img
-                    src={paymentInfo.qrisImageUrl}
+                    src={publicInfo.qrisImageUrl}
                     alt="QRIS"
                     className="max-w-xs w-full rounded-lg border border-gray-100"
                     onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
@@ -301,37 +359,37 @@ export default function RegisterPage() {
               </div>
             )}
 
-            {!isQris && paymentInfo && (
+            {!isQris && publicInfo && (
               <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
                 <h2 className="font-semibold text-gray-900 mb-3">Transfer Rekening Bank</h2>
                 <p className="text-sm text-gray-500 mb-4">
-                  Transfer <span className="font-semibold text-gray-800">{selectedAmount}</span> ke rekening berikut:
+                  Transfer <span className="font-semibold text-gray-800">{getSelectedAmount()}</span> ke rekening berikut:
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-100">
-                  {paymentInfo.bankName && (
+                  {publicInfo.bankName && (
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-500">Bank</span>
-                      <span className="font-semibold text-gray-900">{paymentInfo.bankName}</span>
+                      <span className="font-semibold text-gray-900">{publicInfo.bankName}</span>
                     </div>
                   )}
-                  {paymentInfo.bankAccountNumber && (
+                  {publicInfo.bankAccountNumber && (
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-500">No. Rekening</span>
-                      <span className="font-semibold text-gray-900 tracking-wider">{paymentInfo.bankAccountNumber}</span>
+                      <span className="font-semibold text-gray-900 tracking-wider">{publicInfo.bankAccountNumber}</span>
                     </div>
                   )}
-                  {paymentInfo.bankAccountName && (
+                  {publicInfo.bankAccountName && (
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-500">Atas Nama</span>
-                      <span className="font-semibold text-gray-900">{paymentInfo.bankAccountName}</span>
+                      <span className="font-semibold text-gray-900">{publicInfo.bankAccountName}</span>
                     </div>
                   )}
                 </div>
-                {paymentInfo.bankNote && <p className="mt-3 text-sm text-gray-500 italic">{paymentInfo.bankNote}</p>}
+                {publicInfo.bankNote && <p className="mt-3 text-sm text-gray-500 italic">{publicInfo.bankNote}</p>}
               </div>
             )}
 
-            {isQris && paymentInfo && !paymentInfo.qrisImageUrl && (
+            {isQris && publicInfo && !publicInfo.qrisImageUrl && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
                 <p className="text-sm text-blue-700">Hubungi admin untuk informasi pembayaran.</p>
               </div>
@@ -360,10 +418,7 @@ export default function RegisterPage() {
             </form>
 
             <div className="text-center">
-              <button
-                onClick={() => setStep("success")}
-                className="text-sm text-gray-400 hover:text-gray-600"
-              >
+              <button onClick={() => setStep("success")} className="text-sm text-gray-400 hover:text-gray-600">
                 Lewati — bayar nanti
               </button>
             </div>
@@ -377,13 +432,13 @@ export default function RegisterPage() {
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 mb-3">
-              {selectedPlan !== "free" ? "Bukti Terkirim!" : "Pendaftaran Berhasil!"}
+              {selectedPlan && !isFree(selectedPlan) ? "Bukti Terkirim!" : "Pendaftaran Berhasil!"}
             </h1>
             <p className="text-gray-600 mb-2">
               Perusahaan <strong>{result.name}</strong> telah terdaftar.
             </p>
             <p className="text-gray-500 text-sm mb-6">
-              {selectedPlan !== "free"
+              {selectedPlan && !isFree(selectedPlan)
                 ? "Pembayaran Anda sedang diverifikasi. Akun akan diaktifkan setelah pembayaran dikonfirmasi."
                 : "Pendaftaran Anda sedang dalam proses verifikasi oleh admin sistem."}
             </p>

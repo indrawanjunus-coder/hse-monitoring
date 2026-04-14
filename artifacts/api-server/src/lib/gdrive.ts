@@ -207,7 +207,7 @@ export async function getGdriveConfigured(): Promise<boolean> {
 }
 
 /**
- * Simple upload for general files (QRIS images, payment proofs, etc.)
+ * Simple upload for general files (QRIS images, etc.)
  * Uploads to the root GDrive folder directly without date-based folder structure.
  */
 export async function uploadToGdrive(
@@ -239,4 +239,63 @@ export async function uploadToGdrive(
 
   logger.info({ fileId, fileName }, "General file uploaded to Google Drive");
   return { fileId, viewUrl };
+}
+
+/**
+ * Upload bukti pembayaran ke folder Pembayaran/{Tahun}/{Bulan} di GDrive.
+ * Nama file: NamaPT-YYYY-MM-DD-Layanan.ext
+ * Folder dibuat otomatis jika belum ada.
+ */
+export async function uploadPaymentProof(
+  fileBuffer: Buffer,
+  originalName: string,
+  mimeType: string,
+  companyName: string,
+  planLabel: string,
+): Promise<{ fileId: string; viewUrl: string; storedName: string }> {
+  const { drive, rootFolderId } = await getGdriveClient();
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const day = String(now.getDate()).padStart(2, "0");
+  const monthStr = String(month).padStart(2, "0");
+  const monthFolderName = `${monthStr} - ${INDONESIAN_MONTHS[month - 1]}`;
+
+  // Build folder: root → Pembayaran → {Tahun} → {Bulan}
+  logger.info({ rootFolderId, year, monthFolderName }, "Creating payment proof folder path on GDrive");
+  const pembayaranFolder = await getOrCreateFolder(drive, rootFolderId, "Pembayaran");
+  const yearFolder = await getOrCreateFolder(drive, pembayaranFolder, String(year));
+  const monthFolder = await getOrCreateFolder(drive, yearFolder, monthFolderName);
+
+  // Build filename: NamaPT-YYYY-MM-DD-Layanan.ext
+  const safeName = companyName.replace(/[^a-zA-Z0-9\s]/g, "").trim().replace(/\s+/g, "_");
+  const safePlan = planLabel.replace(/[^a-zA-Z0-9\s]/g, "").trim().replace(/\s+/g, "_");
+  const ext = originalName.includes(".") ? originalName.split(".").pop()! : "bin";
+  const storedName = `${safeName}-${year}-${monthStr}-${day}-${safePlan}.${ext}`;
+
+  const { Readable } = await import("stream");
+  const stream = new Readable();
+  stream.push(fileBuffer);
+  stream.push(null);
+
+  logger.info({ storedName, monthFolder }, "Uploading payment proof to GDrive");
+  const uploaded = await drive.files.create({
+    requestBody: { name: storedName, parents: [monthFolder] },
+    media: { mimeType, body: stream },
+    fields: "id,webViewLink",
+    supportsAllDrives: true,
+  });
+
+  const fileId = uploaded.data.id!;
+  const viewUrl = uploaded.data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`;
+
+  await drive.permissions.create({
+    fileId,
+    requestBody: { role: "reader", type: "anyone" },
+    supportsAllDrives: true,
+  });
+
+  logger.info({ fileId, storedName, companyName, planLabel }, "Payment proof uploaded to Google Drive");
+  return { fileId, viewUrl, storedName };
 }

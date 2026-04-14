@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, paymentsTable, systemSettingsTable, companiesTable, plansTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
-import { uploadToGdrive } from "../lib/gdrive";
+import { uploadPaymentProof } from "../lib/gdrive";
 import multer from "multer";
 
 const router = Router();
@@ -33,10 +33,14 @@ async function getPaymentInfo() {
   };
 }
 
-// Public: get payment info (QRIS/bank + pricing) — no auth needed (for new registration)
+// Public: get payment info + all active plans (for new registration page)
 router.get("/public-info", async (_req, res) => {
   try {
-    res.json(await getPaymentInfo());
+    const [info, plans] = await Promise.all([
+      getPaymentInfo(),
+      db.select().from(plansTable).where(eq(plansTable.isActive, true)),
+    ]);
+    res.json({ ...info, plans });
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -58,12 +62,15 @@ router.post("/public-submit", upload.single("proof"), async (req, res) => {
   if (planRecord) {
     amount = plan === "yearly" ? Number(planRecord.priceYearly ?? 0) : Number(planRecord.priceMonthly ?? 0) * months;
   }
+  const planLabel = planRecord?.name ?? plan;
 
   try {
-    const { fileId, viewUrl } = await uploadToGdrive(
+    const { fileId, viewUrl, storedName } = await uploadPaymentProof(
       req.file.buffer,
-      `bukti-reg-${cid}-${Date.now()}-${req.file.originalname}`,
+      req.file.originalname,
       req.file.mimetype,
+      company.name,
+      planLabel,
     );
 
     const [payment] = await db.insert(paymentsTable).values({
@@ -73,7 +80,7 @@ router.post("/public-submit", upload.single("proof"), async (req, res) => {
       periodMonths: months,
       status: "pending",
       proofDriveFileId: fileId,
-      proofFileName: req.file.originalname,
+      proofFileName: storedName,
       proofViewUrl: viewUrl,
       periodStart: new Date().toISOString().slice(0, 10),
     }).returning();
@@ -110,18 +117,26 @@ router.post("/submit", authMiddleware, upload.single("proof"), async (req, res) 
   if (!plan || !req.file) { res.status(400).json({ error: "Plan dan bukti transfer diperlukan" }); return; }
 
   const months = parseInt(periodMonths ?? "1");
-  const plans = await db.select().from(plansTable);
+  const [company, plans] = await Promise.all([
+    db.select({ name: companiesTable.name }).from(companiesTable).where(eq(companiesTable.id, user.companyId!)),
+    db.select().from(plansTable),
+  ]);
+
   const planRecord = plans.find(p => p.slug === plan);
   let amount = 0;
   if (planRecord) {
     amount = plan === "yearly" ? Number(planRecord.priceYearly ?? 0) : Number(planRecord.priceMonthly ?? 0) * months;
   }
+  const planLabel = planRecord?.name ?? plan;
+  const companyName = company[0]?.name ?? `company-${user.companyId}`;
 
   try {
-    const { fileId, viewUrl } = await uploadToGdrive(
+    const { fileId, viewUrl, storedName } = await uploadPaymentProof(
       req.file.buffer,
-      `bukti-${user.companyId}-${Date.now()}-${req.file.originalname}`,
+      req.file.originalname,
       req.file.mimetype,
+      companyName,
+      planLabel,
     );
 
     const [payment] = await db.insert(paymentsTable).values({
@@ -131,7 +146,7 @@ router.post("/submit", authMiddleware, upload.single("proof"), async (req, res) 
       periodMonths: months,
       status: "pending",
       proofDriveFileId: fileId,
-      proofFileName: req.file.originalname,
+      proofFileName: storedName,
       proofViewUrl: viewUrl,
       periodStart: new Date().toISOString().slice(0, 10),
     }).returning();
