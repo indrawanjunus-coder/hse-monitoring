@@ -84,9 +84,10 @@ router.get("/:id", async (req, res) => {
 
 // Submit inspection with answers and auto-create incidents for wrong answers
 router.post("/", async (req, res) => {
-  const user = (req as typeof req & { user: { id: number; role: string } }).user;
+  const user = (req as typeof req & { user: { id: number; role: string; companyId?: number | null } }).user;
   const { scheduleId, plantId, templateId, inspectedAt, answers } = req.body;
   const supervisorId = user.id;
+  const companyId = user.companyId ?? null;
 
   const [inspection] = await db.insert(inspectionsTable)
     .values({ scheduleId, supervisorId, plantId, templateId, inspectedAt: inspectedAt ?? new Date().toISOString().slice(0, 10) })
@@ -112,14 +113,18 @@ router.post("/", async (req, res) => {
     for (const a of answers) {
       const [q] = await db.select().from(questionsTable).where(eq(questionsTable.id, a.questionId));
       if (!q) continue;
-      if (q.answerType === "yes_no" && q.expectedAnswer) {
+      if (q.answerType === "yes_no" && q.expectedAnswer && a.answerYesNo !== undefined) {
         const expectedBool = q.expectedAnswer === "yes";
         if (a.answerYesNo !== expectedBool) {
           const detail = `[Auto] Jawaban tidak sesuai harapan. Pertanyaan: "${q.text}" — Diharapkan: ${expectedBool ? "Ya" : "Tidak"}, Dijawab: ${a.answerYesNo ? "Ya" : "Tidak"}`;
+          const effectivePlantId = plantId ?? null;
+          const effectiveCategoryId = q.categoryId ?? null;
+          if (!effectivePlantId || !effectiveCategoryId) continue;
           const [incident] = await db.insert(incidentsTable).values({
             reporterId: supervisorId,
-            plantId: plantId ?? 1,
-            categoryId: q.categoryId ?? 1,
+            companyId,
+            plantId: effectivePlantId,
+            categoryId: effectiveCategoryId,
             incidentDate: today,
             reportedDate: today,
             detail,
