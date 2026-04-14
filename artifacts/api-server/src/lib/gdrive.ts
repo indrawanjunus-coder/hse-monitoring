@@ -1,7 +1,7 @@
 import { google } from "googleapis";
 import { createPrivateKey, sign as cryptoSign } from "node:crypto";
 import { db, gdriveSettingsTable, incidentAttachmentsTable } from "@workspace/db";
-import { and, eq, gte, lt, count } from "drizzle-orm";
+import { and, eq, gte, lt, count, isNull } from "drizzle-orm";
 import { logger } from "./logger";
 
 const INDONESIAN_MONTHS = [
@@ -104,6 +104,32 @@ async function getGdriveSettings() {
 
 async function getGdriveClient() {
   const settings = await getGdriveSettings();
+  const accessToken = await getAccessToken(settings.clientEmail, settings.privateKey);
+  const auth = new google.auth.OAuth2();
+  auth.setCredentials({ access_token: accessToken });
+  return { drive: google.drive({ version: "v3", auth }), rootFolderId: settings.rootFolderId };
+}
+
+/**
+ * Get GDrive client configured for payment proofs (sysadmin-level GDrive).
+ * Priority: sysadmin GDrive (companyId = NULL) → KCI GDrive (companyId = 1) fallback.
+ */
+async function getPaymentGdriveClient() {
+  // Try sysadmin-level payment GDrive first
+  let [settings] = await db.select().from(gdriveSettingsTable).where(isNull(gdriveSettingsTable.companyId));
+
+  // Fallback to KCI GDrive if sysadmin one not configured
+  if (!settings || !settings.privateKey || !settings.clientEmail) {
+    [settings] = await db.select().from(gdriveSettingsTable).where(eq(gdriveSettingsTable.companyId, 1));
+  }
+
+  if (!settings || !settings.privateKey || !settings.clientEmail) {
+    throw new Error(
+      "Google Drive untuk bukti pembayaran belum dikonfigurasi. " +
+      "Silakan atur di Sysadmin → Pengaturan → GDrive Pembayaran.",
+    );
+  }
+
   const accessToken = await getAccessToken(settings.clientEmail, settings.privateKey);
   const auth = new google.auth.OAuth2();
   auth.setCredentials({ access_token: accessToken });
@@ -253,7 +279,7 @@ export async function uploadPaymentProof(
   companyName: string,
   planLabel: string,
 ): Promise<{ fileId: string; viewUrl: string; storedName: string }> {
-  const { drive, rootFolderId } = await getGdriveClient();
+  const { drive, rootFolderId } = await getPaymentGdriveClient();
 
   const now = new Date();
   const year = now.getFullYear();

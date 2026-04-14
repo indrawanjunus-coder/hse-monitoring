@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, companiesTable, paymentsTable, usersTable, systemSettingsTable, testimonialsTable, plansTable, auditLogsTable } from "@workspace/db";
-import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
+import { db, companiesTable, paymentsTable, usersTable, systemSettingsTable, testimonialsTable, plansTable, auditLogsTable, gdriveSettingsTable } from "@workspace/db";
+import { eq, desc, and, gte, lte, sql, isNull } from "drizzle-orm";
 import { sysadminMiddleware, hashPassword } from "../lib/auth";
 import { uploadToGdrive } from "../lib/gdrive";
 import { enforcePlanLimits } from "../lib/plan-limits";
@@ -380,6 +380,78 @@ router.post("/settings/qris", upload.single("file"), async (req, res) => {
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// --- Payment GDrive Settings ---
+
+// GET: return current payment GDrive config (private key masked)
+router.get("/settings/payment-gdrive", async (_req, res) => {
+  const [sysGdrive] = await db.select().from(gdriveSettingsTable).where(isNull(gdriveSettingsTable.companyId));
+  if (sysGdrive) {
+    res.json({
+      clientEmail: sysGdrive.clientEmail,
+      rootFolderId: sysGdrive.rootFolderId,
+      hasPrivateKey: !!sysGdrive.privateKey,
+      source: "custom",
+    });
+    return;
+  }
+  // Not configured yet — show KCI settings as preview
+  const [kci] = await db.select().from(gdriveSettingsTable).where(eq(gdriveSettingsTable.companyId, 1));
+  res.json({
+    clientEmail: kci?.clientEmail ?? "",
+    rootFolderId: kci?.rootFolderId ?? "",
+    hasPrivateKey: !!(kci?.privateKey),
+    source: "kci_preview",
+  });
+});
+
+// PUT: save payment GDrive settings
+router.put("/settings/payment-gdrive", async (req, res) => {
+  const { clientEmail, privateKey, rootFolderId } = req.body as { clientEmail?: string; privateKey?: string; rootFolderId?: string };
+  const [existing] = await db.select().from(gdriveSettingsTable).where(isNull(gdriveSettingsTable.companyId));
+  const updates: Record<string, unknown> = { updatedAt: new Date() };
+  if (clientEmail !== undefined) updates.clientEmail = clientEmail;
+  if (rootFolderId !== undefined) updates.rootFolderId = rootFolderId;
+  if (privateKey && privateKey.trim() !== "") updates.privateKey = privateKey;
+
+  if (existing) {
+    await db.update(gdriveSettingsTable).set(updates as any).where(eq(gdriveSettingsTable.id, existing.id));
+  } else {
+    await db.insert(gdriveSettingsTable).values({
+      companyId: null,
+      clientEmail: (clientEmail ?? "") as string,
+      privateKey: (privateKey ?? "") as string,
+      rootFolderId: (rootFolderId ?? "") as string,
+    });
+  }
+  res.json({ success: true });
+});
+
+// POST: copy GDrive settings from KCI to sysadmin payment GDrive
+router.post("/settings/payment-gdrive/copy-kci", async (_req, res) => {
+  const [kci] = await db.select().from(gdriveSettingsTable).where(eq(gdriveSettingsTable.companyId, 1));
+  if (!kci || !kci.clientEmail) {
+    res.status(404).json({ error: "Pengaturan GDrive KCI tidak ditemukan" });
+    return;
+  }
+  const [existing] = await db.select().from(gdriveSettingsTable).where(isNull(gdriveSettingsTable.companyId));
+  if (existing) {
+    await db.update(gdriveSettingsTable).set({
+      clientEmail: kci.clientEmail,
+      privateKey: kci.privateKey,
+      rootFolderId: kci.rootFolderId,
+      updatedAt: new Date(),
+    }).where(eq(gdriveSettingsTable.id, existing.id));
+  } else {
+    await db.insert(gdriveSettingsTable).values({
+      companyId: null,
+      clientEmail: kci.clientEmail,
+      privateKey: kci.privateKey,
+      rootFolderId: kci.rootFolderId,
+    });
+  }
+  res.json({ success: true });
 });
 
 // --- Testimonials ---
