@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Shield, CheckCircle, BarChart2, Calendar, AlertTriangle,
   Users, FileText, Building2, ArrowRight, ChevronRight, Star,
@@ -79,20 +80,20 @@ const PLANS = [
   },
 ];
 
-const TESTIMONIALS = [
+const STATIC_TESTIMONIALS = [
   {
-    name: "Andi Prasetyo",
-    role: "HSE Manager",
-    company: "PT. Karya Cipta Industri",
-    text: "HSE Monitor membantu kami mengelola lebih dari 200 jadwal inspeksi per bulan dengan mudah. Laporan otomatis sangat menghemat waktu.",
-    stars: 5,
+    authorName: "Andi Prasetyo",
+    authorRole: "HSE Manager",
+    authorCompany: "PT. Karya Cipta Industri",
+    content: "HSE Monitor membantu kami mengelola lebih dari 200 jadwal inspeksi per bulan dengan mudah. Laporan otomatis sangat menghemat waktu.",
+    rating: 5,
   },
   {
-    name: "Dewi Rahayu",
-    role: "Safety Officer",
-    company: "PT. Maju Bersama",
-    text: "Pelaporan insiden kini jauh lebih cepat. Tim lapangan bisa langsung upload foto dari HP, dan notifikasi langsung ke PIC.",
-    stars: 5,
+    authorName: "Dewi Rahayu",
+    authorRole: "Safety Officer",
+    authorCompany: "PT. Maju Bersama",
+    content: "Pelaporan insiden kini jauh lebih cepat. Tim lapangan bisa langsung upload foto dari HP, dan notifikasi langsung ke PIC.",
+    rating: 5,
   },
 ];
 
@@ -239,8 +240,22 @@ function PortalLoginModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+interface ApiTestimonial {
+  id: number; authorName: string; authorRole: string; authorCompany: string; content: string; rating: number;
+}
+
 export default function LandingPage() {
   const [showPortal, setShowPortal] = useState(false);
+  const { data: apiTestimonials } = useQuery<ApiTestimonial[]>({
+    queryKey: ["public-testimonials"],
+    queryFn: async () => {
+      const res = await fetch("/api/testimonials/public");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+  const testimonials = apiTestimonials && apiTestimonials.length > 0 ? apiTestimonials : STATIC_TESTIMONIALS;
 
   return (
     <div className="min-h-screen bg-white font-sans">
@@ -401,18 +416,18 @@ export default function LandingPage() {
             <div className="text-blue-600 font-semibold text-sm mb-2 uppercase tracking-wide">Testimoni</div>
             <h2 className="text-3xl font-bold text-gray-900">Dipercaya Profesional HSE</h2>
           </div>
-          <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-            {TESTIMONIALS.map(t => (
-              <div key={t.name} className="bg-white rounded-2xl p-6 border border-gray-100">
+          <div className={`grid gap-6 max-w-4xl mx-auto ${testimonials.length === 1 ? "max-w-lg" : testimonials.length === 2 ? "md:grid-cols-2 max-w-3xl" : "md:grid-cols-2 lg:grid-cols-3"}`}>
+            {testimonials.map((t, i) => (
+              <div key={"id" in t ? (t as any).id : i} className="bg-white rounded-2xl p-6 border border-gray-100">
                 <div className="flex gap-0.5 mb-4">
-                  {Array.from({ length: t.stars }).map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                  {Array.from({ length: t.rating }).map((_, j) => (
+                    <Star key={j} className="w-4 h-4 fill-amber-400 text-amber-400" />
                   ))}
                 </div>
-                <p className="text-gray-600 text-sm leading-relaxed mb-4">"{t.text}"</p>
+                <p className="text-gray-600 text-sm leading-relaxed mb-4">"{t.content}"</p>
                 <div>
-                  <div className="font-semibold text-gray-900 text-sm">{t.name}</div>
-                  <div className="text-xs text-gray-400">{t.role} · {t.company}</div>
+                  <div className="font-semibold text-gray-900 text-sm">{t.authorName}</div>
+                  <div className="text-xs text-gray-400">{[t.authorRole, t.authorCompany].filter(Boolean).join(" · ")}</div>
                 </div>
               </div>
             ))}

@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import SysadminLoginPage from "./login";
 import SysadminLayout from "./layout";
 import SysadminCompanies from "./companies";
 import SysadminPayments from "./payments";
 import SysadminSettings from "./settings";
 import SysadminReports from "./reports";
+import SysadminTestimonials from "./testimonials";
+import SysadminPlans from "./plans";
 
-export type SysadminTab = "companies" | "payments" | "reports" | "settings";
+export type SysadminTab = "companies" | "payments" | "plans" | "testimonials" | "reports" | "settings";
 
 function getSysToken() { return localStorage.getItem("sys_token"); }
 function getSysUser() {
@@ -42,6 +43,8 @@ export default function SysadminApp() {
     <SysadminLayout user={sysUser} tab={tab} setTab={setTab} onLogout={handleLogout}>
       {tab === "companies" && <SysadminCompanies token={token} />}
       {tab === "payments" && <SysadminPayments token={token} />}
+      {tab === "plans" && <SysadminPlans token={token} />}
+      {tab === "testimonials" && <SysadminTestimonials token={token} />}
       {tab === "reports" && <SysadminReports token={token} />}
       {tab === "settings" && <SysadminSettings token={token} />}
     </SysadminLayout>

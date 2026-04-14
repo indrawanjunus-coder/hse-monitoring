@@ -24,6 +24,7 @@ import incidentCommentsRouter from "./incident-comments";
 import incidentEscalationsRouter from "./incident-escalations";
 import sysadminRouter from "./sysadmin";
 import companyPaymentsRouter from "./company-payments";
+import testimonialsRouter from "./testimonials";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use("/incidents/:incidentId/comments", incidentCommentsRouter);
 router.use("/incidents/:incidentId/escalations", incidentEscalationsRouter);
 router.use("/sysadmin", sysadminRouter);
 router.use("/payments", companyPaymentsRouter);
+router.use("/testimonials", testimonialsRouter);
 
 export default router;

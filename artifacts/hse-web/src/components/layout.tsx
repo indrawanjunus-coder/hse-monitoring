@@ -27,6 +27,7 @@ import {
   Grid3X3,
   ScrollText,
   Cloud,
+  MessageSquare,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
@@ -67,6 +68,7 @@ const navItems: NavItem[] = [
       { label: "Laporan Indikator HSE", href: "/reports/indicators", icon: <Target className="w-4 h-4" />, supervisorOrAdmin: true },
     ],
   },
+  { label: "Testimoni", href: "/testimonial", icon: <MessageSquare className="w-4 h-4" /> },
   { label: "Profil", href: "/profile", icon: <UserCircle className="w-4 h-4" /> },
   {
     label: "Pengaturan", href: "/settings", icon: <Settings className="w-4 h-4" />, adminOnly: true,

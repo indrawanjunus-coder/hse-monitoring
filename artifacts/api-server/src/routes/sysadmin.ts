@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, companiesTable, paymentsTable, usersTable, systemSettingsTable } from "@workspace/db";
+import { db, companiesTable, paymentsTable, usersTable, systemSettingsTable, testimonialsTable, plansTable } from "@workspace/db";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import { sysadminMiddleware } from "../lib/auth";
 import { uploadToGdrive } from "../lib/gdrive";
@@ -180,6 +180,77 @@ router.post("/settings/qris", upload.single("file"), async (req, res) => {
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// --- Testimonials ---
+router.get("/testimonials", async (_req, res) => {
+  const rows = await db.select().from(testimonialsTable).orderBy(desc(testimonialsTable.createdAt));
+  res.json(rows);
+});
+
+router.put("/testimonials/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const { content, authorName, authorRole, authorCompany, rating, isActive } = req.body;
+  const updates: Record<string, unknown> = {};
+  if (content !== undefined) updates.content = content;
+  if (authorName !== undefined) updates.authorName = authorName;
+  if (authorRole !== undefined) updates.authorRole = authorRole;
+  if (authorCompany !== undefined) updates.authorCompany = authorCompany;
+  if (rating !== undefined) updates.rating = Number(rating);
+  if (isActive !== undefined) updates.isActive = Boolean(isActive);
+  const [updated] = await db.update(testimonialsTable).set(updates as any).where(eq(testimonialsTable.id, id)).returning();
+  if (!updated) { res.status(404).json({ error: "Tidak ditemukan" }); return; }
+  res.json(updated);
+});
+
+router.delete("/testimonials/:id", async (req, res) => {
+  await db.delete(testimonialsTable).where(eq(testimonialsTable.id, Number(req.params.id)));
+  res.json({ success: true });
+});
+
+// --- Plans (Layanan) ---
+router.get("/plans", async (_req, res) => {
+  const rows = await db.select().from(plansTable).orderBy(plansTable.sortOrder, plansTable.id);
+  res.json(rows);
+});
+
+router.post("/plans", async (req, res) => {
+  const { name, slug, description, priceMonthly, priceYearly, maxUsers, durationMonths, maxTemplates, isActive, sortOrder } = req.body;
+  const [plan] = await db.insert(plansTable).values({
+    name, slug, description: description ?? "",
+    priceMonthly: Number(priceMonthly ?? 0),
+    priceYearly: Number(priceYearly ?? 0),
+    maxUsers: maxUsers != null ? Number(maxUsers) : null,
+    durationMonths: Number(durationMonths ?? 1),
+    maxTemplates: maxTemplates != null ? Number(maxTemplates) : null,
+    isActive: isActive !== false,
+    sortOrder: Number(sortOrder ?? 0),
+  }).returning();
+  res.status(201).json(plan);
+});
+
+router.put("/plans/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  const { name, slug, description, priceMonthly, priceYearly, maxUsers, durationMonths, maxTemplates, isActive, sortOrder } = req.body;
+  const updates: Record<string, unknown> = {};
+  if (name !== undefined) updates.name = name;
+  if (slug !== undefined) updates.slug = slug;
+  if (description !== undefined) updates.description = description;
+  if (priceMonthly !== undefined) updates.priceMonthly = Number(priceMonthly);
+  if (priceYearly !== undefined) updates.priceYearly = Number(priceYearly);
+  if ("maxUsers" in req.body) updates.maxUsers = maxUsers != null ? Number(maxUsers) : null;
+  if (durationMonths !== undefined) updates.durationMonths = Number(durationMonths);
+  if ("maxTemplates" in req.body) updates.maxTemplates = maxTemplates != null ? Number(maxTemplates) : null;
+  if (isActive !== undefined) updates.isActive = Boolean(isActive);
+  if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder);
+  const [updated] = await db.update(plansTable).set(updates as any).where(eq(plansTable.id, id)).returning();
+  if (!updated) { res.status(404).json({ error: "Tidak ditemukan" }); return; }
+  res.json(updated);
+});
+
+router.delete("/plans/:id", async (req, res) => {
+  await db.delete(plansTable).where(eq(plansTable.id, Number(req.params.id)));
+  res.json({ success: true });
 });
 
 export default router;

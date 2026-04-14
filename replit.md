@@ -211,8 +211,21 @@ HSE Monitor is a multi-tenant SaaS platform. Each company has isolated data.
 ### Sysadmin Panel
 - URL: `/sysadmin` — separate dark-themed admin panel
 - Login: NIK `SYSADMIN` / password `sysadmin2024` (role=`sysadmin`, companyId=null)
-- Features: company list + activate/suspend, payment verification, reports (monthly), settings (QRIS image upload, pricing)
-- Routes: `GET/POST /api/sysadmin/companies`, `GET/PUT /api/sysadmin/payments`, `GET /api/sysadmin/reports/*`, `GET/PUT /api/sysadmin/settings`, `POST /api/sysadmin/settings/qris`
+- **IMPORTANT**: sysadmin password hash is SHA256 format (`hashPassword()` in auth.ts = `sha256(pass + "hse_salt_2024")`). Auto-migrate now uses SHA256 (not pgcrypto bcrypt). If DB has `$2...` bcrypt hash, auto-migrate automatically fixes it on startup.
+- Features: company list + activate/suspend, payment verification, **layanan/plans CRUD**, **testimoni management** (activate/deactivate/edit/delete), reports (monthly), settings (QRIS image upload, pricing)
+- Routes: `GET/POST /api/sysadmin/companies`, `GET/PUT /api/sysadmin/payments`, `GET/POST/PUT/DELETE /api/sysadmin/plans`, `GET/PUT/DELETE /api/sysadmin/testimonials`, `GET /api/sysadmin/reports/*`, `GET/PUT /api/sysadmin/settings`, `POST /api/sysadmin/settings/qris`
+
+### Testimoni
+- Tables: `testimonials` (id, company_id, user_id, author_name, author_role, author_company, content, rating 1-5, is_active)
+- User route: `GET /api/testimonials/mine`, `POST /api/testimonials` (submit/update own testimonial; is_active=false, pending review)
+- Public route: `GET /api/testimonials/public` — active testimonials for landing page
+- Landing page fetches from API; falls back to static data if no active testimonials
+- User page: `/testimonial` — star rating + textarea form, shows pending/approved status
+
+### Layanan (Plans Master)
+- Table: `plans` (id, name, slug, description, price_monthly, price_yearly, max_users, duration_months, max_templates, is_active, sort_order)
+- Sysadmin CRUD at `/sysadmin` → Layanan tab
+- Will eventually drive landing page pricing section dynamically
 
 ### Registration
 - URL: `/register` — public company registration form (step 1: plan, step 2: company + admin details)

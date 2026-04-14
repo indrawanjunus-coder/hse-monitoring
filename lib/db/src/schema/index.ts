@@ -22,3 +22,5 @@ export * from "./incident-comments";
 export * from "./incident-escalations";
 export * from "./companies";
 export * from "./payments";
+export * from "./testimonials";
+export * from "./plans";

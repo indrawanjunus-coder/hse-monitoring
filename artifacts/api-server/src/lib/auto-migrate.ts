@@ -107,20 +107,31 @@ export async function autoMigrate() {
 
       const { rows: existingSysadmin } = await pool.query(`SELECT id FROM users WHERE nik = 'SYSADMIN' LIMIT 1`);
       if (existingSysadmin.length === 0) {
+        const { createHash } = await import("crypto");
+        const sysadminPwHash = createHash("sha256").update("sysadmin2024" + "hse_salt_2024").digest("hex");
         await pool.query(`
           INSERT INTO users (nik, name, email, password_hash, role, is_head, company_id)
           VALUES (
             'SYSADMIN',
             'System Administrator',
             'sysadmin@hse.local',
-            crypt('sysadmin2024', gen_salt('bf', 10)),
+            $1,
             'sysadmin',
             false,
             NULL
           )
           ON CONFLICT DO NOTHING
-        `);
+        `, [sysadminPwHash]);
         logger.info("autoMigrate: sysadmin user created");
+      } else {
+        // Fix: ensure sysadmin password_hash is in SHA256 format (not bcrypt)
+        const { rows: [sysadminUser] } = await pool.query(`SELECT password_hash FROM users WHERE nik = 'SYSADMIN' LIMIT 1`);
+        if (sysadminUser?.password_hash?.startsWith("$2")) {
+          const { createHash } = await import("crypto");
+          const sysadminPwHash = createHash("sha256").update("sysadmin2024" + "hse_salt_2024").digest("hex");
+          await pool.query(`UPDATE users SET password_hash = $1 WHERE nik = 'SYSADMIN'`, [sysadminPwHash]);
+          logger.info("autoMigrate: sysadmin password hash migrated from bcrypt to SHA256");
+        }
       }
 
       await pool.query(`

@@ -31,6 +31,7 @@ import RegisterPage from "@/pages/register";
 import PaymentPage from "@/pages/payment";
 import LandingPage from "@/pages/landing";
 import SysadminApp from "@/pages/sysadmin/index";
+import TestimonialPage from "@/pages/testimonial";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -97,6 +98,7 @@ function MainApp() {
           <Route path="/reports/schedule-compliance" component={ScheduleCompliancePage} />
           <Route path="/admin/logs" component={LogsPage} />
           <Route path="/payment" component={PaymentPage} />
+          <Route path="/testimonial" component={TestimonialPage} />
           <Route><Redirect to="/" /></Route>
         </Switch>
       </Layout>

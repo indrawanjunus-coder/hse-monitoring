@@ -1,9 +1,11 @@
-import { Building2, CreditCard, BarChart2, Settings, Shield, LogOut } from "lucide-react";
+import { Building2, CreditCard, BarChart2, Settings, Shield, LogOut, MessageSquare, Package } from "lucide-react";
 import type { SysadminTab } from "./index";
 
 const NAV = [
   { key: "companies" as SysadminTab, label: "Perusahaan", icon: Building2 },
   { key: "payments" as SysadminTab, label: "Pembayaran", icon: CreditCard },
+  { key: "plans" as SysadminTab, label: "Layanan", icon: Package },
+  { key: "testimonials" as SysadminTab, label: "Testimoni", icon: MessageSquare },
   { key: "reports" as SysadminTab, label: "Laporan", icon: BarChart2 },
   { key: "settings" as SysadminTab, label: "Pengaturan", icon: Settings },
 ];
