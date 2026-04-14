@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CheckCircle2, XCircle, AlertCircle, Printer, Users, User, Calendar, TrendingUp, FileSpreadsheet, ChevronLeft, ChevronRight, BarChart2 } from "lucide-react";
@@ -357,75 +357,67 @@ export default function ScheduleCompliancePage() {
             <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Tidak ada data untuk ditampilkan</div>
           ) : (
             <>
-              <ResponsiveContainer width="100%" height={chartData.length > 6 ? 360 : 260}>
-                <BarChart
-                  data={chartData}
-                  margin={{ top: 8, right: 24, left: 0, bottom: chartData.length > 4 ? 60 : 20 }}
-                  barCategoryGap="25%"
-                  barGap={4}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fontSize: 11, fill: "#6b7280" }}
-                    tickLine={false}
-                    axisLine={false}
-                    angle={chartData.length > 4 ? -30 : 0}
-                    textAnchor={chartData.length > 4 ? "end" : "middle"}
-                    interval={0}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    tickFormatter={v => `${v}%`}
-                    tick={{ fontSize: 11, fill: "#6b7280" }}
-                    tickLine={false}
-                    axisLine={false}
-                    width={42}
-                  />
-                  <Tooltip
-                    formatter={(value: number, name: string) => [
-                      `${value.toFixed(1)}%`,
-                      name === "laporan" ? "% Laporan Masuk" : "% Pelapor",
-                    ]}
-                    labelFormatter={(label, payload) => {
-                      const item = payload?.[0]?.payload;
-                      return `${item?.fullName ?? label} (${item?.count ?? ""} jadwal)`;
-                    }}
-                    contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }}
-                  />
-                  <Legend
-                    formatter={name => name === "laporan" ? "% Laporan Masuk" : "% Pelapor"}
-                    wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
-                  />
-                  <Bar dataKey="laporan" name="laporan" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={48}>
-                    {chartData.map((entry) => (
-                      <Cell
-                        key={entry.name}
-                        fill={entry.laporan >= 80 ? "#22c55e" : entry.laporan >= 50 ? "#f59e0b" : "#ef4444"}
+              {/* Manual bar chart — more reliable than recharts Cell */}
+              <div className="w-full overflow-x-auto">
+                <div style={{ minWidth: chartData.length * 120, height: 280 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={chartData}
+                      margin={{ top: 16, right: 24, left: 0, bottom: chartData.length > 5 ? 72 : 32 }}
+                      barCategoryGap="30%"
+                      barGap={3}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fontSize: 11, fill: "#6b7280" }}
+                        tickLine={false}
+                        axisLine={false}
+                        angle={chartData.length > 5 ? -35 : 0}
+                        textAnchor={chartData.length > 5 ? "end" : "middle"}
+                        interval={0}
+                        height={chartData.length > 5 ? 70 : 30}
                       />
-                    ))}
-                  </Bar>
-                  <Bar dataKey="pelapor" name="pelapor" fill="#8b5cf6" radius={[4, 4, 0, 0]} maxBarSize={48} />
-                </BarChart>
-              </ResponsiveContainer>
+                      <YAxis
+                        domain={[0, 100]}
+                        tickFormatter={v => `${v}%`}
+                        tick={{ fontSize: 11, fill: "#6b7280" }}
+                        tickLine={false}
+                        axisLine={false}
+                        width={44}
+                      />
+                      <Tooltip
+                        formatter={(value: number, name: string) => [
+                          `${Number(value).toFixed(1)}%`,
+                          name === "laporan" ? "% Laporan Masuk" : "% Pelapor",
+                        ]}
+                        labelFormatter={(_label, payload) => {
+                          const item = payload?.[0]?.payload;
+                          return item ? `${item.fullName} (${item.count} jadwal)` : _label;
+                        }}
+                        contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
+                      />
+                      <Legend
+                        formatter={name => name === "laporan" ? "% Laporan Masuk" : "% Pelapor"}
+                        wrapperStyle={{ fontSize: 12, paddingTop: 4 }}
+                        iconType="square"
+                      />
+                      <Bar dataKey="laporan" name="laporan" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={44} label={{ position: "top", fontSize: 10, fill: "#374151", formatter: (v: number) => `${Number(v).toFixed(0)}%` }} />
+                      <Bar dataKey="pelapor" name="pelapor" fill="#8b5cf6" radius={[4, 4, 0, 0]} maxBarSize={44} label={{ position: "top", fontSize: 10, fill: "#374151", formatter: (v: number) => `${Number(v).toFixed(0)}%` }} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
 
               {/* Legend description */}
-              <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-500 justify-center">
+              <div className="mt-3 flex flex-wrap gap-4 text-xs text-gray-500 justify-center">
                 <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-green-500 inline-block" />
-                  <span>% Laporan Masuk ≥ 80% (Sesuai)</span>
+                  <span className="w-3 h-3 rounded-sm inline-block" style={{ background: "#3b82f6" }} />
+                  <span>% Laporan Masuk — rasio laporan terisi vs target</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-amber-500 inline-block" />
-                  <span>% Laporan Masuk 50–79% (Sebagian)</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" />
-                  <span>% Laporan Masuk &lt;50% (Kurang)</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-3 h-3 rounded-sm bg-violet-500 inline-block" />
-                  <span>% Pelapor (unik)</span>
+                  <span className="w-3 h-3 rounded-sm inline-block" style={{ background: "#8b5cf6" }} />
+                  <span>% Pelapor — rasio pelapor unik vs total ditugaskan</span>
                 </div>
               </div>
             </>
