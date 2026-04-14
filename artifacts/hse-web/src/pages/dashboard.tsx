@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
@@ -29,6 +29,12 @@ interface HazardArea {
   area: string;
   count: number;
   pct: number;
+}
+
+interface WeeklyRow {
+  name: string;
+  w1: number; w2: number; w3: number; w4: number; w5: number;
+  total: number;
 }
 
 interface TemplateCompliance {
@@ -91,6 +97,9 @@ export default function DashboardPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [selectedWeeklyTemplate, setSelectedWeeklyTemplate] = useState<string>("");
+  type WeeklySortKey = "name" | "w1" | "w2" | "w3" | "w4" | "w5" | "total";
+  const [weeklySort, setWeeklySort] = useState<{ key: WeeklySortKey; dir: "asc" | "desc" }>({ key: "name", dir: "asc" });
   const [, navigate] = useLocation();
 
   const goToIncidents = (categoryName: string, risk: "fatal" | "major" | "moderate" | "minor" | "all") => {
@@ -117,6 +126,12 @@ export default function DashboardPage() {
     queryKey: ["dashboard-compliance", selectedTemplate, month, year],
     queryFn: () => api.get(`/dashboard/template-compliance?templateId=${selectedTemplate}&month=${month}&year=${year}`),
     enabled: !!selectedTemplate,
+  });
+
+  const { data: weeklyData, isLoading: weeklyLoading } = useQuery<{ departments: WeeklyRow[] }>({
+    queryKey: ["dashboard-weekly", selectedWeeklyTemplate, month, year],
+    queryFn: () => api.get(`/dashboard/template-weekly?templateId=${selectedWeeklyTemplate}&month=${month}&year=${year}`),
+    enabled: !!selectedWeeklyTemplate,
   });
 
   const prevMonth = () => {
@@ -173,6 +188,31 @@ export default function DashboardPage() {
   const hazardPieData = hazardAreas.map((a, i) => ({ name: a.area, value: a.count, color: PIE_COLORS[i % PIE_COLORS.length] }));
 
   const departments = complianceData?.departments ?? [];
+
+  const rawWeeklyRows = weeklyData?.departments ?? [];
+  const sortedWeeklyRows = useMemo(() => {
+    return [...rawWeeklyRows].sort((a, b) => {
+      const av = weeklySort.key === "name" ? a.name : a[weeklySort.key];
+      const bv = weeklySort.key === "name" ? b.name : b[weeklySort.key];
+      if (typeof av === "string" && typeof bv === "string") {
+        return weeklySort.dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      }
+      return weeklySort.dir === "asc" ? (av as number) - (bv as number) : (bv as number) - (av as number);
+    });
+  }, [rawWeeklyRows, weeklySort]);
+
+  function toggleWeeklySort(key: WeeklySortKey) {
+    setWeeklySort(prev =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: key === "name" ? "asc" : "desc" }
+    );
+  }
+
+  function SortIcon({ col }: { col: WeeklySortKey }) {
+    if (weeklySort.key !== col) return <span className="text-gray-300 ml-0.5">↕</span>;
+    return <span className="text-blue-600 ml-0.5">{weeklySort.dir === "asc" ? "↑" : "↓"}</span>;
+  }
 
   return (
     <div className="p-6">
@@ -489,6 +529,98 @@ export default function DashboardPage() {
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Template Weekly Report */}
+      <Card className="mb-4">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Laporan Mingguan Template</CardTitle>
+              <p className="text-xs text-gray-400 mt-0.5">Jumlah template diisi per minggu — {MONTHS[month - 1]} {year}</p>
+            </div>
+            <Select value={selectedWeeklyTemplate} onValueChange={setSelectedWeeklyTemplate}>
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Pilih template..." />
+              </SelectTrigger>
+              <SelectContent className="max-h-60 overflow-y-auto">
+                {templateList.map(t => (
+                  <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!selectedWeeklyTemplate ? (
+            <div className="h-20 flex items-center justify-center text-gray-400 text-sm">Pilih template untuk melihat laporan mingguan</div>
+          ) : weeklyLoading ? (
+            <div className="h-20 flex items-center justify-center text-gray-400">Memuat...</div>
+          ) : sortedWeeklyRows.length === 0 ? (
+            <div className="h-20 flex items-center justify-center text-gray-400 text-sm">Belum ada jadwal atau data untuk template ini</div>
+          ) : (
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50">
+                    {(["name", "w1", "w2", "w3", "w4", "w5", "total"] as WeeklySortKey[]).map((col) => {
+                      const labels: Record<WeeklySortKey, string> = {
+                        name: "Nama Departemen", w1: "Week 1", w2: "Week 2",
+                        w3: "Week 3", w4: "Week 4", w5: "Week 5", total: "Total",
+                      };
+                      return (
+                        <th
+                          key={col}
+                          className={`py-2.5 px-3 font-medium text-gray-600 cursor-pointer hover:text-blue-700 select-none ${col === "name" ? "text-left" : "text-center"}`}
+                          onClick={() => toggleWeeklySort(col)}
+                        >
+                          {labels[col]}<SortIcon col={col} />
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedWeeklyRows.map((row, i) => {
+                    const weekNums: (keyof WeeklyRow)[] = ["w1", "w2", "w3", "w4", "w5"];
+                    return (
+                      <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="py-2.5 px-3 font-medium text-gray-800">{row.name}</td>
+                        {weekNums.map(w => (
+                          <td key={w} className="py-2.5 px-3 text-center">
+                            {(row[w] as number) > 0
+                              ? <span className="font-bold text-blue-700">{row[w] as number}</span>
+                              : <span className="text-gray-300">—</span>}
+                          </td>
+                        ))}
+                        <td className="py-2.5 px-3 text-center">
+                          <span className={`font-bold text-base ${row.total > 0 ? "text-gray-900" : "text-gray-300"}`}>
+                            {row.total > 0 ? row.total : "—"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Totals footer */}
+                  <tr className="border-t-2 bg-blue-50 font-semibold">
+                    <td className="py-2.5 px-3 text-gray-700">Total</td>
+                    {(["w1", "w2", "w3", "w4", "w5"] as const).map(w => {
+                      const sum = sortedWeeklyRows.reduce((s, r) => s + r[w], 0);
+                      return (
+                        <td key={w} className="py-2.5 px-3 text-center text-gray-800">
+                          {sum > 0 ? sum : "—"}
+                        </td>
+                      );
+                    })}
+                    <td className="py-2.5 px-3 text-center text-blue-700 text-base font-bold">
+                      {sortedWeeklyRows.reduce((s, r) => s + r.total, 0)}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>

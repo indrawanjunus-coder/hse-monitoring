@@ -329,4 +329,118 @@ router.get("/templates", async (_req, res) => {
   res.json(templates);
 });
 
+// Template Weekly Report per Departemen
+router.get("/template-weekly", async (req, res) => {
+  const now = new Date();
+  const templateId = req.query.templateId ? parseInt(req.query.templateId as string) : null;
+  const month = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
+  const year = req.query.year ? parseInt(req.query.year as string) : now.getFullYear();
+
+  if (!templateId) {
+    res.json({ departments: [] });
+    return;
+  }
+
+  const prefix = `${year}-${String(month).padStart(2, "0")}`;
+
+  function getWeek(dateStr: string): 1 | 2 | 3 | 4 | 5 {
+    const day = parseInt(dateStr.split("-")[2] ?? "1");
+    if (day <= 7) return 1;
+    if (day <= 14) return 2;
+    if (day <= 21) return 3;
+    if (day <= 28) return 4;
+    return 5;
+  }
+
+  // Get all schedules for this template
+  const schedules = await db.select().from(schedulesTable).where(eq(schedulesTable.templateId, templateId));
+  if (schedules.length === 0) {
+    res.json({ departments: [] });
+    return;
+  }
+
+  const scheduleIds = schedules.map(s => s.id);
+
+  // Get inspections for this month for those schedules
+  const allInspections = await db.select().from(inspectionsTable)
+    .where(inArray(inspectionsTable.scheduleId, scheduleIds));
+  const monthInspections = allInspections.filter(i => i.inspectedAt.startsWith(prefix));
+
+  // Get group links
+  const schedGroups = await db.select().from(scheduleGroupsTable)
+    .where(inArray(scheduleGroupsTable.scheduleId, scheduleIds));
+
+  const schedUsers = await db.select().from(scheduleUsersTable)
+    .where(inArray(scheduleUsersTable.scheduleId, scheduleIds));
+
+  const groupIds = [...new Set([
+    ...schedGroups.map(sg => sg.groupId),
+    ...schedules.filter(s => s.groupId).map(s => s.groupId!),
+  ])];
+
+  const groups = groupIds.length > 0
+    ? await db.select().from(groupsTable).where(inArray(groupsTable.id, groupIds))
+    : [];
+
+  const allMembers = groupIds.length > 0
+    ? await db.select().from(groupMembersTable).where(inArray(groupMembersTable.groupId, groupIds))
+    : [];
+
+  const directUserIds = [...new Set(schedUsers.map(u => u.userId))];
+
+  // Build department map
+  type WeeklyRow = { name: string; w1: number; w2: number; w3: number; w4: number; w5: number };
+  const deptMap: Record<string, WeeklyRow> = {};
+
+  for (const sched of schedules) {
+    const linkedGroupIds = schedGroups.filter(sg => sg.scheduleId === sched.id).map(sg => sg.groupId);
+    if (sched.groupId && !linkedGroupIds.includes(sched.groupId)) linkedGroupIds.push(sched.groupId);
+
+    for (const gId of linkedGroupIds) {
+      const group = groups.find(g => g.id === gId);
+      const key = `group_${gId}`;
+      if (!deptMap[key]) {
+        deptMap[key] = { name: group?.name ?? `Departemen #${gId}`, w1: 0, w2: 0, w3: 0, w4: 0, w5: 0 };
+      }
+    }
+
+    const directForSched = schedUsers.filter(su => su.scheduleId === sched.id).map(su => su.userId);
+    if (directForSched.length > 0 && !deptMap["direct_users"]) {
+      deptMap["direct_users"] = { name: "Pengguna Individual", w1: 0, w2: 0, w3: 0, w4: 0, w5: 0 };
+    }
+  }
+
+  // Tally inspections into weeks per department
+  for (const insp of monthInspections) {
+    const sched = schedules.find(s => s.id === insp.scheduleId);
+    if (!sched) continue;
+
+    const week = getWeek(insp.inspectedAt);
+    const wKey = `w${week}` as "w1" | "w2" | "w3" | "w4" | "w5";
+
+    const linkedGroupIds = schedGroups.filter(sg => sg.scheduleId === sched.id).map(sg => sg.groupId);
+    if (sched.groupId && !linkedGroupIds.includes(sched.groupId)) linkedGroupIds.push(sched.groupId);
+
+    let assigned = false;
+    for (const gId of linkedGroupIds) {
+      const isMember = allMembers.some(m => m.groupId === gId && m.userId === insp.supervisorId);
+      if (isMember) {
+        const key = `group_${gId}`;
+        if (deptMap[key]) { deptMap[key]![wKey]++; assigned = true; }
+      }
+    }
+    if (!assigned && directUserIds.includes(insp.supervisorId) && deptMap["direct_users"]) {
+      deptMap["direct_users"]![wKey]++;
+    }
+  }
+
+  const departments = Object.values(deptMap).map(d => ({
+    name: d.name,
+    w1: d.w1, w2: d.w2, w3: d.w3, w4: d.w4, w5: d.w5,
+    total: d.w1 + d.w2 + d.w3 + d.w4 + d.w5,
+  }));
+
+  res.json({ month, year, templateId, departments });
+});
+
 export default router;
