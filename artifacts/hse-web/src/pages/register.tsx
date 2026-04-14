@@ -1,10 +1,11 @@
-import { useState } from "react";
-import { Shield, Building2, ChevronRight, CheckCircle, Mail, ExternalLink } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Shield, Building2, ChevronRight, CheckCircle, Mail, ExternalLink, Upload, CreditCard, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { api } from "@/lib/api";
+
+const API_BASE = "/api";
 
 const PLANS = [
   { id: "free", label: "Gratis", price: "Rp 0", period: "/bulan", desc: "1 bulan trial, fitur dasar" },
@@ -12,18 +13,51 @@ const PLANS = [
   { id: "yearly", label: "Tahunan", price: "Rp 2.250.000", period: "/tahun", desc: "Hemat 25%, bayar tahunan" },
 ];
 
+const PLAN_MONTHS: Record<string, number> = { monthly: 1, yearly: 12, free: 1 };
+
+interface PaymentInfo {
+  paymentMethod: "qris" | "transfer";
+  qrisImageUrl: string;
+  bankName: string;
+  bankAccountNumber: string;
+  bankAccountName: string;
+  bankNote: string;
+  priceMonthly: number;
+  priceYearly: number;
+}
+
+function formatRp(n: number) {
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
+}
+
+type Step = "plan" | "form" | "payment" | "success";
+
 export default function RegisterPage() {
   const urlPlan = new URLSearchParams(window.location.search).get("plan");
   const validPlanIds = PLANS.map(p => p.id);
   const initialPlan = urlPlan && validPlanIds.includes(urlPlan) ? urlPlan : "monthly";
-  const [step, setStep] = useState<"plan" | "form" | "success">(urlPlan && validPlanIds.includes(urlPlan) ? "form" : "plan");
+  const [step, setStep] = useState<Step>(urlPlan && validPlanIds.includes(urlPlan) ? "form" : "plan");
   const [selectedPlan, setSelectedPlan] = useState(initialPlan);
   const [form, setForm] = useState({
     companyName: "", companySlug: "", contactName: "", contactEmail: "", contactPhone: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<{ slug: string; name: string; contactEmail?: string } | null>(null);
+  const [result, setResult] = useState<{ slug: string; name: string; contactEmail?: string; id?: number } | null>(null);
+
+  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
+
+  useEffect(() => {
+    if (step === "payment") {
+      fetch(`${API_BASE}/payments/public-info`)
+        .then(r => r.json())
+        .then(setPaymentInfo)
+        .catch(() => {});
+    }
+  }, [step]);
 
   const handleSlugAuto = (name: string) => {
     const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 30);
@@ -35,16 +69,27 @@ export default function RegisterPage() {
     setError("");
     setLoading(true);
     try {
-      const res = await api.post<{ company: { slug: string; name: string } }>("/auth/register", {
-        companyName: form.companyName,
-        companySlug: form.companySlug,
-        contactName: form.contactName,
-        contactEmail: form.contactEmail,
-        contactPhone: form.contactPhone,
-        plan: selectedPlan,
+      const r = await fetch(`${API_BASE}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName: form.companyName,
+          companySlug: form.companySlug,
+          contactName: form.contactName,
+          contactEmail: form.contactEmail,
+          contactPhone: form.contactPhone,
+          plan: selectedPlan,
+        }),
       });
-      setResult({ ...res.company, contactEmail: form.contactEmail });
-      setStep("success");
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Gagal mendaftar");
+      const company = data.company;
+      setResult({ ...company, contactEmail: form.contactEmail });
+      if (selectedPlan === "free") {
+        setStep("success");
+      } else {
+        setStep("payment");
+      }
     } catch (err: any) {
       setError(err.message ?? "Gagal mendaftar");
     } finally {
@@ -52,10 +97,38 @@ export default function RegisterPage() {
     }
   };
 
+  const handlePaymentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!proofFile) { setPaymentError("Pilih file bukti transfer"); return; }
+    if (!result?.id) { setPaymentError("Data perusahaan tidak ditemukan"); return; }
+    setPaymentError("");
+    setPaymentLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append("proof", proofFile);
+      fd.append("companyId", String(result.id));
+      fd.append("plan", selectedPlan);
+      fd.append("periodMonths", String(PLAN_MONTHS[selectedPlan] ?? 1));
+      const r = await fetch(`${API_BASE}/payments/public-submit`, { method: "POST", body: fd });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "Gagal mengirim bukti");
+      setStep("success");
+    } catch (err: any) {
+      setPaymentError(err.message ?? "Gagal mengirim bukti");
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const planData = PLANS.find(p => p.id === selectedPlan);
+  const isQris = !paymentInfo || paymentInfo.paymentMethod === "qris";
+  const selectedAmount = paymentInfo
+    ? selectedPlan === "yearly" ? formatRp(paymentInfo.priceYearly) : formatRp(paymentInfo.priceMonthly)
+    : "...";
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-2xl mx-auto py-12 px-4">
-        {/* Header */}
         <div className="flex items-center gap-3 mb-10">
           <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
             <Shield className="w-5 h-5 text-white" />
@@ -122,7 +195,11 @@ export default function RegisterPage() {
               ← Kembali
             </button>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Data Perusahaan</h1>
-            <p className="text-gray-500 mb-6">Lengkapi informasi perusahaan. Akun admin akan dikirim ke email Anda setelah diaktivasi.</p>
+            <p className="text-gray-500 mb-6">
+              {selectedPlan === "free"
+                ? "Lengkapi informasi perusahaan. Akun admin akan dikirim ke email Anda setelah diaktivasi."
+                : "Lengkapi informasi perusahaan, lalu lanjutkan ke pembayaran."}
+            </p>
 
             {error && (
               <Alert variant="destructive" className="mb-5 py-3">
@@ -173,16 +250,123 @@ export default function RegisterPage() {
 
               <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-center justify-between">
                 <div>
-                  <div className="text-sm font-medium text-gray-900">Paket dipilih: {PLANS.find(p => p.id === selectedPlan)?.label}</div>
-                  <div className="text-sm text-gray-500">{PLANS.find(p => p.id === selectedPlan)?.price} {PLANS.find(p => p.id === selectedPlan)?.period}</div>
+                  <div className="text-sm font-medium text-gray-900">Paket dipilih: {planData?.label}</div>
+                  <div className="text-sm text-gray-500">{planData?.price} {planData?.period}</div>
                 </div>
                 <button type="button" onClick={() => setStep("plan")} className="text-xs text-blue-600 hover:underline">Ubah</button>
               </div>
 
               <Button type="submit" disabled={loading} className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium">
-                {loading ? "Mendaftarkan..." : "Daftar Sekarang"}
+                {loading ? "Mendaftarkan..." : selectedPlan === "free" ? "Daftar Sekarang" : "Lanjutkan ke Pembayaran →"}
               </Button>
             </form>
+          </div>
+        )}
+
+        {/* Step: payment */}
+        {step === "payment" && result && (
+          <div>
+            <div className="flex items-center gap-2 mb-6">
+              <CreditCard className="w-5 h-5 text-blue-600" />
+              <h1 className="text-xl font-bold text-gray-900">Pembayaran Langganan</h1>
+            </div>
+
+            <div className="p-4 bg-green-50 border border-green-200 rounded-xl mb-6 flex items-start gap-3">
+              <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
+              <div className="text-sm text-green-800">
+                <strong>{result.name}</strong> berhasil terdaftar! Selesaikan pembayaran untuk mengaktifkan akun Anda lebih cepat.
+              </div>
+            </div>
+
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl mb-6 text-sm text-blue-800">
+              <strong>Paket:</strong> {planData?.label} — {selectedAmount}
+            </div>
+
+            {isQris && paymentInfo?.qrisImageUrl && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+                <h2 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <QrCode className="w-4 h-4 text-blue-600" /> Scan QRIS
+                </h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  Transfer <span className="font-semibold text-gray-800">{selectedAmount}</span> ke QRIS berikut:
+                </p>
+                <div className="flex justify-center">
+                  <img
+                    src={paymentInfo.qrisImageUrl}
+                    alt="QRIS"
+                    className="max-w-xs w-full rounded-lg border border-gray-100"
+                    onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {!isQris && paymentInfo && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+                <h2 className="font-semibold text-gray-900 mb-3">Transfer Rekening Bank</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  Transfer <span className="font-semibold text-gray-800">{selectedAmount}</span> ke rekening berikut:
+                </p>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-100">
+                  {paymentInfo.bankName && (
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Bank</span>
+                      <span className="font-semibold text-gray-900">{paymentInfo.bankName}</span>
+                    </div>
+                  )}
+                  {paymentInfo.bankAccountNumber && (
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">No. Rekening</span>
+                      <span className="font-semibold text-gray-900 tracking-wider">{paymentInfo.bankAccountNumber}</span>
+                    </div>
+                  )}
+                  {paymentInfo.bankAccountName && (
+                    <div className="flex justify-between">
+                      <span className="text-sm text-gray-500">Atas Nama</span>
+                      <span className="font-semibold text-gray-900">{paymentInfo.bankAccountName}</span>
+                    </div>
+                  )}
+                </div>
+                {paymentInfo.bankNote && <p className="mt-3 text-sm text-gray-500 italic">{paymentInfo.bankNote}</p>}
+              </div>
+            )}
+
+            {isQris && paymentInfo && !paymentInfo.qrisImageUrl && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
+                <p className="text-sm text-blue-700">Hubungi admin untuk informasi pembayaran.</p>
+              </div>
+            )}
+
+            <form onSubmit={handlePaymentSubmit} className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+              <h2 className="font-semibold text-gray-900 mb-3">Upload Bukti Transfer</h2>
+              {paymentError && (
+                <Alert variant="destructive" className="mb-4 py-3">
+                  <AlertDescription>{paymentError}</AlertDescription>
+                </Alert>
+              )}
+              <div className="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center mb-4">
+                <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                <label className="cursor-pointer">
+                  <span className="text-sm font-medium text-blue-600 hover:underline">Pilih file</span>
+                  <span className="text-sm text-gray-500"> atau drag & drop</span>
+                  <input type="file" className="hidden" accept="image/*,.pdf" onChange={e => setProofFile(e.target.files?.[0] ?? null)} />
+                </label>
+                {proofFile && <p className="text-sm text-gray-600 mt-2 font-medium">{proofFile.name}</p>}
+                <p className="text-xs text-gray-400 mt-1">JPG, PNG, PDF · Maks. 10MB</p>
+              </div>
+              <Button type="submit" disabled={paymentLoading || !proofFile} className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium">
+                {paymentLoading ? "Mengirim..." : "Kirim Bukti Transfer"}
+              </Button>
+            </form>
+
+            <div className="text-center">
+              <button
+                onClick={() => setStep("success")}
+                className="text-sm text-gray-400 hover:text-gray-600"
+              >
+                Lewati — bayar nanti
+              </button>
+            </div>
           </div>
         )}
 
@@ -192,12 +376,16 @@ export default function RegisterPage() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-3">Pendaftaran Berhasil!</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-3">
+              {selectedPlan !== "free" ? "Bukti Terkirim!" : "Pendaftaran Berhasil!"}
+            </h1>
             <p className="text-gray-600 mb-2">
               Perusahaan <strong>{result.name}</strong> telah terdaftar.
             </p>
             <p className="text-gray-500 text-sm mb-6">
-              Pendaftaran Anda sedang dalam proses verifikasi oleh admin sistem.
+              {selectedPlan !== "free"
+                ? "Pembayaran Anda sedang diverifikasi. Akun akan diaktifkan setelah pembayaran dikonfirmasi."
+                : "Pendaftaran Anda sedang dalam proses verifikasi oleh admin sistem."}
             </p>
 
             <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl text-left mb-6">

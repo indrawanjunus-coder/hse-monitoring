@@ -268,3 +268,91 @@ export function incidentEscalationHtml(incident: {
     </div>
   `;
 }
+
+export function subscriptionExpiryEmailHtml(params: {
+  companyName: string;
+  contactName: string;
+  daysLeft: number;
+  subscriptionEndsAt: string;
+  planLabel: string;
+  portalUrl: string;
+  paymentMethod: "qris" | "transfer";
+  qrisImageUrl?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankAccountName?: string;
+  priceMonthly: number;
+  priceYearly: number;
+}): string {
+  const {
+    companyName, contactName, daysLeft, subscriptionEndsAt, planLabel,
+    portalUrl, paymentMethod, qrisImageUrl, bankName, bankAccountNumber, bankAccountName,
+    priceMonthly, priceYearly,
+  } = params;
+
+  const isUrgent = daysLeft <= 2;
+  const urgencyColor = isUrgent ? "#dc2626" : daysLeft <= 15 ? "#d97706" : "#2563eb";
+  const urgencyBg = isUrgent ? "#fef2f2" : daysLeft <= 15 ? "#fffbeb" : "#eff6ff";
+  const urgencyLabel = isUrgent ? `⚠️ SEGERA — ${daysLeft} hari lagi` : `📅 ${daysLeft} hari lagi`;
+
+  const fmtRp = (n: number) =>
+    new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
+
+  const paymentSection = paymentMethod === "qris" && qrisImageUrl ? `
+    <div style="margin-top:16px;padding:16px;background:#f9fafb;border-radius:8px;text-align:center">
+      <p style="margin:0 0 12px;font-size:14px;color:#374151;font-weight:600">Scan QRIS untuk membayar:</p>
+      <img src="${qrisImageUrl}" alt="QRIS" style="max-width:200px;border-radius:8px;border:1px solid #e5e7eb" />
+    </div>
+  ` : paymentMethod === "transfer" && bankAccountNumber ? `
+    <div style="margin-top:16px;padding:16px;background:#f9fafb;border-radius:8px">
+      <p style="margin:0 0 12px;font-size:14px;color:#374151;font-weight:600">Transfer ke rekening:</p>
+      <table style="width:100%;font-size:14px;border-collapse:collapse">
+        ${bankName ? `<tr><td style="color:#6b7280;padding:4px 0">Bank</td><td style="font-weight:600;color:#111827;text-align:right">${bankName}</td></tr>` : ""}
+        ${bankAccountNumber ? `<tr><td style="color:#6b7280;padding:4px 0">No. Rekening</td><td style="font-weight:700;color:#111827;text-align:right;letter-spacing:1px">${bankAccountNumber}</td></tr>` : ""}
+        ${bankAccountName ? `<tr><td style="color:#6b7280;padding:4px 0">Atas Nama</td><td style="font-weight:600;color:#111827;text-align:right">${bankAccountName}</td></tr>` : ""}
+      </table>
+    </div>
+  ` : `<p style="font-size:14px;color:#6b7280;margin-top:12px">Hubungi admin untuk informasi pembayaran.</p>`;
+
+  return `
+    <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:20px">
+      <div style="background:white;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">
+        <div style="background:#1d4ed8;padding:20px 24px">
+          <h1 style="margin:0;color:white;font-size:18px;font-weight:700">H&A Monitoring System</h1>
+          <p style="margin:4px 0 0;color:#bfdbfe;font-size:13px">Notifikasi Perpanjangan Langganan</p>
+        </div>
+        <div style="padding:24px">
+          <p style="margin:0 0 16px;font-size:15px;color:#374151">Yth. <strong>${contactName}</strong>,</p>
+
+          <div style="padding:14px 16px;background:${urgencyBg};border-radius:8px;border-left:4px solid ${urgencyColor};margin-bottom:20px">
+            <p style="margin:0;color:${urgencyColor};font-weight:700;font-size:15px">${urgencyLabel}</p>
+            <p style="margin:6px 0 0;color:#374151;font-size:14px">
+              Langganan <strong>${companyName}</strong> (${planLabel}) akan berakhir pada <strong>${subscriptionEndsAt}</strong>.
+            </p>
+          </div>
+
+          <p style="font-size:14px;color:#374151;margin:0 0 8px">Segera perpanjang langganan agar akses sistem HSE Anda tidak terganggu.</p>
+          <p style="font-size:14px;color:#374151;margin:0 0 16px">
+            <strong>Harga perpanjangan:</strong> Bulanan ${fmtRp(priceMonthly)} · Tahunan ${fmtRp(priceYearly)}
+          </p>
+
+          ${paymentSection}
+
+          <div style="margin-top:20px;text-align:center">
+            <a href="${portalUrl}" style="display:inline-block;background:#1d4ed8;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">
+              Upload Bukti Bayar →
+            </a>
+          </div>
+
+          <p style="margin-top:20px;font-size:13px;color:#6b7280">
+            Setelah pembayaran dikonfirmasi oleh admin, akses Anda akan diperpanjang otomatis.<br/>
+            Jika sudah melakukan pembayaran, abaikan email ini.
+          </p>
+        </div>
+        <div style="padding:16px 24px;border-top:1px solid #f3f4f6;background:#f9fafb">
+          <p style="margin:0;font-size:12px;color:#9ca3af">Notifikasi otomatis dari H&A Monitoring System · <a href="${portalUrl}" style="color:#6b7280">${portalUrl}</a></p>
+        </div>
+      </div>
+    </div>
+  `;
+}

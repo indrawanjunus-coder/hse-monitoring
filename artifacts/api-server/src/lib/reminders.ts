@@ -1,7 +1,7 @@
 import { schedule } from "node-cron";
-import { db, incidentsTable, usersTable, groupsTable, groupMembersTable, plantsTable, categoriesTable } from "@workspace/db";
+import { db, incidentsTable, usersTable, groupsTable, groupMembersTable, plantsTable, categoriesTable, companiesTable, systemSettingsTable, plansTable } from "@workspace/db";
 import { eq, and, ne, lt } from "drizzle-orm";
-import { sendEmail, incidentTargetReminderHtml, incidentEscalationHtml } from "./email";
+import { sendEmail, incidentTargetReminderHtml, incidentEscalationHtml, subscriptionExpiryEmailHtml } from "./email";
 import { logger } from "./logger";
 
 function getLocalDateString(date: Date): string {
@@ -9,6 +9,12 @@ function getLocalDateString(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
 }
 
 async function getPicEmails(assignedGroupId: number): Promise<string[]> {
@@ -161,6 +167,83 @@ async function sendEscalationReminders() {
   }
 }
 
+async function sendSubscriptionExpiryNotifications() {
+  const now = new Date();
+  const NOTIFY_DAYS = [30, 15, 2, 1];
+
+  logger.info("Running subscription expiry notifications");
+
+  const [settingsRows, plans] = await Promise.all([
+    db.select().from(systemSettingsTable),
+    db.select().from(plansTable),
+  ]);
+  const settings: Record<string, string> = {};
+  settingsRows.forEach(r => { settings[r.key] = r.value; });
+
+  const paymentMethod = (settings["payment_method"] ?? "qris") as "qris" | "transfer";
+  const qrisImageUrl = settings["qris_image_url"] ?? "";
+  const bankName = settings["bank_name"] ?? "";
+  const bankAccountNumber = settings["bank_account_number"] ?? "";
+  const bankAccountName = settings["bank_account_name"] ?? "";
+
+  const getPlanPrice = (slug: string, field: "priceMonthly" | "priceYearly") => {
+    const p = plans.find(p => p.slug === slug);
+    return p ? Number(p[field] ?? 0) : 0;
+  };
+  const priceMonthly = getPlanPrice("monthly", "priceMonthly");
+  const priceYearly = getPlanPrice("yearly", "priceYearly");
+
+  const planLabels: Record<string, string> = { free: "Gratis", monthly: "Bulanan", yearly: "Tahunan" };
+
+  const allCompanies = await db.select().from(companiesTable);
+
+  for (const daysLeft of NOTIFY_DAYS) {
+    const targetDate = getLocalDateString(addDays(now, daysLeft));
+
+    const expiring = allCompanies.filter(c => {
+      if (!c.subscriptionEndsAt || c.status !== "active") return false;
+      return getLocalDateString(new Date(c.subscriptionEndsAt)) === targetDate;
+    });
+
+    for (const company of expiring) {
+      try {
+        const portalUrl = `${process.env.APP_URL ?? "https://app.example.com"}/c/${company.slug}/`;
+        const subscriptionEndsAt = new Date(company.subscriptionEndsAt!).toLocaleDateString("id-ID", {
+          day: "numeric", month: "long", year: "numeric",
+        });
+
+        const html = subscriptionExpiryEmailHtml({
+          companyName: company.name,
+          contactName: company.contactName,
+          daysLeft,
+          subscriptionEndsAt,
+          planLabel: planLabels[company.plan] ?? company.plan,
+          portalUrl,
+          paymentMethod,
+          qrisImageUrl,
+          bankName,
+          bankAccountNumber,
+          bankAccountName,
+          priceMonthly,
+          priceYearly,
+        });
+
+        const dayLabel = daysLeft === 1 ? "H-1" : daysLeft === 2 ? "H-2" : `H-${daysLeft}`;
+        const subject = `[HSE] 🔔 ${dayLabel} Langganan ${company.name} Akan Berakhir`;
+
+        const result = await sendEmail([company.contactEmail], subject, html);
+        if (result.success) {
+          logger.info({ companyId: company.id, daysLeft }, "Subscription expiry email sent");
+        } else {
+          logger.warn({ companyId: company.id, daysLeft, error: result.error }, "Failed to send expiry email");
+        }
+      } catch (err) {
+        logger.error({ err, companyId: company.id, daysLeft }, "Error sending expiry notification");
+      }
+    }
+  }
+}
+
 export function startReminderCron() {
   schedule("0 7 * * *", () => {
     sendIncidentTargetReminders().catch(err =>
@@ -174,5 +257,11 @@ export function startReminderCron() {
     );
   });
 
-  logger.info("Reminder crons started: target reminders (daily 07:00), escalation check (every hour)");
+  schedule("0 8 * * *", () => {
+    sendSubscriptionExpiryNotifications().catch(err =>
+      logger.error({ err }, "Subscription expiry notification cron error")
+    );
+  });
+
+  logger.info("Reminder crons started: target reminders (07:00), escalation check (hourly), subscription expiry (08:00)");
 }

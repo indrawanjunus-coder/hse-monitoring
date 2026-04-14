@@ -187,7 +187,7 @@ export default function SysadminPayments({ token }: { token: string }) {
                 {loading ? "..." : "Tolak"}
               </Button>
               <Button onClick={() => review("approve")} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white">
-                {loading ? "..." : "Setujui"}
+                {loading ? "..." : "✓ Lunas"}
               </Button>
             </DialogFooter>
           </DialogContent>
