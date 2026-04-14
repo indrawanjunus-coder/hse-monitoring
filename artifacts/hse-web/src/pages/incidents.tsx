@@ -403,7 +403,7 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Plant *</Label>
+          <Label>Area *</Label>
           <Select value={plantId} onValueChange={setPlantId}>
             <SelectTrigger><SelectValue placeholder="Pilih plant" /></SelectTrigger>
             <SelectContent className="max-h-60 overflow-y-auto">{plants.map(p => <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>)}</SelectContent>
@@ -532,7 +532,7 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
       </div>
       <div className="flex items-center gap-2">
         <Checkbox id="furtherAction" checked={needsFurtherAction} onCheckedChange={v => setNeedsFurtherAction(v === true)} />
-        <Label htmlFor="furtherAction">Perlu tindak lanjut lebih lanjut</Label>
+        <Label htmlFor="furtherAction">Perlu tindak lanjut</Label>
       </div>
 
       <div className="space-y-2">

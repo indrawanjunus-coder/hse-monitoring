@@ -61,7 +61,7 @@ const navItems: NavItem[] = [
     href: "/incidents",
     icon: <AlertTriangle className="w-4 h-4" />,
     children: [
-      { label: "Daftar H&I", href: "/incidents", icon: <AlertTriangle className="w-4 h-4" /> },
+      { label: "Identifikasi Bahaya", href: "/incidents", icon: <AlertTriangle className="w-4 h-4" /> },
       { label: "Laporan Followup", href: "/reports/followup", icon: <BarChart2 className="w-4 h-4" /> },
       { label: "Laporan Bulanan", href: "/reports/monthly", icon: <FileBarChart className="w-4 h-4" /> },
       { label: "Matrix Aksi per Plant", href: "/reports/action-matrix", icon: <Grid3X3 className="w-4 h-4" /> },

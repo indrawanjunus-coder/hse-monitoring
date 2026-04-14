@@ -185,7 +185,7 @@ router.post("/", async (req, res) => {
     } else {
       sendEmail(
         emails,
-        `[HSE] Incident Baru #${inc.id} - ${formatted.categoryName}`,
+        `Identifikasi Bahaya Baru #${inc.id} - ${formatted.categoryName}`,
         incidentEmailHtml({
           id: inc.id, detail: inc.detail,
           categoryName: formatted.categoryName,
