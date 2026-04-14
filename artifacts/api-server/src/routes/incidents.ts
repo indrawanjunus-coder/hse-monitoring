@@ -18,14 +18,15 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
   const [action] = inc.actionId ? await db.select().from(actionsTable).where(eq(actionsTable.id, inc.actionId)) : [undefined];
   const [preventiveAction] = inc.preventiveActionId ? await db.select().from(preventiveActionsTable).where(eq(preventiveActionsTable.id, inc.preventiveActionId)) : [undefined];
   const [assignedGroup] = inc.assignedGroupId ? await db.select().from(groupsTable).where(eq(groupsTable.id, inc.assignedGroupId)) : [undefined];
+  const [assignedUser] = (inc as any).assignedUserId ? await db.select().from(usersTable).where(eq(usersTable.id, (inc as any).assignedUserId)) : [undefined];
 
-  let picMembers: { name: string; email: string }[] = [];
+  let picMembers: { id: number; name: string; email: string }[] = [];
   if (inc.assignedGroupId) {
-    const rows = await db.select({ name: usersTable.name, email: usersTable.email })
+    const rows = await db.select({ id: usersTable.id, name: usersTable.name, email: usersTable.email })
       .from(groupMembersTable)
       .innerJoin(usersTable, eq(groupMembersTable.userId, usersTable.id))
       .where(eq(groupMembersTable.groupId, inc.assignedGroupId));
-    picMembers = rows.filter(r => r.email).map(r => ({ name: r.name, email: r.email! }));
+    picMembers = rows.filter(r => r.email).map(r => ({ id: r.id, name: r.name, email: r.email! }));
   }
 
   const attachments = await db
@@ -43,6 +44,7 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
     actionName: action?.name ?? null,
     preventiveActionName: preventiveAction?.name ?? null,
     assignedGroupName: assignedGroup?.name ?? null,
+    assignedUserName: assignedUser?.name ?? null,
     picMembers,
     attachments,
     createdAt: inc.createdAt.toISOString(),
@@ -80,20 +82,23 @@ router.get("/", async (req, res) => {
       ...groupCats.map(r => r.categoryId),
     ]);
 
-    // Also include incidents the user personally reported
+    // Also include incidents the user personally reported or is directly assigned to handle
     const baseWhere = cid ? eq(incidentsTable.companyId, cid) : undefined;
-    if (allowedCategoryIds.size === 0) {
-      incidents = await db.select().from(incidentsTable)
-        .where(baseWhere ? and(baseWhere, eq(incidentsTable.reporterId, authUser.id)) : eq(incidentsTable.reporterId, authUser.id))
-        .orderBy(desc(incidentsTable.createdAt));
-    } else {
-      const allIncidents = baseWhere
-        ? await db.select().from(incidentsTable).where(baseWhere).orderBy(desc(incidentsTable.createdAt))
-        : await db.select().from(incidentsTable).orderBy(desc(incidentsTable.createdAt));
-      incidents = allIncidents.filter(i =>
-        allowedCategoryIds.has(i.categoryId) || i.reporterId === authUser.id
-      );
-    }
+    const allIncidents = baseWhere
+      ? await db.select().from(incidentsTable).where(baseWhere).orderBy(desc(incidentsTable.createdAt))
+      : await db.select().from(incidentsTable).orderBy(desc(incidentsTable.createdAt));
+
+    incidents = allIncidents.filter(i => {
+      // User is the reporter
+      if (i.reporterId === authUser.id) return true;
+      // User is directly assigned to handle the incident
+      if ((i as any).assignedUserId === authUser.id) return true;
+      // User belongs to the assigned group
+      if (i.assignedGroupId && userGroupIds.includes(i.assignedGroupId)) return true;
+      // User is in a category that the incident belongs to
+      if (allowedCategoryIds.has(i.categoryId)) return true;
+      return false;
+    });
   }
 
   const result = await Promise.all(incidents.map(formatIncident));
@@ -113,7 +118,14 @@ router.post("/", async (req, res) => {
   const reporterId = req.body.reporterId ?? user.id;
 
   const [cat] = await db.select().from(categoriesTable).where(eq(categoriesTable.id, categoryId));
-  const assignedGroupId = cat?.picGroupId ?? null;
+  // assignedGroupId: first from form's recipientGroupIds, then category's PIC group
+  const assignedGroupId = (Array.isArray(recipientGroupIds) && recipientGroupIds.length > 0)
+    ? Number(recipientGroupIds[0])
+    : (cat?.picGroupId ?? null);
+  // assignedUserId: first individual user from recipientUserIds (if provided)
+  const assignedUserId = (Array.isArray(recipientUserIds) && recipientUserIds.length > 0)
+    ? Number(recipientUserIds[0])
+    : null;
 
   const today = new Date().toISOString().slice(0, 10);
   const cid = req.user!.companyId;
@@ -133,7 +145,8 @@ router.post("/", async (req, res) => {
     needsFurtherAction: needsFurtherAction ?? false,
     status: "open",
     assignedGroupId,
-  }).returning();
+    assignedUserId,
+  } as any).returning();
 
   if (!inc) { res.status(500).json({ message: "Failed" }); return; }
 
@@ -211,10 +224,29 @@ router.post("/", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
+  const authUser = req.user!;
+
+  // Load the existing incident first for access control check
+  const [existing] = await db.select().from(incidentsTable).where(eq(incidentsTable.id, id));
+  if (!existing) { res.status(404).json({ message: "Not found" }); return; }
+
+  // Access control: admin, reporter, assignedUser, or member of assignedGroup
+  if (authUser.role !== "admin") {
+    let allowed = existing.reporterId === authUser.id;
+    if (!allowed && (existing as any).assignedUserId === authUser.id) allowed = true;
+    if (!allowed && existing.assignedGroupId) {
+      const membership = await db.select({ id: groupMembersTable.userId })
+        .from(groupMembersTable)
+        .where(and(eq(groupMembersTable.groupId, existing.assignedGroupId), eq(groupMembersTable.userId, authUser.id)));
+      if (membership.length > 0) allowed = true;
+    }
+    if (!allowed) { res.status(403).json({ message: "Tidak diizinkan mengubah tiket ini" }); return; }
+  }
+
   const {
     status, actionId, preventiveActionId, followupNote, needsFurtherAction,
     plantId, categoryId, incidentDate, reportedDate, detail,
-    incidentType, targetDate, rootCause,
+    incidentType, targetDate, rootCause, assignedGroupId, assignedUserId,
   } = req.body;
   const updates: Record<string, unknown> = {};
   if (status !== undefined) {
@@ -230,6 +262,11 @@ router.put("/:id", async (req, res) => {
     updates.categoryId = categoryId;
     const [cat] = await db.select().from(categoriesTable).where(eq(categoriesTable.id, categoryId));
     updates.assignedGroupId = cat?.picGroupId ?? null;
+  }
+  // Allow explicit assignment override (admin only)
+  if (authUser.role === "admin") {
+    if (assignedGroupId !== undefined) updates.assignedGroupId = assignedGroupId || null;
+    if (assignedUserId !== undefined) updates.assignedUserId = assignedUserId || null;
   }
   if (incidentDate !== undefined) updates.incidentDate = incidentDate;
   if (reportedDate !== undefined) updates.reportedDate = reportedDate;

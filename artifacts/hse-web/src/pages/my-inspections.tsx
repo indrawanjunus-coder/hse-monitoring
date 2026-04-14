@@ -282,13 +282,9 @@ export default function MyInspectionsPage() {
     queryFn: () => api.get("/schedules?todayOnly=true"),
   });
 
-  const mySchedules = schedules.filter(s => {
-    if (!user) return false;
-    if (user.role === "admin") return true;
-    if (s.userIds && s.userIds.length > 0) return s.userIds.includes(user.id);
-    if (s.supervisorId) return s.supervisorId === user.id;
-    return true;
-  });
+  // API already returns only schedules this user is assigned to (directly or via group).
+  // The old filter was excluding group members when a schedule had both group + direct user assignments.
+  const mySchedules = schedules.filter(s => !!s && (user?.role === "admin" || true));
   // Split by whether the user has already submitted today (takes priority over status)
   const doneToday = mySchedules.filter(s => s.submittedTodayByUser === true);
   const pending = mySchedules.filter(s => !s.submittedTodayByUser);

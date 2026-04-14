@@ -94,6 +94,7 @@ function AttachmentIcon({ mimeType }: { mimeType: string }) {
 
 interface Incident {
   id: number;
+  reporterId: number;
   reporterName: string;
   plantName: string;
   categoryId: number;
@@ -115,7 +116,9 @@ interface Incident {
   closedAt?: string | null;
   assignedGroupId?: number | null;
   assignedGroupName?: string | null;
-  picMembers?: { name: string; email: string }[];
+  assignedUserId?: number | null;
+  assignedUserName?: string | null;
+  picMembers?: { id: number; name: string; email: string }[];
   escalationLevel?: number;
   createdAt?: string;
   attachments?: Attachment[];
@@ -600,7 +603,13 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
   onUpdate: (data: Record<string, unknown>) => Promise<void>;
   actions: Action[]; preventiveActions: PreventiveAction[];
 }) {
-  const canUpdate = incident.status !== "closed";
+  // User can update if: admin/supervisor, reporter, directly assigned user, or member of assigned group
+  const isAssignedGroupMember = !!(user && incident.picMembers?.some(m => m.id === user.id));
+  const isAuthorized = user?.role === "admin" || user?.role === "supervisor"
+    || incident.reporterId === user?.id
+    || incident.assignedUserId === user?.id
+    || isAssignedGroupMember;
+  const canUpdate = incident.status !== "closed" && isAuthorized;
   const { data: allIncidentTypes = [] } = useQuery<ApiIncidentType[]>({ queryKey: ["incident-types"], queryFn: () => api.get("/incident-types") });
   const incidentTypes = allIncidentTypes.filter(t => t.categoryId === incident.categoryId || t.categoryId == null);
   const [incidentType, setIncidentType] = useState(incident.incidentType ?? "none");
@@ -794,8 +803,14 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
         {incident.closedAt && <div><span className="text-gray-500">Ditutup:</span> <span className="font-medium">{incident.closedAt}</span></div>}
         {incident.assignedGroupName && (
           <div className="col-span-2">
-            <span className="text-gray-500 flex items-center gap-1"><Users className="w-3 h-3" />Group PIC:</span>
+            <span className="text-gray-500 flex items-center gap-1"><Users className="w-3 h-3" />Group Penanganan:</span>
             <span className="font-medium text-blue-700 ml-1">{incident.assignedGroupName}</span>
+          </div>
+        )}
+        {incident.assignedUserName && (
+          <div className="col-span-2">
+            <span className="text-gray-500 flex items-center gap-1"><User className="w-3 h-3" />User Penanganan:</span>
+            <span className="font-medium text-indigo-700 ml-1">{incident.assignedUserName}</span>
           </div>
         )}
       </div>
@@ -933,6 +948,16 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
           </DialogFooter>
         </div>
       )}
+      {incident.status === "closed" && (
+        <div className="bg-gray-100 border border-gray-200 rounded-lg p-3 text-sm text-gray-600 text-center">
+          ✓ Incident ini sudah ditutup.
+        </div>
+      )}
+      {!isAuthorized && incident.status !== "closed" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+          🔒 Anda hanya bisa melihat tiket ini. Update status atau komentar hanya dapat dilakukan oleh pelapor, user/group yang ditugaskan, atau admin.
+        </div>
+      )}
       {(!canUpdate || incident.status === "closed") && (
         <DialogFooter><Button variant="outline" onClick={onClose}>Tutup</Button></DialogFooter>
       )}
@@ -1065,20 +1090,24 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
             </div>
           ))}
         </div>
-        <div className="flex gap-2 pt-1">
-          <Textarea
-            value={commentText}
-            onChange={e => setCommentText(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
-            placeholder="Tulis update perkembangan... (Enter untuk kirim, Shift+Enter baris baru)"
-            rows={2}
-            className="flex-1 text-sm resize-none"
-            disabled={sendingComment}
-          />
-          <Button size="sm" onClick={handleSendComment} disabled={sendingComment || !commentText.trim()} className="self-end">
-            <Send className="w-4 h-4" />
-          </Button>
-        </div>
+        {isAuthorized ? (
+          <div className="flex gap-2 pt-1">
+            <Textarea
+              value={commentText}
+              onChange={e => setCommentText(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
+              placeholder="Tulis update perkembangan... (Enter untuk kirim, Shift+Enter baris baru)"
+              rows={2}
+              className="flex-1 text-sm resize-none"
+              disabled={sendingComment}
+            />
+            <Button size="sm" onClick={handleSendComment} disabled={sendingComment || !commentText.trim()} className="self-end">
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400 italic pt-1">Anda tidak memiliki akses untuk memberikan komentar pada tiket ini.</p>
+        )}
       </div>
 
       {/* Dialog eskalasi ke group lain */}
@@ -1350,6 +1379,11 @@ export default function IncidentsPage() {
                           {inc.assignedGroupName && (
                             <span className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1 font-medium">
                               <Users className="w-3 h-3" />{inc.assignedGroupName}
+                            </span>
+                          )}
+                          {inc.assignedUserName && (
+                            <span className="text-xs bg-violet-50 text-violet-700 border border-violet-200 px-2 py-0.5 rounded-md flex items-center gap-1 font-medium">
+                              <User className="w-3 h-3" />{inc.assignedUserName}
                             </span>
                           )}
                           <span className={`text-xs px-2 py-0.5 rounded-md font-medium border ${aging > 48 ? "bg-red-50 text-red-600 border-red-200" : aging > 24 ? "bg-amber-50 text-amber-600 border-amber-200" : "bg-gray-50 text-gray-500 border-gray-200"}`}>

@@ -26,6 +26,7 @@ export const incidentsTable = pgTable("incidents", {
   needsFurtherAction: boolean("needs_further_action").notNull().default(false),
   status: text("status", { enum: ["open", "in_progress", "closed"] }).notNull().default("open"),
   assignedGroupId: integer("assigned_group_id").references(() => groupsTable.id),
+  assignedUserId: integer("assigned_user_id").references(() => usersTable.id),
   followupNote: text("followup_note"),
   closedAt: text("closed_at"),
   escalationLevel: integer("escalation_level").notNull().default(0),

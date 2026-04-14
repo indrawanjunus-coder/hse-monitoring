@@ -50,7 +50,8 @@ export async function autoMigrate() {
 
     const columnsToAdd: Array<{ table: string; column: string; definition: string }> = [
       { table: "users",              column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
-      { table: "incidents",          column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
+      { table: "incidents",          column: "company_id",       definition: "INTEGER REFERENCES companies(id)" },
+      { table: "incidents",          column: "assigned_user_id", definition: "INTEGER REFERENCES users(id)" },
       { table: "categories",         column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
       { table: "plants",             column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
       { table: "groups",             column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
