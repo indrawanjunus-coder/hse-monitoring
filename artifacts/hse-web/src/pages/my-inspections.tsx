@@ -21,6 +21,7 @@ interface Schedule {
   userIds?: number[]; groupIds?: number[];
   groups?: { id: number; name: string }[];
   lastInspectedAt?: string | null;
+  submittedTodayByUser?: boolean;
 }
 
 type AnswerType = "yes_no" | "text" | "master_user" | "master_group" | "master_action";
@@ -288,8 +289,9 @@ export default function MyInspectionsPage() {
     if (s.supervisorId) return s.supervisorId === user.id;
     return true;
   });
-  const pending = mySchedules.filter(s => s.status === "active" || s.status === "pending" || !s.status);
-  const completed = mySchedules.filter(s => s.status === "completed");
+  // Split by whether the user has already submitted today (takes priority over status)
+  const doneToday = mySchedules.filter(s => s.submittedTodayByUser === true);
+  const pending = mySchedules.filter(s => !s.submittedTodayByUser);
 
   return (
     <div className="p-6">
@@ -323,8 +325,8 @@ export default function MyInspectionsPage() {
               <CheckCircle className="w-5 h-5 text-green-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{completed.length}</p>
-              <p className="text-xs text-gray-500">Selesai</p>
+              <p className="text-2xl font-bold text-gray-900">{doneToday.length}</p>
+              <p className="text-xs text-gray-500">Sudah Diisi</p>
             </div>
           </CardContent>
         </Card>
@@ -360,23 +362,21 @@ export default function MyInspectionsPage() {
         </div>
       )}
 
-      {completed.length > 0 && (
+      {doneToday.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Selesai</h2>
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">Sudah Diisi Hari Ini</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {completed.map(s => (
+            {doneToday.map(s => (
               <div key={s.id} className="flex items-center gap-3 bg-white border border-green-200 rounded-lg px-4 py-3">
                 <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
                   <CheckCircle className="w-4 h-4 text-green-600" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-700 truncate">{s.templateName ?? s.title}</p>
-                  {s.lastInspectedAt && (
-                    <p className="text-xs text-gray-400 mt-0.5">Diselesaikan: {s.lastInspectedAt}</p>
-                  )}
+                  <p className="text-xs text-gray-400 mt-0.5">Sudah diisi hari ini · {s.plantName || s.frequency}</p>
                 </div>
                 <Badge className="bg-green-100 text-green-700 border-green-300 flex-shrink-0 text-xs">
-                  Selesai
+                  ✓ Selesai
                 </Badge>
               </div>
             ))}

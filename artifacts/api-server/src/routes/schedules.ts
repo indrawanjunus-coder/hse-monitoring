@@ -3,7 +3,7 @@ import {
   db, schedulesTable, usersTable, templatesTable, plantsTable, groupsTable,
   scheduleGroupsTable, scheduleUsersTable, groupMembersTable, inspectionsTable,
 } from "@workspace/db";
-import { eq, inArray, max } from "drizzle-orm";
+import { eq, inArray, max, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 import { sendEmail, scheduleReminderHtml } from "../lib/email";
 
@@ -24,7 +24,7 @@ async function getScheduleUsers(scheduleId: number) {
     .where(eq(scheduleUsersTable.scheduleId, scheduleId));
 }
 
-async function formatSchedule(s: typeof schedulesTable.$inferSelect) {
+async function formatSchedule(s: typeof schedulesTable.$inferSelect, forUserId?: number) {
   const [supervisor] = s.supervisorId
     ? await db.select().from(usersTable).where(eq(usersTable.id, s.supervisorId))
     : [undefined];
@@ -40,6 +40,20 @@ async function formatSchedule(s: typeof schedulesTable.$inferSelect) {
     .from(inspectionsTable)
     .where(eq(inspectionsTable.scheduleId, s.id));
 
+  // Check if the requesting user has already submitted an inspection today for this schedule
+  let submittedTodayByUser = false;
+  if (forUserId) {
+    const today = new Date().toISOString().slice(0, 10);
+    const [todayInsp] = await db.select({ id: inspectionsTable.id })
+      .from(inspectionsTable)
+      .where(and(
+        eq(inspectionsTable.scheduleId, s.id),
+        eq(inspectionsTable.supervisorId, forUserId),
+        eq(inspectionsTable.inspectedAt, today),
+      ));
+    submittedTodayByUser = !!todayInsp;
+  }
+
   return {
     ...s,
     title: s.title ?? template?.name ?? `Inspeksi #${s.id}`,
@@ -53,6 +67,7 @@ async function formatSchedule(s: typeof schedulesTable.$inferSelect) {
     userIds: users.map(u => u.id),
     createdAt: s.createdAt.toISOString(),
     lastInspectedAt: lastInsp?.inspectedAt ?? null,
+    submittedTodayByUser,
   };
 }
 
@@ -118,7 +133,9 @@ router.get("/", async (req, res) => {
     schedules = schedules.filter(s => s.isActive !== 0 && isScheduleActiveToday(s));
   }
 
-  const result = await Promise.all(schedules.map(formatSchedule));
+  // Pass userId when todayOnly so we can compute submittedTodayByUser per schedule
+  const forUserId = todayOnly ? authUser.id : undefined;
+  const result = await Promise.all(schedules.map(s => formatSchedule(s, forUserId)));
   res.json(result);
 });
 
