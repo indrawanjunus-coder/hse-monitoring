@@ -14,7 +14,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus, Edit, Trash2, LayoutTemplate, HelpCircle, ChevronUp, ChevronDown,
   Camera, Star, CheckSquare, AlignLeft, Lock, Search, Users, User, Zap,
+  PowerOff, Power, AlertTriangle,
 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Pagination } from "@/components/pagination";
 import { useToast } from "@/hooks/use-toast";
 
@@ -27,7 +29,7 @@ interface Question {
   expectedAnswer?: string | null;
   questionType?: string | null;
 }
-interface Template { id: number; name: string; description?: string; questionCount?: number }
+interface Template { id: number; name: string; description?: string; questionCount?: number; isActive?: boolean }
 interface Category { id: number; name: string }
 
 const ANSWER_TYPE_OPTIONS: { value: AnswerType; label: string; icon: React.ReactNode; hint: string }[] = [
@@ -431,6 +433,7 @@ export default function TemplatesPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState("");
+  const [limitError, setLimitError] = useState<string | null>(null);
 
   const canManage = user?.role === "admin" || user?.role === "supervisor";
 
@@ -443,20 +446,46 @@ export default function TemplatesPage() {
     queryFn: () => api.get("/categories"),
   });
 
+  const inactiveCount = templates.filter(t => t.isActive === false).length;
+
   const saveMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
       editTemplate ? api.put(`/templates/${editTemplate.id}`, data) : api.post("/templates", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["templates"] });
       setFormDialog(false);
+      setLimitError(null);
       toast({ title: editTemplate ? "Template diperbarui" : "Template ditambahkan" });
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => {
+      if (err?.code === "TEMPLATE_LIMIT_REACHED") {
+        setLimitError(err.message);
+        setFormDialog(false);
+      } else {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      }
+    },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.del(`/templates/${id}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["templates"] }); toast({ title: "Template dihapus" }); },
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: (id: number) => api.post(`/templates/${id}/toggle-active`, {}),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["templates"] });
+      const t = templates.find(t => t.id === id);
+      toast({ title: t?.isActive === false ? "Template diaktifkan" : "Template dinonaktifkan" });
+    },
+    onError: (err: any) => {
+      if (err?.code === "TEMPLATE_LIMIT_REACHED") {
+        setLimitError(err.message);
+      } else {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      }
+    },
   });
 
   const filtered = templates.filter(t => !search.trim() || t.name.toLowerCase().includes(search.toLowerCase()) || t.description?.toLowerCase().includes(search.toLowerCase()));
@@ -479,6 +508,25 @@ export default function TemplatesPage() {
           </Button>
         ) : undefined}
       />
+
+      {limitError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>{limitError}</span>
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setLimitError(null)}>✕</Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {inactiveCount > 0 && (
+        <Alert className="mb-4 border-amber-200 bg-amber-50">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800">
+            {inactiveCount} template dinonaktifkan otomatis karena batas paket langganan. Upgrade paket atau nonaktifkan template lain untuk mengaktifkan kembali.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {!canManage && (
         <div className="flex items-center gap-2 mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
@@ -505,16 +553,19 @@ export default function TemplatesPage() {
         <>
           <div className="space-y-3">
             {paginated.map(t => (
-              <Card key={t.id}>
+              <Card key={t.id} className={t.isActive === false ? "opacity-60" : ""}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <LayoutTemplate className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                        <LayoutTemplate className={`w-4 h-4 flex-shrink-0 ${t.isActive === false ? "text-gray-400" : "text-blue-500"}`} />
                         <p className="font-semibold text-gray-900">{t.name}</p>
                         <span className="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-medium">
                           {t.questionCount ?? 0} pertanyaan
                         </span>
+                        {t.isActive === false && (
+                          <span className="text-xs bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-medium">Nonaktif</span>
+                        )}
                       </div>
                       {t.description && <p className="text-sm text-gray-500 ml-6">{t.description}</p>}
                     </div>
@@ -528,6 +579,14 @@ export default function TemplatesPage() {
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
                             onClick={() => { setEditTemplate(t); setFormDialog(true); }}>
                             <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="sm" className={`h-8 w-8 p-0 ${t.isActive === false ? "text-green-600 hover:text-green-800" : "text-amber-600 hover:text-amber-800"}`}
+                            title={t.isActive === false ? "Aktifkan" : "Nonaktifkan"}
+                            onClick={() => toggleActiveMutation.mutate(t.id)}
+                            disabled={toggleActiveMutation.isPending}
+                          >
+                            {t.isActive === false ? <Power className="w-3.5 h-3.5" /> : <PowerOff className="w-3.5 h-3.5" />}
                           </Button>
                           <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
                             onClick={() => { if (confirm("Hapus template ini?")) deleteMutation.mutate(t.id); }}>

@@ -38,6 +38,11 @@ router.post("/login", async (req, res) => {
   if (!valid) {
     res.status(401).json({ message: "NIK atau password salah" }); return;
   }
+  // Check if user account is active (may be auto-deactivated due to plan limit)
+  if (!user.isActive) {
+    res.status(403).json({ message: "Akun Anda telah dinonaktifkan karena keterbatasan paket langganan. Hubungi admin perusahaan Anda.", code: "ACCOUNT_DEACTIVATED" });
+    return;
+  }
 
   // Check subscription for company users
   if (user.companyId && user.role !== "sysadmin") {

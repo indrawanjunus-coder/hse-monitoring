@@ -14,6 +14,7 @@ export const usersTable = pgTable("users", {
   role: text("role", { enum: ["admin", "supervisor", "employee", "sysadmin"] }).notNull().default("employee"),
   departmentId: integer("department_id").references(() => departmentsTable.id),
   isHead: boolean("is_head").notNull().default(false),
+  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

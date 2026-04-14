@@ -3,6 +3,7 @@ import { db, companiesTable, paymentsTable, usersTable, systemSettingsTable, tes
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import { sysadminMiddleware } from "../lib/auth";
 import { uploadToGdrive } from "../lib/gdrive";
+import { enforcePlanLimits } from "../lib/plan-limits";
 import multer from "multer";
 
 const router = Router();
@@ -65,7 +66,10 @@ router.post("/companies/:id/activate", async (req, res) => {
     updatedAt: new Date(),
   }).where(eq(companiesTable.id, id)).returning();
 
-  res.json({ success: true, company: updated });
+  // Enforce plan limits after plan change (auto-deactivate excess users/templates)
+  const enforced = await enforcePlanLimits(id);
+
+  res.json({ success: true, company: updated, enforced });
 });
 
 router.post("/companies/:id/suspend", async (req, res) => {
@@ -109,6 +113,8 @@ router.put("/payments/:id/approve", async (req, res) => {
     if (payment.plan === "monthly") newEnd.setMonth(newEnd.getMonth() + payment.periodMonths);
     else if (payment.plan === "yearly") newEnd.setFullYear(newEnd.getFullYear() + payment.periodMonths);
     await db.update(companiesTable).set({ status: "active", plan: payment.plan as any, subscriptionEndsAt: newEnd, activatedAt: new Date(), updatedAt: new Date() }).where(eq(companiesTable.id, company.id));
+    // Enforce plan limits after plan change
+    await enforcePlanLimits(company.id);
   }
 
   res.json({ success: true });

@@ -81,9 +81,17 @@ The project utilizes a pnpm workspace monorepo structure.
 **Multi-Tenancy Features:**
 - **Companies & Plans**: Tables for `companies`, `payments`, `system_settings`. Supports `free`, `monthly`, `yearly` plans with `pending`, `active`, `suspended` statuses.
 - **Testimonials**: `testimonials` table, user submission, sysadmin review, public display.
-- **Layanan (Plans Master)**: `plans` table, sysadmin CRUD, dynamically drives pricing section.
+- **Layanan (Plans Master)**: `plans` table with `max_users` and `max_templates` nullable int columns. Sysadmin CRUD, dynamically drives pricing section.
 - **Registration**: Public `/register` form to create new companies (pending status).
 - **Payment Flow**: Users submit payment proof, sysadmin approves to activate subscription. Payment info displayed on a dedicated page.
+- **Plan Limits Enforcement**: `users` and `templates` tables have `is_active` boolean column (default true). `plan-limits.ts` utility enforces per-plan limits:
+  - `checkUserLimit(companyId)` — checks active user count vs `plans.max_users`
+  - `checkTemplateLimit(companyId)` — checks active template count vs `plans.max_templates`
+  - `enforcePlanLimits(companyId)` — auto-deactivates excess users/templates when plan changes (non-admins deactivated first, at least 1 admin kept active)
+  - Triggered on sysadmin activate, payment approve, plan change
+  - Login blocked (403) for deactivated users with clear error message
+  - POST /users and POST /templates return 403 `USER_LIMIT_REACHED`/`TEMPLATE_LIMIT_REACHED` if over limit
+  - Frontend Users/Templates pages show Aktif/Nonaktif badges, toggle-active button, and amber warning alerts
 
 **Authentication:**
 - JWT-based authentication with NIK and password (SHA-256 + salt "hse_salt_2024").

@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db, usersTable, departmentsTable, groupMembersTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { authMiddleware, hashPassword } from "../lib/auth";
 import { sendEmail, newUserEmailHtml, passwordResetEmailHtml } from "../lib/email";
+import { checkUserLimit } from "../lib/plan-limits";
 
 const router = Router();
 router.use(authMiddleware);
@@ -35,6 +36,7 @@ router.get("/", async (req, res) => {
       return {
         id: u.id, nik: u.nik, name: u.name, email: u.email, role: u.role,
         departmentId: u.departmentId, departmentName, isHead: u.isHead,
+        isActive: u.isActive,
         groupIds: gms.map(g => g.groupId), createdAt: u.createdAt.toISOString(),
       };
     }));
@@ -60,6 +62,7 @@ router.get("/:id", async (req, res) => {
     res.json({
       id: u.id, nik: u.nik, name: u.name, email: u.email, role: u.role,
       departmentId: u.departmentId, departmentName, isHead: u.isHead,
+      isActive: u.isActive,
       groupIds: gms.map(g => g.groupId), createdAt: u.createdAt.toISOString(),
     });
   } catch (err: any) {
@@ -77,6 +80,21 @@ router.post("/", async (req, res) => {
   const deptId = departmentId != null && departmentId !== "" && departmentId !== "none"
     ? parseInt(String(departmentId)) : null;
 
+  // Check plan user limit
+  const companyId = req.user!.companyId;
+  if (companyId) {
+    const limitCheck = await checkUserLimit(companyId);
+    if (!limitCheck.allowed) {
+      res.status(403).json({
+        error: `Batas maksimal user paket ini telah tercapai (${limitCheck.current}/${limitCheck.max}). Upgrade paket untuk menambah lebih banyak user.`,
+        code: "USER_LIMIT_REACHED",
+        current: limitCheck.current,
+        max: limitCheck.max,
+      });
+      return;
+    }
+  }
+
   try {
     const passwordHash = await hashPassword(password);
 
@@ -89,6 +107,7 @@ router.post("/", async (req, res) => {
       role: role ?? "employee",
       departmentId: deptId && !isNaN(deptId) ? deptId : null,
       isHead: isHead === true || isHead === "true" || false,
+      isActive: true,
     }).returning();
 
     if (!u) { res.status(500).json({ error: "Gagal membuat user" }); return; }
@@ -112,7 +131,8 @@ router.post("/", async (req, res) => {
 
     res.status(201).json({
       id: u.id, nik: u.nik, name: u.name, email: u.email, role: u.role,
-      departmentId: u.departmentId, isHead: u.isHead, groupIds: groupIds ?? [],
+      departmentId: u.departmentId, isHead: u.isHead, isActive: u.isActive,
+      groupIds: groupIds ?? [],
       createdAt: u.createdAt.toISOString(),
     });
   } catch (err: any) {
@@ -180,7 +200,8 @@ router.put("/:id", async (req, res) => {
     const gms = await db.select().from(groupMembersTable).where(eq(groupMembersTable.userId, id));
     res.json({
       id: u.id, nik: u.nik, name: u.name, email: u.email, role: u.role,
-      departmentId: u.departmentId, isHead: u.isHead, groupIds: gms.map(g => g.groupId),
+      departmentId: u.departmentId, isHead: u.isHead, isActive: u.isActive,
+      groupIds: gms.map(g => g.groupId),
       createdAt: u.createdAt.toISOString(),
     });
   } catch (err: any) {
@@ -198,6 +219,34 @@ router.put("/:id", async (req, res) => {
     console.error("PUT /users/:id error:", pgCode, getErrMsg(err), err);
     res.status(500).json({ error: getErrMsg(err) });
   }
+});
+
+// Toggle user active/inactive status (admin only)
+router.post("/:id/toggle-active", async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "ID tidak valid" }); return; }
+  const authUser = req.user!;
+  if (authUser.role !== "admin") { res.status(403).json({ error: "Hanya admin yang dapat mengubah status user" }); return; }
+
+  const [u] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+  if (!u) { res.status(404).json({ error: "User tidak ditemukan" }); return; }
+
+  // If activating, check limit first
+  if (!u.isActive && u.companyId) {
+    const limitCheck = await checkUserLimit(u.companyId);
+    if (!limitCheck.allowed) {
+      res.status(403).json({
+        error: `Batas maksimal user paket ini telah tercapai (${limitCheck.current}/${limitCheck.max}). Nonaktifkan user lain atau upgrade paket.`,
+        code: "USER_LIMIT_REACHED",
+        current: limitCheck.current,
+        max: limitCheck.max,
+      });
+      return;
+    }
+  }
+
+  const [updated] = await db.update(usersTable).set({ isActive: !u.isActive }).where(eq(usersTable.id, id)).returning();
+  res.json({ id: updated!.id, isActive: updated!.isActive });
 });
 
 router.delete("/:id", async (req, res) => {

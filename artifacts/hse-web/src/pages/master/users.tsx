@@ -8,13 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit, Trash2, Users, Key } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Plus, Edit, Trash2, Users, Key, PowerOff, Power, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Pagination } from "@/components/pagination";
 
 interface User {
   id: number; nik: string; name: string; email?: string;
   role: "admin" | "supervisor" | "employee"; groupName?: string;
+  isActive: boolean;
 }
 interface Group { id: number; name: string }
 
@@ -134,9 +136,12 @@ export default function UsersPage() {
   const [pwDialog, setPwDialog] = useState<number | null>(null);
   const [editUser, setEditUser] = useState<User | undefined>();
   const [search, setSearch] = useState("");
+  const [limitError, setLimitError] = useState<string | null>(null);
 
   const { data: users = [], isLoading } = useQuery<User[]>({ queryKey: ["users"], queryFn: () => api.get("/users") });
   const { data: groups = [] } = useQuery<Group[]>({ queryKey: ["groups"], queryFn: () => api.get("/groups") });
+
+  const inactiveCount = users.filter(u => !u.isActive).length;
 
   const saveMutation = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
@@ -144,9 +149,17 @@ export default function UsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       setFormDialog(false);
+      setLimitError(null);
       toast({ title: editUser ? "User diperbarui" : "User ditambahkan" });
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: any) => {
+      if (err?.code === "USER_LIMIT_REACHED") {
+        setLimitError(err.message);
+        setFormDialog(false);
+      } else {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      }
+    },
   });
 
   const deleteMutation = useMutation({
@@ -154,6 +167,22 @@ export default function UsersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] });
       toast({ title: "User dihapus" });
+    },
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: (id: number) => api.post(`/users/${id}/toggle-active`, {}),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      const u = users.find(u => u.id === id);
+      toast({ title: u?.isActive ? "User dinonaktifkan" : "User diaktifkan" });
+    },
+    onError: (err: any) => {
+      if (err?.code === "USER_LIMIT_REACHED") {
+        setLimitError(err.message);
+      } else {
+        toast({ title: "Error", description: err.message, variant: "destructive" });
+      }
     },
   });
 
@@ -178,6 +207,26 @@ export default function UsersPage() {
           </Button>
         }
       />
+
+      {limitError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>{limitError}</span>
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setLimitError(null)}>✕</Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {inactiveCount > 0 && (
+        <Alert className="mb-4 border-amber-200 bg-amber-50">
+          <AlertTriangle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800">
+            {inactiveCount} user dinonaktifkan otomatis karena batas paket langganan. Upgrade paket atau nonaktifkan user lain untuk mengaktifkan kembali.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="mb-4">
         <Input
           value={search}
@@ -194,16 +243,17 @@ export default function UsersPage() {
               <th className="text-left px-4 py-3 font-medium text-gray-600">Nama</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Email</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
               <th className="text-right px-4 py-3 font-medium text-gray-600">Aksi</th>
             </tr>
           </thead>
           <tbody>
             {isLoading ? (
-              <tr><td colSpan={5} className="text-center py-8 text-gray-400">Memuat...</td></tr>
+              <tr><td colSpan={6} className="text-center py-8 text-gray-400">Memuat...</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-8 text-gray-400">Tidak ada user</td></tr>
+              <tr><td colSpan={6} className="text-center py-8 text-gray-400">Tidak ada user</td></tr>
             ) : paginated.map(u => (
-              <tr key={u.id} className="border-b last:border-0 hover:bg-gray-50">
+              <tr key={u.id} className={`border-b last:border-0 hover:bg-gray-50 ${!u.isActive ? "opacity-60 bg-gray-50" : ""}`}>
                 <td className="px-4 py-3 font-mono text-xs">{u.nik}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">{u.name}</td>
                 <td className="px-4 py-3 text-gray-600">{u.email ?? "-"}</td>
@@ -211,6 +261,12 @@ export default function UsersPage() {
                   <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${roleColors[u.role]}`}>
                     {roleLabels[u.role]}
                   </span>
+                </td>
+                <td className="px-4 py-3">
+                  {u.isActive
+                    ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-green-100 text-green-700">Aktif</span>
+                    : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-red-100 text-red-700">Nonaktif</span>
+                  }
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end gap-1">
@@ -221,6 +277,14 @@ export default function UsersPage() {
                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
                       onClick={() => { setEditUser(u); setFormDialog(true); }}>
                       <Edit className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="sm" className={`h-8 w-8 p-0 ${u.isActive ? "text-amber-600 hover:text-amber-800" : "text-green-600 hover:text-green-800"}`}
+                      title={u.isActive ? "Nonaktifkan" : "Aktifkan"}
+                      onClick={() => toggleActiveMutation.mutate(u.id)}
+                      disabled={toggleActiveMutation.isPending}
+                    >
+                      {u.isActive ? <PowerOff className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
                     </Button>
                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
                       onClick={() => { if (confirm(`Hapus user "${u.name}"?`)) deleteMutation.mutate(u.id); }}>
