@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CheckCircle, Clock, AlertTriangle, Printer } from "lucide-react";
+import { CheckCircle, Clock, AlertTriangle, Printer, ExternalLink } from "lucide-react";
 
 interface BucketIncident {
   id: number; status: string; incidentDate: string; categoryName: string;
@@ -38,6 +39,7 @@ export default function FollowupReportPage() {
   const [to, setTo] = useState(today);
   const [appliedFrom, setAppliedFrom] = useState<string | null>(null);
   const [appliedTo, setAppliedTo] = useState<string | null>(null);
+  const [, navigate] = useLocation();
 
   const { data, isLoading } = useQuery<FollowupData>({
     queryKey: ["reports", "followup", appliedFrom, appliedTo],
@@ -52,6 +54,10 @@ export default function FollowupReportPage() {
 
   const applyFilter = () => { setAppliedFrom(from); setAppliedTo(to); };
   const clearFilter = () => { setAppliedFrom(null); setAppliedTo(null); setFrom(monthStart); setTo(today); };
+
+  const openIncident = (id: number) => {
+    navigate(`/incidents?openId=${id}`);
+  };
 
   return (
     <div className="p-6">
@@ -128,13 +134,21 @@ export default function FollowupReportPage() {
                     ) : (
                       <div className="space-y-2">
                         {bucket.incidents.map(inc => (
-                          <div key={inc.id} className={`rounded-lg border p-3 ${meta.bg} ${meta.border}`}>
+                          <div
+                            key={inc.id}
+                            className={`rounded-lg border p-3 ${meta.bg} ${meta.border} cursor-pointer hover:shadow-md hover:brightness-95 transition-all`}
+                            onClick={() => openIncident(inc.id)}
+                          >
                             <div className="flex items-start justify-between gap-2 mb-1.5">
                               <span className="text-xs font-mono text-gray-500">#{inc.id} · {inc.incidentDate}</span>
-                              <span className={`inline-flex text-xs px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${STATUS_STYLES[inc.status] ?? "bg-gray-100 text-gray-600"}`}>
-                                {STATUS_LABELS[inc.status] ?? inc.status}
-                              </span>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span className={`inline-flex text-xs px-1.5 py-0.5 rounded-full border font-medium ${STATUS_STYLES[inc.status] ?? "bg-gray-100 text-gray-600"}`}>
+                                  {STATUS_LABELS[inc.status] ?? inc.status}
+                                </span>
+                                <ExternalLink className="w-3 h-3 text-gray-400" />
+                              </div>
                             </div>
+                            <p className="text-xs text-gray-800 font-medium line-clamp-2 mb-1.5">{inc.detail}</p>
                             <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs">
                               <div className="text-gray-500"><span className="font-medium text-gray-700">Kategori:</span> {inc.categoryName || "—"}</div>
                               <div className="text-gray-500"><span className="font-medium text-gray-700">Plant:</span> {inc.plantName || "—"}</div>

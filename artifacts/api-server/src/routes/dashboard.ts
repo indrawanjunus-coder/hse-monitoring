@@ -2,7 +2,7 @@ import { Router } from "express";
 import { db, incidentsTable, categoriesTable, actionsTable, plantsTable,
   schedulesTable, scheduleGroupsTable, scheduleUsersTable,
   groupMembersTable, groupsTable, usersTable, inspectionsTable, templatesTable } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 
 const router = Router();
@@ -12,12 +12,19 @@ router.get("/summary", async (req, res) => {
   const now = new Date();
   const month = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
   const year = req.query.year ? parseInt(req.query.year as string) : now.getFullYear();
+  const cid = req.user!.companyId;
 
-  const allIncidents = await db.select().from(incidentsTable);
+  const allIncidents = cid
+    ? await db.select().from(incidentsTable).where(eq(incidentsTable.companyId, cid))
+    : await db.select().from(incidentsTable);
   const prefix = `${year}-${String(month).padStart(2, "0")}`;
   const monthIncidents = allIncidents.filter(i => i.incidentDate.startsWith(prefix));
-  const categories = await db.select().from(categoriesTable);
-  const actions = await db.select().from(actionsTable);
+  const categories = cid
+    ? await db.select().from(categoriesTable).where(eq(categoriesTable.companyId, cid))
+    : await db.select().from(categoriesTable);
+  const actions = cid
+    ? await db.select().from(actionsTable).where(eq(actionsTable.companyId, cid))
+    : await db.select().from(actionsTable);
 
   const openIncidents = monthIncidents.filter(i => i.status === "open" || i.status === "in_progress").length;
   const closedIncidents = monthIncidents.filter(i => i.status === "closed").length;
@@ -110,10 +117,15 @@ router.get("/hazard-by-area", async (req, res) => {
   const now = new Date();
   const month = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
   const year = req.query.year ? parseInt(req.query.year as string) : now.getFullYear();
+  const cid = req.user!.companyId;
 
   const prefix = `${year}-${String(month).padStart(2, "0")}`;
-  const allIncidents = await db.select().from(incidentsTable);
-  const plants = await db.select().from(plantsTable);
+  const allIncidents = cid
+    ? await db.select().from(incidentsTable).where(eq(incidentsTable.companyId, cid))
+    : await db.select().from(incidentsTable);
+  const plants = cid
+    ? await db.select().from(plantsTable).where(eq(plantsTable.companyId, cid))
+    : await db.select().from(plantsTable);
   const monthIncidents = allIncidents.filter(i => i.incidentDate.startsWith(prefix));
 
   const areaMap: Record<string, number> = {};
@@ -323,9 +335,11 @@ router.get("/template-compliance", async (req, res) => {
 });
 
 // List templates (for dropdown in compliance dashboard)
-router.get("/templates", async (_req, res) => {
-  const templates = await db.select({ id: templatesTable.id, name: templatesTable.name })
-    .from(templatesTable);
+router.get("/templates", async (req, res) => {
+  const cid = req.user!.companyId;
+  const templates = cid
+    ? await db.select({ id: templatesTable.id, name: templatesTable.name }).from(templatesTable).where(eq(templatesTable.companyId, cid))
+    : await db.select({ id: templatesTable.id, name: templatesTable.name }).from(templatesTable);
   res.json(templates);
 });
 

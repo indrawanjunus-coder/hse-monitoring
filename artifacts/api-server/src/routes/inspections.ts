@@ -4,7 +4,7 @@ import {
   usersTable, templatesTable, plantsTable, questionsTable, categoriesTable, incidentsTable,
   categoryGroupsTable, categoryUsersTable, groupMembersTable,
 } from "@workspace/db";
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, inArray, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 import { sendEmail, incidentEmailHtml } from "../lib/email";
 
@@ -14,18 +14,32 @@ router.use(authMiddleware);
 router.get("/", async (req, res) => {
   const userId = req.query.userId ? parseInt(req.query.userId as string) : undefined;
   const scheduleId = req.query.scheduleId ? parseInt(req.query.scheduleId as string) : undefined;
+  const cid = req.user!.companyId;
+
+  // Build companyId subquery: get schedule IDs for this company
+  let allowedScheduleIds: number[] | null = null;
+  if (cid) {
+    const companySchedules = await db.select({ id: schedulesTable.id }).from(schedulesTable).where(eq(schedulesTable.companyId, cid));
+    allowedScheduleIds = companySchedules.map(s => s.id);
+    if (allowedScheduleIds.length === 0) { res.json([]); return; }
+  }
+
   let inspections: (typeof inspectionsTable.$inferSelect)[];
   if (userId) {
-    inspections = await db.select().from(inspectionsTable)
-      .where(eq(inspectionsTable.supervisorId, userId))
-      .orderBy(desc(inspectionsTable.createdAt));
+    const where = cid && allowedScheduleIds
+      ? and(eq(inspectionsTable.supervisorId, userId), inArray(inspectionsTable.scheduleId, allowedScheduleIds))
+      : eq(inspectionsTable.supervisorId, userId);
+    inspections = await db.select().from(inspectionsTable).where(where).orderBy(desc(inspectionsTable.createdAt));
   } else if (scheduleId) {
-    inspections = await db.select().from(inspectionsTable)
-      .where(eq(inspectionsTable.scheduleId, scheduleId))
-      .orderBy(desc(inspectionsTable.createdAt));
+    const where = cid && allowedScheduleIds
+      ? and(eq(inspectionsTable.scheduleId, scheduleId), inArray(inspectionsTable.scheduleId, allowedScheduleIds))
+      : eq(inspectionsTable.scheduleId, scheduleId);
+    inspections = await db.select().from(inspectionsTable).where(where).orderBy(desc(inspectionsTable.createdAt));
   } else {
-    inspections = await db.select().from(inspectionsTable)
-      .orderBy(desc(inspectionsTable.createdAt));
+    const where = cid && allowedScheduleIds ? inArray(inspectionsTable.scheduleId, allowedScheduleIds) : undefined;
+    inspections = where
+      ? await db.select().from(inspectionsTable).where(where).orderBy(desc(inspectionsTable.createdAt))
+      : await db.select().from(inspectionsTable).orderBy(desc(inspectionsTable.createdAt));
   }
   const result = await Promise.all(inspections.map(async (i) => {
     const [supervisor] = await db.select().from(usersTable).where(eq(usersTable.id, i.supervisorId));

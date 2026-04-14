@@ -40,9 +40,10 @@ async function formatSchedule(s: typeof schedulesTable.$inferSelect, forUserId?:
     .from(inspectionsTable)
     .where(eq(inspectionsTable.scheduleId, s.id));
 
-  // Check if the requesting user has already submitted an inspection today for this schedule
+  // Check if the requesting user has already submitted an inspection today for this schedule.
+  // "always" frequency allows unlimited submissions, so never mark as submitted.
   let submittedTodayByUser = false;
-  if (forUserId) {
+  if (forUserId && s.frequency !== "always") {
     const today = new Date().toISOString().slice(0, 10);
     const [todayInsp] = await db.select({ id: inspectionsTable.id })
       .from(inspectionsTable)

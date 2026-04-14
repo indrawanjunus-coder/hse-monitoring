@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, smtpSettingsTable, groupsTable, groupMembersTable, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 import { getSmtpTransporter } from "../lib/email";
 
@@ -8,8 +8,11 @@ const router = Router();
 router.use(authMiddleware);
 
 // GET current SMTP settings (password masked)
-router.get("/", async (_req, res) => {
-  const [settings] = await db.select().from(smtpSettingsTable);
+router.get("/", async (req, res) => {
+  const cid = req.user!.companyId;
+  const [settings] = cid
+    ? await db.select().from(smtpSettingsTable).where(eq(smtpSettingsTable.companyId, cid))
+    : await db.select().from(smtpSettingsTable);
   if (!settings) {
     res.json({ id: null, host: "", port: 587, protocol: "STARTTLS", username: "", fromName: "HSE System", fromEmail: "", passwordSet: false });
     return;
@@ -30,7 +33,10 @@ router.get("/", async (_req, res) => {
 // PUT upsert SMTP settings
 router.put("/", async (req, res) => {
   const { host, port, protocol, username, password, fromName, fromEmail } = req.body;
-  const [existing] = await db.select().from(smtpSettingsTable);
+  const cid = req.user!.companyId;
+  const [existing] = cid
+    ? await db.select().from(smtpSettingsTable).where(eq(smtpSettingsTable.companyId, cid))
+    : await db.select().from(smtpSettingsTable);
 
   if (existing) {
     const updates: Record<string, unknown> = { host, port, protocol, username, fromName, fromEmail, updatedAt: new Date() };
@@ -41,6 +47,7 @@ router.put("/", async (req, res) => {
     const [created] = await db.insert(smtpSettingsTable).values({
       host, port: port ?? 587, protocol: protocol ?? "STARTTLS",
       username, password: password ?? "", fromName: fromName ?? "HSE System", fromEmail: fromEmail ?? "",
+      companyId: cid,
     }).returning();
     res.status(201).json({ ...created, passwordSet: !!created?.password, password: undefined });
   }
@@ -54,7 +61,10 @@ router.post("/test", async (req, res) => {
   if (!transporter) { res.status(400).json({ message: "SMTP not configured. Please save settings first." }); return; }
   try {
     await transporter.verify();
-    const [settings] = await db.select().from(smtpSettingsTable);
+    const cid = req.user!.companyId;
+    const [settings] = cid
+      ? await db.select().from(smtpSettingsTable).where(eq(smtpSettingsTable.companyId, cid))
+      : await db.select().from(smtpSettingsTable);
     await transporter.sendMail({
       from: `"${settings?.fromName ?? "HSE System"}" <${settings?.fromEmail || settings?.username}>`,
       to: testEmail,

@@ -9,13 +9,14 @@ router.use(authMiddleware);
 // H&I Followup report — incidents bucketed by hours since creation with enhanced details
 router.get("/followup", async (req, res) => {
   const { from, to } = req.query;
-  let whereClause = undefined as ReturnType<typeof and> | undefined;
+  const cid = req.user!.companyId;
+  let whereClause = cid ? eq(incidentsTable.companyId, cid) : undefined as ReturnType<typeof and> | undefined;
   if (from && to) {
-    whereClause = and(gte(incidentsTable.incidentDate, String(from)), lte(incidentsTable.incidentDate, String(to)));
+    whereClause = whereClause ? and(whereClause, gte(incidentsTable.incidentDate, String(from)), lte(incidentsTable.incidentDate, String(to))) : and(gte(incidentsTable.incidentDate, String(from)), lte(incidentsTable.incidentDate, String(to)));
   } else if (from) {
-    whereClause = gte(incidentsTable.incidentDate, String(from));
+    whereClause = whereClause ? and(whereClause, gte(incidentsTable.incidentDate, String(from))) : gte(incidentsTable.incidentDate, String(from));
   } else if (to) {
-    whereClause = lte(incidentsTable.incidentDate, String(to));
+    whereClause = whereClause ? and(whereClause, lte(incidentsTable.incidentDate, String(to))) : lte(incidentsTable.incidentDate, String(to));
   }
 
   const query = db.select({
@@ -94,11 +95,11 @@ router.get("/followup", async (req, res) => {
 router.get("/monthly", async (req, res) => {
   const { from, to } = req.query;
   if (!from || !to) { res.status(400).json({ message: "from and to required (YYYY-MM-DD)" }); return; }
+  const cid = req.user!.companyId;
 
-  const whereClause = and(
-    gte(incidentsTable.incidentDate, String(from)),
-    lte(incidentsTable.incidentDate, String(to))
-  );
+  const whereClause = cid
+    ? and(eq(incidentsTable.companyId, cid), gte(incidentsTable.incidentDate, String(from)), lte(incidentsTable.incidentDate, String(to)))
+    : and(gte(incidentsTable.incidentDate, String(from)), lte(incidentsTable.incidentDate, String(to)));
 
   const rawIncidents = await db.select({
     inc: incidentsTable,
@@ -254,13 +255,14 @@ router.get("/monthly", async (req, res) => {
 // Action matrix per plant
 router.get("/action-matrix", async (req, res) => {
   const { from, to } = req.query;
-  let whereClause = undefined as ReturnType<typeof and> | undefined;
+  const cid = req.user!.companyId;
+  let whereClause = cid ? eq(incidentsTable.companyId, cid) : undefined as ReturnType<typeof and> | undefined;
   if (from && to) {
-    whereClause = and(gte(incidentsTable.incidentDate, String(from)), lte(incidentsTable.incidentDate, String(to)));
+    whereClause = whereClause ? and(whereClause, gte(incidentsTable.incidentDate, String(from)), lte(incidentsTable.incidentDate, String(to))) : and(gte(incidentsTable.incidentDate, String(from)), lte(incidentsTable.incidentDate, String(to)));
   } else if (from) {
-    whereClause = gte(incidentsTable.incidentDate, String(from));
+    whereClause = whereClause ? and(whereClause, gte(incidentsTable.incidentDate, String(from))) : gte(incidentsTable.incidentDate, String(from));
   } else if (to) {
-    whereClause = lte(incidentsTable.incidentDate, String(to));
+    whereClause = whereClause ? and(whereClause, lte(incidentsTable.incidentDate, String(to))) : lte(incidentsTable.incidentDate, String(to));
   }
 
   const query = db.select({
@@ -321,7 +323,10 @@ router.get("/action-matrix", async (req, res) => {
 // Indicator HSE achievement report
 router.get("/indicators", async (req, res) => {
   const { month, year } = req.query;
-  const indicators = await db.select().from(indicatorsTable).orderBy(indicatorsTable.type, indicatorsTable.id);
+  const cid = req.user!.companyId;
+  const indicators = cid
+    ? await db.select().from(indicatorsTable).where(eq(indicatorsTable.companyId, cid)).orderBy(indicatorsTable.type, indicatorsTable.id)
+    : await db.select().from(indicatorsTable).orderBy(indicatorsTable.type, indicatorsTable.id);
 
   const result = await Promise.all(indicators.map(async (ind) => {
     const links = await db.select().from(indicatorQuestionsTable).where(eq(indicatorQuestionsTable.indicatorId, ind.id));
@@ -452,8 +457,11 @@ router.get("/schedule-compliance", async (req, res) => {
     daily: "Harian", weekly: "Mingguan", biweekly: "2 Mingguan", monthly: "Bulanan", custom: "Custom",
   };
 
-  // Load all schedules
-  const schedules = await db.select().from(schedulesTable);
+  // Load all schedules (company-filtered)
+  const cid = req.user!.companyId;
+  const schedules = cid
+    ? await db.select().from(schedulesTable).where(eq(schedulesTable.companyId, cid))
+    : await db.select().from(schedulesTable);
 
   // Load templates, plants
   const [templates, plants] = await Promise.all([

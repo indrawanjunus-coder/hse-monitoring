@@ -28,6 +28,7 @@ import {
   ScrollText,
   Cloud,
   MessageSquare,
+  Database,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
@@ -75,6 +76,7 @@ const navItems: NavItem[] = [
     children: [
       { label: "Email (SMTP)", href: "/settings/smtp", icon: <Mail className="w-4 h-4" /> },
       { label: "Google Drive", href: "/settings/gdrive", icon: <Cloud className="w-4 h-4" /> },
+      { label: "Backup Database", href: "/settings/backup", icon: <Database className="w-4 h-4" />, adminOnly: true },
       { label: "Log Sistem", href: "/admin/logs", icon: <ScrollText className="w-4 h-4" />, adminOnly: true },
     ],
   },

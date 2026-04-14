@@ -26,6 +26,7 @@ import sysadminRouter from "./sysadmin";
 import companyPaymentsRouter from "./company-payments";
 import testimonialsRouter from "./testimonials";
 import plansRouter from "./plans";
+import backupRouter from "./backup";
 
 const router: IRouter = Router();
 
@@ -56,5 +57,6 @@ router.use("/sysadmin", sysadminRouter);
 router.use("/payments", companyPaymentsRouter);
 router.use("/testimonials", testimonialsRouter);
 router.use("/plans", plansRouter);
+router.use("/backup", backupRouter);
 
 export default router;

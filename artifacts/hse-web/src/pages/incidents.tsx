@@ -603,6 +603,10 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
   onUpdate: (data: Record<string, unknown>) => Promise<void>;
   actions: Action[]; preventiveActions: PreventiveAction[];
 }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
   // User can update if: admin/supervisor, reporter, directly assigned user, or member of assigned group
   const isAssignedGroupMember = !!(user && incident.picMembers?.some(m => m.id === user.id));
   const isAuthorized = user?.role === "admin" || user?.role === "supervisor"
@@ -610,6 +614,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
     || incident.assignedUserId === user?.id
     || isAssignedGroupMember;
   const canUpdate = incident.status !== "closed" && isAuthorized;
+
   const { data: allIncidentTypes = [] } = useQuery<ApiIncidentType[]>({ queryKey: ["incident-types"], queryFn: () => api.get("/incident-types") });
   const incidentTypes = allIncidentTypes.filter(t => t.categoryId === incident.categoryId || t.categoryId == null);
   const [incidentType, setIncidentType] = useState(incident.incidentType ?? "none");
@@ -626,9 +631,6 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
   const [commentText, setCommentText] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  const { user } = useAuth();
 
   const { data: comments = [], refetch: refetchComments } = useQuery<{
     id: number; incidentId: number; userId: number | null; userName: string | null; content: string; createdAt: string;
@@ -763,6 +765,21 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
     try {
       await onUpdate({
         status,
+        incidentType: incidentType !== "none" ? incidentType : null,
+        actionId: actionId !== "none" ? parseInt(actionId) : null,
+        preventiveActionId: preventiveActionId !== "none" ? parseInt(preventiveActionId) : null,
+        targetDate: targetDate || null,
+        followupNote: followupNote.trim() || null,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    setSaving(true);
+    try {
+      await onUpdate({
         incidentType: incidentType !== "none" ? incidentType : null,
         actionId: actionId !== "none" ? parseInt(actionId) : null,
         preventiveActionId: preventiveActionId !== "none" ? parseInt(preventiveActionId) : null,
@@ -942,6 +959,12 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
             {incident.status === "open" && (
               <Button variant="outline" className="text-amber-600 border-amber-300"
                 disabled={saving} onClick={() => handleResolve("in_progress")}>Tandai Proses</Button>
+            )}
+            {incident.status === "in_progress" && (
+              <Button variant="outline" className="text-blue-600 border-blue-300"
+                disabled={saving} onClick={handleSaveChanges}>
+                {saving ? "Menyimpan..." : "Simpan Perubahan"}
+              </Button>
             )}
             <Button className="bg-green-600 hover:bg-green-700"
               disabled={saving} onClick={() => setShowCloseConfirm(true)}>Tutup Incident</Button>
@@ -1232,6 +1255,20 @@ export default function IncidentsPage() {
   const { data: incidents = [], isLoading } = useQuery<Incident[]>({
     queryKey: ["incidents"], queryFn: () => api.get("/incidents"),
   });
+
+  // Auto-open incident when `openId` query param is present (e.g. navigated from Followup Report)
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const openId = params.get("openId");
+    if (openId && incidents.length > 0) {
+      const found = incidents.find(i => i.id === parseInt(openId));
+      if (found) {
+        setDetailIncident(found);
+        setFilterStatus("all");
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, incidents]);
   const { data: plants = [] } = useQuery<Plant[]>({ queryKey: ["plants"], queryFn: () => api.get("/plants") });
   const { data: categories = [] } = useQuery<Category[]>({ queryKey: ["categories"], queryFn: () => api.get("/categories") });
   const { data: actions = [] } = useQuery<Action[]>({ queryKey: ["actions"], queryFn: () => api.get("/actions") });
@@ -1247,10 +1284,19 @@ export default function IncidentsPage() {
   const updateIncident = async (id: number, data: Record<string, unknown>) => {
     await api.put(`/incidents/${id}`, data);
     queryClient.invalidateQueries({ queryKey: ["incidents"] });
-    setDetailIncident(null);
-    if (data.status === "closed") toast({ title: "Incident ditutup" });
-    else if (data.status === "in_progress") toast({ title: "Incident ditandai proses" });
-    else toast({ title: "Incident diperbarui" });
+    if (data.status === "closed") {
+      setDetailIncident(null);
+      toast({ title: "Incident ditutup" });
+    } else if (data.status === "in_progress") {
+      setDetailIncident(null);
+      toast({ title: "Incident ditandai proses" });
+    } else if (data.status !== undefined) {
+      setDetailIncident(null);
+      toast({ title: "Incident diperbarui" });
+    } else {
+      // No status change — keep dialog open, just show success
+      toast({ title: "Perubahan disimpan" });
+    }
   };
 
   const filtered = useMemo(() => {

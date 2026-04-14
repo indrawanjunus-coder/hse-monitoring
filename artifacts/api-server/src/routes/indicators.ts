@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { indicatorsTable, indicatorQuestionsTable, questionsTable, templatesTable, inspectionAnswersTable } from "@workspace/db";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 
 const router = Router();
@@ -34,8 +34,11 @@ async function calcIndicatorPercentage(indicatorId: number): Promise<number | nu
   return Math.round((correctWeight / totalWeight) * 100);
 }
 
-router.get("/", async (_req, res) => {
-  const indicators = await db.select().from(indicatorsTable).orderBy(indicatorsTable.id);
+router.get("/", async (req, res) => {
+  const cid = req.user!.companyId;
+  const indicators = cid
+    ? await db.select().from(indicatorsTable).where(eq(indicatorsTable.companyId, cid)).orderBy(indicatorsTable.id)
+    : await db.select().from(indicatorsTable).orderBy(indicatorsTable.id);
   const result = await Promise.all(indicators.map(async (ind) => {
     const percentage = await calcIndicatorPercentage(ind.id);
     const links = await db.select({ questionId: indicatorQuestionsTable.questionId })
@@ -47,7 +50,9 @@ router.get("/", async (_req, res) => {
 
 router.get("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const [indicator] = await db.select().from(indicatorsTable).where(eq(indicatorsTable.id, id));
+  const cid = req.user!.companyId;
+  const whereClause = cid ? and(eq(indicatorsTable.id, id), eq(indicatorsTable.companyId, cid)) : eq(indicatorsTable.id, id);
+  const [indicator] = await db.select().from(indicatorsTable).where(whereClause);
   if (!indicator) return res.status(404).json({ error: "Not found" });
   const links = await db.select({
     id: indicatorQuestionsTable.id,
@@ -67,21 +72,26 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   const { name, description, type, targetPercentage } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: "Name required" });
-  const [created] = await db.insert(indicatorsTable).values({ name: name.trim(), description, type: type || "ISO", targetPercentage: targetPercentage ?? 100 }).returning();
+  const companyId = req.user!.companyId;
+  const [created] = await db.insert(indicatorsTable).values({ name: name.trim(), description, type: type || "ISO", targetPercentage: targetPercentage ?? 100, companyId }).returning();
   res.status(201).json(created);
 });
 
 router.put("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const { name, description, type, targetPercentage } = req.body;
-  const [updated] = await db.update(indicatorsTable).set({ name, description, type, targetPercentage }).where(eq(indicatorsTable.id, id)).returning();
+  const cid = req.user!.companyId;
+  const whereClause = cid ? and(eq(indicatorsTable.id, id), eq(indicatorsTable.companyId, cid)) : eq(indicatorsTable.id, id);
+  const [updated] = await db.update(indicatorsTable).set({ name, description, type, targetPercentage }).where(whereClause).returning();
   if (!updated) return res.status(404).json({ error: "Not found" });
   res.json(updated);
 });
 
 router.delete("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  await db.delete(indicatorsTable).where(eq(indicatorsTable.id, id));
+  const cid = req.user!.companyId;
+  const whereClause = cid ? and(eq(indicatorsTable.id, id), eq(indicatorsTable.companyId, cid)) : eq(indicatorsTable.id, id);
+  await db.delete(indicatorsTable).where(whereClause);
   res.json({ ok: true });
 });
 
