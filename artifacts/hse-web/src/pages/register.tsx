@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Shield, Building2, ChevronRight, CheckCircle, Mail } from "lucide-react";
+import { Shield, Building2, ChevronRight, CheckCircle, Mail, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -213,9 +213,18 @@ export default function RegisterPage() {
               </div>
             </div>
 
-            <div className="p-4 bg-gray-100 rounded-xl text-sm text-gray-600 mb-8">
-              <div className="font-medium mb-1">Portal perusahaan Anda:</div>
-              <code className="text-blue-700">/c/{result.slug}/</code>
+            <div className="p-5 bg-white border border-gray-200 rounded-xl text-left mb-4">
+              <div className="text-sm font-semibold text-gray-700 mb-3">Link Portal Perusahaan Anda</div>
+              <a
+                href={`/c/${result.slug}/`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-100 transition-colors group"
+              >
+                <span className="flex-1 font-mono text-sm break-all">{window.location.origin}/c/{result.slug}/</span>
+                <ExternalLink className="w-4 h-4 shrink-0 opacity-60 group-hover:opacity-100" />
+              </a>
+              <p className="text-xs text-gray-400 mt-2">Bookmark link ini untuk akses mudah ke portal Anda.</p>
             </div>
           </div>
         )}

@@ -20,7 +20,8 @@ async function provisionCompanyAdmin(company: { id: number; slug: string; name: 
     .where(and(eq(usersTable.companyId, company.id), eq(usersTable.role, "admin")));
   if (existing.length > 0) return { alreadyExists: true, nik: null, password: null };
 
-  const nik = "admin";
+  const nikSuffix = company.name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const nik = `admin${nikSuffix}`;
   const password = generatePassword();
   const pwHash = await hashPassword(password);
   await db.insert(usersTable).values({
