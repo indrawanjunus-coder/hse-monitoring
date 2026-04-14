@@ -7,9 +7,11 @@ import { categoriesTable } from "./categories";
 import { actionsTable } from "./actions";
 import { groupsTable } from "./groups";
 import { preventiveActionsTable } from "./preventive-actions";
+import { companiesTable } from "./companies";
 
 export const incidentsTable = pgTable("incidents", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companiesTable.id),
   reporterId: integer("reporter_id").notNull().references(() => usersTable.id),
   plantId: integer("plant_id").notNull().references(() => plantsTable.id),
   categoryId: integer("category_id").notNull().references(() => categoriesTable.id),

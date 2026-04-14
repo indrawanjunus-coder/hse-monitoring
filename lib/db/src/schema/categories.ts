@@ -3,9 +3,11 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { groupsTable } from "./groups";
 import { usersTable } from "./users";
+import { companiesTable } from "./companies";
 
 export const categoriesTable = pgTable("categories", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companiesTable.id),
   name: text("name").notNull(),
   description: text("description"),
   riskLevel: text("risk_level", { enum: ["minor", "moderate", "major", "fatal"] }).notNull().default("minor"),

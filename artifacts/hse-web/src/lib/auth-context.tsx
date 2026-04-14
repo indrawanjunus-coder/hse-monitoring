@@ -1,19 +1,38 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { api } from "./api";
 
-interface AuthUser {
+export interface CompanyInfo {
+  id: number;
+  slug: string;
+  name: string;
+  plan: string;
+  status: string;
+  subscriptionEndsAt: string | null;
+}
+
+export interface AuthUser {
   id: number;
   nik: string;
   name: string;
-  email: string;
-  role: "admin" | "supervisor" | "employee";
+  email: string | null;
+  role: "admin" | "supervisor" | "employee" | "sysadmin";
+  companyId: number | null;
+  company?: CompanyInfo | null;
+}
+
+export interface PaywallInfo {
+  code: "SUBSCRIPTION_EXPIRED" | "PENDING_ACTIVATION" | "SUSPENDED";
+  message: string;
+  company: CompanyInfo;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
   token: string | null;
   isLoading: boolean;
-  login: (nik: string, password: string) => Promise<void>;
+  companySlug: string | null;
+  paywallInfo: PaywallInfo | null;
+  login: (nik: string, password: string, companySlug?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -28,6 +47,11 @@ function decodeToken(token: string): AuthUser | null {
   }
 }
 
+function getCompanySlugFromPath(): string | null {
+  const m = window.location.pathname.match(/^\/c\/([^/]+)/);
+  return m ? m[1]! : null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("hse_token"));
   const [user, setUser] = useState<AuthUser | null>(() => {
@@ -35,14 +59,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return t ? decodeToken(t) : null;
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [companySlug] = useState<string | null>(() => getCompanySlugFromPath());
+  const [paywallInfo, setPaywallInfo] = useState<PaywallInfo | null>(null);
 
-  const login = useCallback(async (nik: string, password: string) => {
+  const login = useCallback(async (nik: string, password: string, slug?: string) => {
     setIsLoading(true);
+    setPaywallInfo(null);
     try {
-      const res = await api.post<{ token: string; user: AuthUser }>("/auth/login", { nik, password });
+      const body: Record<string, string> = { nik, password };
+      if (slug) body.companySlug = slug;
+      const res = await api.post<{ token: string; user: AuthUser }>("/auth/login", body);
       localStorage.setItem("hse_token", res.token);
       setToken(res.token);
       setUser(res.user);
+    } catch (err: any) {
+      // Handle 402 paywall errors
+      if (err?.status === 402 || err?.code) {
+        const info: PaywallInfo = {
+          code: err.code ?? "SUBSCRIPTION_EXPIRED",
+          message: err.message ?? "Langganan berakhir",
+          company: err.company,
+        };
+        setPaywallInfo(info);
+        throw err;
+      }
+      throw err;
     } finally {
       setIsLoading(false);
     }
@@ -52,10 +93,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("hse_token");
     setToken(null);
     setUser(null);
+    setPaywallInfo(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, companySlug, paywallInfo, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

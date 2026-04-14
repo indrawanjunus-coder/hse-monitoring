@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable, departmentsTable, groupMembersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { authMiddleware, hashPassword } from "../lib/auth";
 import { sendEmail, newUserEmailHtml, passwordResetEmailHtml } from "../lib/email";
 
@@ -21,7 +21,10 @@ function getErrMsg(err: any): string {
 
 router.get("/", async (req, res) => {
   try {
-    const users = await db.select().from(usersTable);
+    const cid = req.user!.companyId;
+    const users = cid
+      ? await db.select().from(usersTable).where(eq(usersTable.companyId, cid))
+      : await db.select().from(usersTable);
     const result = await Promise.all(users.map(async (u) => {
       const gms = await db.select().from(groupMembersTable).where(eq(groupMembersTable.userId, u.id));
       let departmentName: string | undefined;
@@ -78,6 +81,7 @@ router.post("/", async (req, res) => {
     const passwordHash = await hashPassword(password);
 
     const [u] = await db.insert(usersTable).values({
+      companyId: req.user!.companyId,
       nik: nik.trim(),
       name: name.trim(),
       email: email?.trim() || null,

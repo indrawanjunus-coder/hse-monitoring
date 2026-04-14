@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, groupsTable, groupMembersTable, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 
 const router = Router();
@@ -23,8 +23,11 @@ async function getGroupWithMembers(groupId: number) {
   };
 }
 
-router.get("/", async (_req, res) => {
-  const groups = await db.select().from(groupsTable);
+router.get("/", async (req, res) => {
+  const cid = req.user!.companyId;
+  const groups = cid
+    ? await db.select().from(groupsTable).where(eq(groupsTable.companyId, cid))
+    : await db.select().from(groupsTable);
   const result = await Promise.all(groups.map(g => getGroupWithMembers(g.id)));
   res.json(result.filter(Boolean));
 });
@@ -38,7 +41,8 @@ router.get("/:id", async (req, res) => {
 
 router.post("/", async (req, res) => {
   const { name, description, memberIds } = req.body;
-  const [g] = await db.insert(groupsTable).values({ name, description }).returning();
+  const cid = req.user!.companyId;
+  const [g] = await db.insert(groupsTable).values({ name, description, companyId: cid }).returning();
   if (!g) { res.status(500).json({ message: "Failed" }); return; }
   if (memberIds?.length) {
     await db.insert(groupMembersTable).values(memberIds.map((uid: number) => ({ groupId: g.id, userId: uid })));

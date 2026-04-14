@@ -205,3 +205,38 @@ export async function getGdriveConfigured(): Promise<boolean> {
   const [s] = await db.select({ pk: gdriveSettingsTable.privateKey }).from(gdriveSettingsTable);
   return !!(s?.pk);
 }
+
+/**
+ * Simple upload for general files (QRIS images, payment proofs, etc.)
+ * Uploads to the root GDrive folder directly without date-based folder structure.
+ */
+export async function uploadToGdrive(
+  fileBuffer: Buffer,
+  fileName: string,
+  mimeType: string,
+): Promise<{ fileId: string; viewUrl: string }> {
+  const { drive, rootFolderId } = await getGdriveClient();
+  const { Readable } = await import("stream");
+  const stream = new Readable();
+  stream.push(fileBuffer);
+  stream.push(null);
+
+  const uploaded = await drive.files.create({
+    requestBody: { name: fileName, parents: [rootFolderId] },
+    media: { mimeType, body: stream },
+    fields: "id,webViewLink",
+    supportsAllDrives: true,
+  });
+
+  const fileId = uploaded.data.id!;
+  const viewUrl = uploaded.data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`;
+
+  await drive.permissions.create({
+    fileId,
+    requestBody: { role: "reader", type: "anyone" },
+    supportsAllDrives: true,
+  });
+
+  logger.info({ fileId, fileName }, "General file uploaded to Google Drive");
+  return { fileId, viewUrl };
+}

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, categoriesTable, groupsTable, usersTable, categoryGroupsTable, categoryUsersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 
 const router = Router();
@@ -50,8 +50,11 @@ async function formatCategory(c: typeof categoriesTable.$inferSelect) {
   };
 }
 
-router.get("/", async (_req, res) => {
-  const cats = await db.select().from(categoriesTable);
+router.get("/", async (req, res) => {
+  const cid = req.user!.companyId;
+  const cats = cid
+    ? await db.select().from(categoriesTable).where(eq(categoriesTable.companyId, cid))
+    : await db.select().from(categoriesTable);
   const result = await Promise.all(cats.map(formatCategory));
   res.json(result);
 });
@@ -59,7 +62,8 @@ router.get("/", async (_req, res) => {
 router.post("/", async (req, res) => {
   const { name, description, riskLevel, color, groupIds, userIds } = req.body;
   const picGroupId = (groupIds && groupIds.length > 0) ? groupIds[0] : null;
-  const [c] = await db.insert(categoriesTable).values({ name, description, riskLevel, picGroupId, color }).returning();
+  const cid = req.user!.companyId;
+  const [c] = await db.insert(categoriesTable).values({ name, description, riskLevel, picGroupId, color, companyId: cid }).returning();
   if (!c) { res.status(500).json({ message: "Failed" }); return; }
   await upsertCategoryJunctions(c.id, groupIds ?? [], userIds ?? []);
   res.status(201).json(await formatCategory(c));

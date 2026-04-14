@@ -27,6 +27,9 @@ import IncidentTypesPage from "@/pages/master/incident-types";
 import IndicatorReportPage from "@/pages/reports/indicator-report";
 import ScheduleCompliancePage from "@/pages/reports/schedule-compliance";
 import LogsPage from "@/pages/admin/logs";
+import RegisterPage from "@/pages/register";
+import PaymentPage from "@/pages/payment";
+import SysadminApp from "@/pages/sysadmin/index";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,9 +39,24 @@ const queryClient = new QueryClient({
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-function AppRoutes() {
-  const { user } = useAuth();
+function isPaymentRoute() {
+  return /^\/c\/[^/]+\/payment/.test(window.location.pathname);
+}
+function isSysadminRoute() {
+  return window.location.pathname.startsWith("/sysadmin");
+}
+function isRegisterRoute() {
+  return window.location.pathname.startsWith("/register");
+}
+
+function MainApp() {
+  const { user, paywallInfo } = useAuth();
+
+  // Paywall: subscription expired / suspended / pending
+  if (!user && paywallInfo) return <PaymentPage />;
   if (!user) return <LoginPage />;
+  if (user.role === "sysadmin") return <SysadminApp />;
+
   return (
     <Router base={base}>
       <Layout>
@@ -66,6 +84,7 @@ function AppRoutes() {
           <Route path="/reports/indicators" component={IndicatorReportPage} />
           <Route path="/reports/schedule-compliance" component={ScheduleCompliancePage} />
           <Route path="/admin/logs" component={LogsPage} />
+          <Route path="/payment" component={PaymentPage} />
           <Route><Redirect to="/" /></Route>
         </Switch>
       </Layout>
@@ -74,10 +93,29 @@ function AppRoutes() {
 }
 
 export default function App() {
+  // Sysadmin and register don't need AuthProvider
+  if (isSysadminRoute()) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <SysadminApp />
+        <Toaster />
+      </QueryClientProvider>
+    );
+  }
+
+  if (isRegisterRoute()) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <RegisterPage />
+        <Toaster />
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AppRoutes />
+        {isPaymentRoute() ? <PaymentPage /> : <MainApp />}
         <Toaster />
       </AuthProvider>
     </QueryClientProvider>

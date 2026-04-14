@@ -190,4 +190,42 @@ React + Vite web dashboard for HSE monitoring. Uses shadcn/ui, Recharts, wouter,
 - Radix Select does not allow empty string (`""`) as SelectItem value — use `"none"` for "no selection" and convert in save handler
 - TemplateBuilder uses `staleTime: 0` + `queryClient.setQueryData` pattern to avoid stale cache on re-open
 
-**Served at:** `/hse-web/` (port 5174 in dev)
+**Served at:** `/` (port 5174 in dev)
+
+## Multi-Tenancy Architecture
+
+HSE Monitor is a multi-tenant SaaS platform. Each company has isolated data.
+
+### Companies & Plans
+- Tables: `companies`, `payments`, `system_settings`
+- All main tables have `company_id` FK: users, incidents, plants, groups, categories, actions, templates, preventive_actions, schedules, indicators, incident_types, smtp_settings, gdrive_settings
+- Plans: `free` (1 month trial), `monthly` (Rp 250k/mo), `yearly` (Rp 2.25M/yr)
+- Company status: `pending` | `active` | `suspended`
+
+### Company Portal
+- URL: `/c/{slug}/` — company-branded login portal
+- Auth: `POST /api/auth/login` with `{ nik, password, companySlug }` — resolves company, verifies subscription
+- Paywall: 402 response with `code: SUBSCRIPTION_EXPIRED|PENDING_ACTIVATION|SUSPENDED` → redirect to `/c/{slug}/payment`
+- KCI company: slug=`kci`, plan=`yearly`, subscriptionEndsAt=2036
+
+### Sysadmin Panel
+- URL: `/sysadmin` — separate dark-themed admin panel
+- Login: NIK `SYSADMIN` / password `sysadmin2024` (role=`sysadmin`, companyId=null)
+- Features: company list + activate/suspend, payment verification, reports (monthly), settings (QRIS image upload, pricing)
+- Routes: `GET/POST /api/sysadmin/companies`, `GET/PUT /api/sysadmin/payments`, `GET /api/sysadmin/reports/*`, `GET/PUT /api/sysadmin/settings`, `POST /api/sysadmin/settings/qris`
+
+### Registration
+- URL: `/register` — public company registration form (step 1: plan, step 2: company + admin details)
+- Route: `POST /api/auth/register` — creates company (status=pending) + admin user
+- After registration: sysadmin must activate via sysadmin panel
+
+### Payment Flow
+- Company admin submits payment proof: `POST /api/payments/submit` (multipart: proof file + plan)
+- Proof uploaded to Google Drive, record saved in `payments` table with status=`pending`
+- Sysadmin reviews: `PUT /api/sysadmin/payments/:id/approve` → extends subscription, updates company status
+- Payment page shown when subscription expired: `/c/{slug}/payment` or `/payment`
+
+### Auth Token
+- Format: `hse_` + base64(JSON) — payload includes `companyId`
+- Sysadmin token: `companyId: null`
+- Company users: `companyId: {number}` — all API queries filter by this

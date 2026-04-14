@@ -5,9 +5,11 @@ import { usersTable } from "./users";
 import { templatesTable } from "./templates";
 import { plantsTable } from "./plants";
 import { groupsTable } from "./groups";
+import { companiesTable } from "./companies";
 
 export const schedulesTable = pgTable("schedules", {
   id: serial("id").primaryKey(),
+  companyId: integer("company_id").references(() => companiesTable.id),
   title: text("title"),
   supervisorId: integer("supervisor_id").references(() => usersTable.id),
   groupId: integer("group_id").references(() => groupsTable.id),

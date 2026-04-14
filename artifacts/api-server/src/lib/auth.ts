@@ -7,8 +7,9 @@ export interface AuthUser {
   id: number;
   nik: string;
   name: string;
-  email: string;
+  email: string | null;
   role: string;
+  companyId: number | null;
 }
 
 declare global {
@@ -51,6 +52,20 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   if (!user) {
     res.status(401).json({ message: "Invalid token" });
     return;
+  }
+  req.user = user;
+  next();
+}
+
+export function sysadminMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    res.status(401).json({ message: "Unauthorized" }); return;
+  }
+  const token = authHeader.slice(7);
+  const user = verifyToken(token);
+  if (!user || user.role !== "sysadmin") {
+    res.status(403).json({ message: "Sysadmin access required" }); return;
   }
   req.user = user;
   next();

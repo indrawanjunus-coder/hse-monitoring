@@ -1,19 +1,23 @@
 import { Router } from "express";
 import { db, plantsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 
 const router = Router();
 router.use(authMiddleware);
 
-router.get("/", async (_req, res) => {
-  const plants = await db.select().from(plantsTable);
+router.get("/", async (req, res) => {
+  const cid = req.user!.companyId;
+  const plants = cid
+    ? await db.select().from(plantsTable).where(eq(plantsTable.companyId, cid))
+    : await db.select().from(plantsTable);
   res.json(plants.map(p => ({ ...p, createdAt: p.createdAt.toISOString() })));
 });
 
 router.post("/", async (req, res) => {
   const { name, code, description } = req.body;
-  const [p] = await db.insert(plantsTable).values({ name, code, description }).returning();
+  const cid = req.user!.companyId;
+  const [p] = await db.insert(plantsTable).values({ name, code, description, companyId: cid }).returning();
   if (!p) { res.status(500).json({ message: "Failed" }); return; }
   res.status(201).json({ ...p, createdAt: p.createdAt.toISOString() });
 });

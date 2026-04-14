@@ -4,7 +4,7 @@ import {
   groupMembersTable, preventiveActionsTable, categoryGroupsTable, categoryUsersTable,
   incidentAttachmentsTable,
 } from "@workspace/db";
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, inArray, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 import { sendEmail, incidentEmailHtml } from "../lib/email";
 
@@ -54,8 +54,11 @@ router.get("/", async (req, res) => {
 
   let incidents: (typeof incidentsTable.$inferSelect)[];
 
+  const cid = authUser.companyId;
   if (authUser.role === "admin") {
-    incidents = await db.select().from(incidentsTable).orderBy(desc(incidentsTable.createdAt));
+    incidents = cid
+      ? await db.select().from(incidentsTable).where(eq(incidentsTable.companyId, cid)).orderBy(desc(incidentsTable.createdAt))
+      : await db.select().from(incidentsTable).orderBy(desc(incidentsTable.createdAt));
   } else {
     // Find all groups the user belongs to
     const memberOf = await db.select({ groupId: groupMembersTable.groupId })
@@ -78,12 +81,15 @@ router.get("/", async (req, res) => {
     ]);
 
     // Also include incidents the user personally reported
+    const baseWhere = cid ? eq(incidentsTable.companyId, cid) : undefined;
     if (allowedCategoryIds.size === 0) {
       incidents = await db.select().from(incidentsTable)
-        .where(eq(incidentsTable.reporterId, authUser.id))
+        .where(baseWhere ? and(baseWhere, eq(incidentsTable.reporterId, authUser.id)) : eq(incidentsTable.reporterId, authUser.id))
         .orderBy(desc(incidentsTable.createdAt));
     } else {
-      const allIncidents = await db.select().from(incidentsTable).orderBy(desc(incidentsTable.createdAt));
+      const allIncidents = baseWhere
+        ? await db.select().from(incidentsTable).where(baseWhere).orderBy(desc(incidentsTable.createdAt))
+        : await db.select().from(incidentsTable).orderBy(desc(incidentsTable.createdAt));
       incidents = allIncidents.filter(i =>
         allowedCategoryIds.has(i.categoryId) || i.reporterId === authUser.id
       );
@@ -110,7 +116,9 @@ router.post("/", async (req, res) => {
   const assignedGroupId = cat?.picGroupId ?? null;
 
   const today = new Date().toISOString().slice(0, 10);
+  const cid = req.user!.companyId;
   const [inc] = await db.insert(incidentsTable).values({
+    companyId: cid,
     reporterId,
     plantId,
     categoryId,

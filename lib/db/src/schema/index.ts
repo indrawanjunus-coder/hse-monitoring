@@ -20,3 +20,5 @@ export * from "./gdrive-settings";
 export * from "./incident-attachments";
 export * from "./incident-comments";
 export * from "./incident-escalations";
+export * from "./companies";
+export * from "./payments";

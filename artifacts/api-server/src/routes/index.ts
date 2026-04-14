@@ -22,6 +22,8 @@ import gdriveSettingsRouter from "./gdrive-settings";
 import attachmentsRouter from "./attachments";
 import incidentCommentsRouter from "./incident-comments";
 import incidentEscalationsRouter from "./incident-escalations";
+import sysadminRouter from "./sysadmin";
+import companyPaymentsRouter from "./company-payments";
 
 const router: IRouter = Router();
 
@@ -48,5 +50,7 @@ router.use("/settings/gdrive", gdriveSettingsRouter);
 router.use("/attachments", attachmentsRouter);
 router.use("/incidents/:incidentId/comments", incidentCommentsRouter);
 router.use("/incidents/:incidentId/escalations", incidentEscalationsRouter);
+router.use("/sysadmin", sysadminRouter);
+router.use("/payments", companyPaymentsRouter);
 
 export default router;
