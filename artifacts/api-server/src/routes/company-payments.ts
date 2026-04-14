@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, paymentsTable, systemSettingsTable, companiesTable } from "@workspace/db";
+import { db, paymentsTable, systemSettingsTable, companiesTable, plansTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 import { uploadToGdrive } from "../lib/gdrive";
@@ -8,15 +8,29 @@ import multer from "multer";
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-// Get public payment info (QRIS, pricing) — needs auth
+// Get public payment info (QRIS/transfer, pricing) — needs auth
 router.get("/info", authMiddleware, async (_req, res) => {
-  const rows = await db.select().from(systemSettingsTable);
+  const [settingsRows, plans] = await Promise.all([
+    db.select().from(systemSettingsTable),
+    db.select().from(plansTable),
+  ]);
   const obj: Record<string, string> = {};
-  rows.forEach(r => { obj[r.key] = r.value; });
+  settingsRows.forEach(r => { obj[r.key] = r.value; });
+
+  const findPrice = (slug: string) => {
+    const plan = plans.find(p => p.slug === slug);
+    return plan ? Number(plan.priceMonthly ?? 0) : 0;
+  };
+
   res.json({
+    paymentMethod: obj["payment_method"] ?? "qris",
     qrisImageUrl: obj["qris_image_url"] ?? "",
-    priceMonthly: Number(obj["price_monthly"] ?? 250000),
-    priceYearly: Number(obj["price_yearly"] ?? 2250000),
+    bankName: obj["bank_name"] ?? "",
+    bankAccountNumber: obj["bank_account_number"] ?? "",
+    bankAccountName: obj["bank_account_name"] ?? "",
+    bankNote: obj["bank_note"] ?? "",
+    priceMonthly: findPrice("monthly"),
+    priceYearly: findPrice("yearly"),
   });
 });
 
@@ -37,13 +51,9 @@ router.post("/submit", authMiddleware, upload.single("proof"), async (req, res) 
   if (!plan || !req.file) { res.status(400).json({ error: "Plan dan bukti transfer diperlukan" }); return; }
 
   const months = parseInt(periodMonths ?? "1");
-  const prices: Record<string, number> = { monthly: 250000, yearly: 2250000, free: 0 };
-  const rows = await db.select().from(systemSettingsTable);
-  const settings: Record<string, string> = {};
-  rows.forEach(r => { settings[r.key] = r.value; });
-  const priceMonthly = Number(settings["price_monthly"] ?? 250000);
-  const priceYearly = Number(settings["price_yearly"] ?? 2250000);
-  const amount = plan === "monthly" ? priceMonthly * months : plan === "yearly" ? priceYearly : 0;
+  const plans = await db.select().from(plansTable);
+  const planRecord = plans.find(p => p.slug === plan);
+  const amount = planRecord ? Number(planRecord.priceMonthly ?? 0) * months : 0;
 
   try {
     const { fileId, viewUrl } = await uploadToGdrive(req.file.buffer, `bukti-${user.companyId}-${Date.now()}-${req.file.originalname}`, req.file.mimetype);

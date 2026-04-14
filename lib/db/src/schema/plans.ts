@@ -5,6 +5,7 @@ export const plansTable = pgTable("plans", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   description: text("description").notNull().default(""),
+  features: text("features").notNull().default(""),
   priceMonthly: integer("price_monthly").notNull().default(0),
   priceYearly: integer("price_yearly").notNull().default(0),
   maxUsers: integer("max_users"),

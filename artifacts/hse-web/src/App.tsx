@@ -39,7 +39,10 @@ const queryClient = new QueryClient({
   },
 });
 
-const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+// For company portal (/c/{slug}/...), include slug in router base so wouter routes match correctly
+const _slugMatch = window.location.pathname.match(/^\/c\/([^/]+)/);
+const _viteBase = import.meta.env.BASE_URL.replace(/\/$/, "");
+const base = _slugMatch ? `/c/${_slugMatch[1]}` : _viteBase;
 
 function isPaymentRoute() {
   return /^\/c\/[^/]+\/payment/.test(window.location.pathname);

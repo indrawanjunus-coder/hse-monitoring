@@ -154,11 +154,16 @@ router.get("/settings", async (_req, res) => {
 });
 
 router.put("/settings", async (req, res) => {
-  const { qrisImageUrl, priceMonthly, priceYearly } = req.body;
+  const { qrisImageUrl, priceMonthly, priceYearly, paymentMethod, bankName, bankAccountNumber, bankAccountName, bankNote } = req.body;
   const updates: { key: string; value: string }[] = [];
   if (qrisImageUrl !== undefined) updates.push({ key: "qris_image_url", value: qrisImageUrl });
   if (priceMonthly !== undefined) updates.push({ key: "price_monthly", value: String(priceMonthly) });
   if (priceYearly !== undefined) updates.push({ key: "price_yearly", value: String(priceYearly) });
+  if (paymentMethod !== undefined) updates.push({ key: "payment_method", value: paymentMethod });
+  if (bankName !== undefined) updates.push({ key: "bank_name", value: bankName });
+  if (bankAccountNumber !== undefined) updates.push({ key: "bank_account_number", value: bankAccountNumber });
+  if (bankAccountName !== undefined) updates.push({ key: "bank_account_name", value: bankAccountName });
+  if (bankNote !== undefined) updates.push({ key: "bank_note", value: bankNote });
   for (const u of updates) {
     const [existing] = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, u.key));
     if (existing) await db.update(systemSettingsTable).set({ value: u.value, updatedAt: new Date() }).where(eq(systemSettingsTable.key, u.key));
@@ -215,9 +220,9 @@ router.get("/plans", async (_req, res) => {
 });
 
 router.post("/plans", async (req, res) => {
-  const { name, slug, description, priceMonthly, priceYearly, maxUsers, durationMonths, maxTemplates, isActive, sortOrder } = req.body;
+  const { name, slug, description, features, priceMonthly, priceYearly, maxUsers, durationMonths, maxTemplates, isActive, sortOrder } = req.body;
   const [plan] = await db.insert(plansTable).values({
-    name, slug, description: description ?? "",
+    name, slug, description: description ?? "", features: features ?? "",
     priceMonthly: Number(priceMonthly ?? 0),
     priceYearly: Number(priceYearly ?? 0),
     maxUsers: maxUsers != null ? Number(maxUsers) : null,
@@ -231,11 +236,12 @@ router.post("/plans", async (req, res) => {
 
 router.put("/plans/:id", async (req, res) => {
   const id = Number(req.params.id);
-  const { name, slug, description, priceMonthly, priceYearly, maxUsers, durationMonths, maxTemplates, isActive, sortOrder } = req.body;
+  const { name, slug, description, features, priceMonthly, priceYearly, maxUsers, durationMonths, maxTemplates, isActive, sortOrder } = req.body;
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = name;
   if (slug !== undefined) updates.slug = slug;
   if (description !== undefined) updates.description = description;
+  if (features !== undefined) updates.features = features;
   if (priceMonthly !== undefined) updates.priceMonthly = Number(priceMonthly);
   if (priceYearly !== undefined) updates.priceYearly = Number(priceYearly);
   if ("maxUsers" in req.body) updates.maxUsers = maxUsers != null ? Number(maxUsers) : null;

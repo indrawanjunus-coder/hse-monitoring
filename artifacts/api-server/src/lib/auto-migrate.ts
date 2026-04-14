@@ -147,6 +147,47 @@ export async function autoMigrate() {
     } else {
       logger.info("autoMigrate: schema already migrated, skipping data seed");
     }
+
+    // Always ensure sysadmin password_hash format is correct
+    const { rows: [sysadminCheck] } = await pool.query(`SELECT password_hash FROM users WHERE nik = 'SYSADMIN' LIMIT 1`);
+    if (sysadminCheck?.password_hash?.startsWith("$2")) {
+      const { createHash: ch2 } = await import("crypto");
+      const fixedHash = ch2("sha256").update("sysadmin2024" + "hse_salt_2024").digest("hex");
+      await pool.query(`UPDATE users SET password_hash = $1 WHERE nik = 'SYSADMIN'`, [fixedHash]);
+      logger.info("autoMigrate: sysadmin bcrypt hash fixed to SHA256");
+    }
+
+    // Always seed default plans if not exists
+    await pool.query(`
+      INSERT INTO plans (name, slug, description, features, price_monthly, price_yearly, max_users, duration_months, max_templates, is_active, sort_order)
+      VALUES
+        ('Gratis', 'free', 'Paket trial untuk mencoba semua fitur HSE Monitor', '1 bulan trial\nSemua fitur dasar\nMaks. 5 pengguna\nPenyimpanan Google Drive\nSupport email', 0, 0, 5, 1, NULL, true, 1),
+        ('Bulanan', 'monthly', 'Paket berlangganan bulanan tanpa batas pengguna', 'Semua fitur lengkap\nPengguna tidak terbatas\nPenyimpanan Google Drive\nLaporan & dashboard\nSupport prioritas\nNotifikasi email otomatis', 250000, 250000, NULL, 1, NULL, true, 2),
+        ('Tahunan', 'yearly', 'Paket berlangganan tahunan, lebih hemat 25%', 'Semua fitur Bulanan\nBayar sekali setahun\nHemat Rp 750.000/tahun\nOnboarding gratis\nDedicated support', 2250000, 2250000, NULL, 12, NULL, true, 3)
+      ON CONFLICT (slug) DO NOTHING
+    `).catch(() => {});
+
+    // Always seed default testimonials if none exist
+    const { rows: testimRows } = await pool.query(`SELECT COUNT(*) as c FROM testimonials`);
+    if (Number(testimRows[0]?.c) === 0) {
+      await pool.query(`
+        INSERT INTO testimonials (user_id, company_id, author_name, author_role, author_company, content, rating, is_active)
+        VALUES
+          (NULL, NULL, 'Andi Prasetyo', 'HSE Manager', 'PT. Karya Cipta Industri', 'HSE Monitor membantu kami mengelola lebih dari 200 jadwal inspeksi per bulan dengan mudah. Laporan otomatis sangat menghemat waktu.', 5, true),
+          (NULL, NULL, 'Dewi Rahayu', 'Safety Officer', 'PT. Maju Bersama', 'Pelaporan insiden kini jauh lebih cepat. Tim lapangan bisa langsung upload foto dari HP, dan notifikasi langsung ke PIC.', 5, true)
+      `).catch(() => {});
+      logger.info("autoMigrate: default testimonials seeded");
+    }
+
+    // Ensure payment_method system setting exists
+    await pool.query(`INSERT INTO system_settings (key, value) VALUES ('payment_method', 'qris') ON CONFLICT (key) DO NOTHING`).catch(() => {});
+
+    // Sync sequences
+    const tables = ['users', 'incidents', 'companies', 'payments', 'system_settings', 'plans', 'testimonials'];
+    for (const t of tables) {
+      await pool.query(`SELECT setval(pg_get_serial_sequence('"${t}"', 'id'), COALESCE(MAX(id), 1)) FROM "${t}"`).catch(() => {});
+    }
+
   } catch (err) {
     logger.warn({ err }, "autoMigrate: error during migration (non-fatal)");
   }

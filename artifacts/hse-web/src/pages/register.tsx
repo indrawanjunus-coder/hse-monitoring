@@ -13,8 +13,11 @@ const PLANS = [
 ];
 
 export default function RegisterPage() {
-  const [step, setStep] = useState<"plan" | "form" | "success">("plan");
-  const [selectedPlan, setSelectedPlan] = useState("monthly");
+  const urlPlan = new URLSearchParams(window.location.search).get("plan");
+  const validPlanIds = PLANS.map(p => p.id);
+  const initialPlan = urlPlan && validPlanIds.includes(urlPlan) ? urlPlan : "monthly";
+  const [step, setStep] = useState<"plan" | "form" | "success">(urlPlan && validPlanIds.includes(urlPlan) ? "form" : "plan");
+  const [selectedPlan, setSelectedPlan] = useState(initialPlan);
   const [form, setForm] = useState({
     companyName: "", companySlug: "", contactName: "", contactEmail: "",
     contactPhone: "", adminNik: "", adminPassword: "", adminPasswordConfirm: "",

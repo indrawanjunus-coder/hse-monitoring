@@ -244,8 +244,42 @@ interface ApiTestimonial {
   id: number; authorName: string; authorRole: string; authorCompany: string; content: string; rating: number;
 }
 
+interface ApiPlan {
+  id: number; name: string; slug: string; description: string; features: string;
+  priceMonthly: number; priceYearly: number; maxUsers: number | null;
+  durationMonths: number; maxTemplates: number | null; isActive: boolean; sortOrder: number;
+}
+
+interface PaymentInfo {
+  paymentMethod: "qris" | "transfer";
+  qrisImageUrl: string;
+  bankName: string; bankAccountNumber: string; bankAccountName: string; bankNote: string;
+}
+
+function planBadge(slug: string) {
+  if (slug === "monthly") return "Populer";
+  if (slug === "yearly") return "Hemat 25%";
+  return null;
+}
+function planHighlight(slug: string) { return slug === "monthly"; }
+function planCta(slug: string) {
+  if (slug === "free") return "Mulai Gratis";
+  if (slug === "yearly") return "Pilih Tahunan";
+  return "Mulai Sekarang";
+}
+function fmtRp(n: number, period?: string) {
+  if (n === 0) return "Rp 0";
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
+}
+function planPeriod(slug: string) { return slug === "yearly" ? "/tahun" : "/bulan"; }
+function planPrice(plan: ApiPlan) {
+  if (plan.slug === "yearly") return fmtRp(plan.priceYearly);
+  return fmtRp(plan.priceMonthly);
+}
+
 export default function LandingPage() {
   const [showPortal, setShowPortal] = useState(false);
+
   const { data: apiTestimonials } = useQuery<ApiTestimonial[]>({
     queryKey: ["public-testimonials"],
     queryFn: async () => {
@@ -255,7 +289,29 @@ export default function LandingPage() {
     },
     staleTime: 5 * 60_000,
   });
+
+  const { data: apiPlans } = useQuery<ApiPlan[]>({
+    queryKey: ["public-plans"],
+    queryFn: async () => {
+      const res = await fetch("/api/plans");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  const { data: paymentInfo } = useQuery<PaymentInfo>({
+    queryKey: ["payment-info"],
+    queryFn: async () => {
+      const res = await fetch("/api/plans/payment-info");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+
   const testimonials = apiTestimonials && apiTestimonials.length > 0 ? apiTestimonials : STATIC_TESTIMONIALS;
+  const plans = apiPlans && apiPlans.length > 0 ? apiPlans : null;
 
   return (
     <div className="min-h-screen bg-white font-sans">
@@ -354,57 +410,72 @@ export default function LandingPage() {
             <p className="text-gray-500">Mulai gratis, upgrade kapan saja. Tidak ada biaya tersembunyi.</p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-            {PLANS.map(plan => (
-              <div
-                key={plan.id}
-                className={`rounded-2xl p-6 border-2 relative ${
-                  plan.highlight
-                    ? "border-blue-600 bg-blue-600 text-white shadow-xl shadow-blue-200"
-                    : "border-gray-200 bg-white"
-                }`}
-              >
-                {plan.badge && (
-                  <div className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-3 py-1 rounded-full ${
-                    plan.highlight ? "bg-white text-blue-600" : "bg-amber-400 text-amber-900"
-                  }`}>
-                    {plan.badge}
-                  </div>
-                )}
-
-                <div className="mb-4">
-                  <div className={`font-bold text-lg mb-1 ${plan.highlight ? "text-white" : "text-gray-900"}`}>{plan.name}</div>
-                  <div className="flex items-baseline gap-1">
-                    <span className={`text-3xl font-bold ${plan.highlight ? "text-white" : "text-gray-900"}`}>{plan.price}</span>
-                    <span className={`text-sm ${plan.highlight ? "text-blue-100" : "text-gray-400"}`}>{plan.period}</span>
-                  </div>
-                </div>
-
-                <ul className="space-y-2.5 mb-6">
-                  {plan.features.map(f => (
-                    <li key={f} className="flex items-center gap-2 text-sm">
-                      <CheckCircle className={`w-4 h-4 shrink-0 ${plan.highlight ? "text-blue-200" : "text-green-500"}`} />
-                      <span className={plan.highlight ? "text-blue-50" : "text-gray-600"}>{f}</span>
-                    </li>
-                  ))}
-                </ul>
-
-                <a
-                  href="/register"
-                  className={`block text-center text-sm font-semibold py-2.5 rounded-xl transition-colors ${
-                    plan.highlight
-                      ? "bg-white text-blue-600 hover:bg-blue-50"
-                      : "bg-blue-600 text-white hover:bg-blue-700"
+          <div className={`grid gap-6 max-w-4xl mx-auto ${plans ? (plans.length === 1 ? "max-w-xs" : plans.length === 2 ? "md:grid-cols-2 max-w-2xl" : "md:grid-cols-3") : "md:grid-cols-3"}`}>
+            {(plans ?? PLANS.map(p => ({
+              id: p.id, slug: p.id, name: p.name, description: "", features: p.features.join("\n"),
+              priceMonthly: 0, priceYearly: 0, maxUsers: null, durationMonths: 1, maxTemplates: null, isActive: true, sortOrder: 0,
+              _staticPrice: p.price, _staticPeriod: p.period, _staticFeatures: p.features, _staticCta: p.cta, _highlight: p.highlight, _badge: p.badge,
+            } as any))).map((plan: any) => {
+              const isApi = !!plans;
+              const highlight = isApi ? planHighlight(plan.slug) : plan._highlight;
+              const badge = isApi ? planBadge(plan.slug) : plan._badge;
+              const price = isApi ? planPrice(plan) : plan._staticPrice;
+              const period = isApi ? planPeriod(plan.slug) : plan._staticPeriod;
+              const featureList: string[] = isApi
+                ? (plan.features ? plan.features.split("\n").filter(Boolean) : [])
+                : (plan._staticFeatures ?? []);
+              const cta = isApi ? planCta(plan.slug) : plan._staticCta;
+              return (
+                <div
+                  key={plan.id}
+                  className={`rounded-2xl p-6 border-2 relative ${
+                    highlight
+                      ? "border-blue-600 bg-blue-600 text-white shadow-xl shadow-blue-200"
+                      : "border-gray-200 bg-white"
                   }`}
                 >
-                  {plan.cta}
-                </a>
-              </div>
-            ))}
+                  {badge && (
+                    <div className={`absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold px-3 py-1 rounded-full ${
+                      highlight ? "bg-white text-blue-600" : "bg-amber-400 text-amber-900"
+                    }`}>
+                      {badge}
+                    </div>
+                  )}
+                  <div className="mb-4">
+                    <div className={`font-bold text-lg mb-1 ${highlight ? "text-white" : "text-gray-900"}`}>{plan.name}</div>
+                    <div className="flex items-baseline gap-1">
+                      <span className={`text-3xl font-bold ${highlight ? "text-white" : "text-gray-900"}`}>{price}</span>
+                      <span className={`text-sm ${highlight ? "text-blue-100" : "text-gray-400"}`}>{period}</span>
+                    </div>
+                  </div>
+                  <ul className="space-y-2.5 mb-6">
+                    {featureList.map((f, i) => (
+                      <li key={i} className="flex items-center gap-2 text-sm">
+                        <CheckCircle className={`w-4 h-4 shrink-0 ${highlight ? "text-blue-200" : "text-green-500"}`} />
+                        <span className={highlight ? "text-blue-50" : "text-gray-600"}>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <a
+                    href={`/register?plan=${plan.slug}`}
+                    className={`block text-center text-sm font-semibold py-2.5 rounded-xl transition-colors ${
+                      highlight
+                        ? "bg-white text-blue-600 hover:bg-blue-50"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    {cta}
+                  </a>
+                </div>
+              );
+            })}
           </div>
 
           <p className="text-center text-sm text-gray-400 mt-8">
-            Pembayaran via transfer bank / QRIS. Aktivasi oleh tim kami dalam 1×24 jam.
+            {paymentInfo?.paymentMethod === "transfer"
+              ? `Pembayaran via transfer bank (${paymentInfo.bankName || "rekening kami"}). Aktivasi oleh tim kami dalam 1×24 jam.`
+              : "Pembayaran via QRIS. Aktivasi oleh tim kami dalam 1×24 jam."
+            }
           </p>
         </div>
       </section>

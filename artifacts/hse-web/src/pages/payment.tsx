@@ -3,10 +3,15 @@ import { useAuth } from "@/lib/auth-context";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { CheckCircle, Upload, AlertCircle, CreditCard } from "lucide-react";
+import { CheckCircle, Upload, AlertCircle, CreditCard, Building2 } from "lucide-react";
 
 interface PaymentInfo {
+  paymentMethod: "qris" | "transfer";
   qrisImageUrl: string;
+  bankName: string;
+  bankAccountNumber: string;
+  bankAccountName: string;
+  bankNote: string;
   priceMonthly: number;
   priceYearly: number;
 }
@@ -68,6 +73,10 @@ export default function PaymentPage() {
     );
   }
 
+  const selectedPlanData = PLANS.find(p => p.id === selectedPlan)!;
+  const selectedAmount = paymentInfo ? formatRp(selectedPlanData.getPrice(paymentInfo)) : "...";
+  const isQris = !paymentInfo || paymentInfo.paymentMethod === "qris";
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-xl mx-auto py-10 px-4">
@@ -109,12 +118,12 @@ export default function PaymentPage() {
           </div>
         </div>
 
-        {/* QRIS image */}
-        {paymentInfo?.qrisImageUrl && (
+        {/* QRIS section */}
+        {isQris && paymentInfo?.qrisImageUrl && (
           <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
             <h2 className="font-semibold text-gray-900 mb-3">Scan QRIS</h2>
             <p className="text-sm text-gray-500 mb-4">
-              Transfer {paymentInfo ? formatRp(PLANS.find(p => p.id === selectedPlan)!.getPrice(paymentInfo)) : "..."} ke QRIS berikut:
+              Transfer <span className="font-semibold text-gray-800">{selectedAmount}</span> ke QRIS berikut:
             </p>
             <div className="flex justify-center">
               <img
@@ -124,6 +133,49 @@ export default function PaymentPage() {
                 onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
               />
             </div>
+          </div>
+        )}
+
+        {/* Transfer Rekening section */}
+        {!isQris && (
+          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Building2 className="w-5 h-5 text-blue-600" />
+              <h2 className="font-semibold text-gray-900">Transfer Rekening Bank</h2>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Transfer <span className="font-semibold text-gray-800">{selectedAmount}</span> ke rekening berikut:
+            </p>
+            <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-100">
+              {paymentInfo?.bankName && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Bank</span>
+                  <span className="font-semibold text-gray-900">{paymentInfo.bankName}</span>
+                </div>
+              )}
+              {paymentInfo?.bankAccountNumber && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">No. Rekening</span>
+                  <span className="font-semibold text-gray-900 tracking-wider">{paymentInfo.bankAccountNumber}</span>
+                </div>
+              )}
+              {paymentInfo?.bankAccountName && (
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Atas Nama</span>
+                  <span className="font-semibold text-gray-900">{paymentInfo.bankAccountName}</span>
+                </div>
+              )}
+            </div>
+            {paymentInfo?.bankNote && (
+              <p className="mt-3 text-sm text-gray-500 italic">{paymentInfo.bankNote}</p>
+            )}
+          </div>
+        )}
+
+        {/* No payment method configured */}
+        {isQris && paymentInfo && !paymentInfo.qrisImageUrl && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
+            <p className="text-sm text-blue-700">Hubungi admin untuk informasi pembayaran.</p>
           </div>
         )}
 

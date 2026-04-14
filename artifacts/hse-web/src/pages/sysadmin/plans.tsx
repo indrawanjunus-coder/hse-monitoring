@@ -36,7 +36,7 @@ function sysApi(token: string) {
 }
 
 interface Plan {
-  id: number; name: string; slug: string; description: string;
+  id: number; name: string; slug: string; description: string; features: string;
   priceMonthly: number; priceYearly: number;
   maxUsers: number | null; durationMonths: number;
   maxTemplates: number | null; isActive: boolean; sortOrder: number;
@@ -46,7 +46,7 @@ interface Plan {
 type PlanForm = Omit<Plan, "id" | "createdAt">;
 
 const emptyForm: PlanForm = {
-  name: "", slug: "", description: "",
+  name: "", slug: "", description: "", features: "",
   priceMonthly: 0, priceYearly: 0,
   maxUsers: null, durationMonths: 1,
   maxTemplates: null, isActive: true, sortOrder: 0,
@@ -74,7 +74,7 @@ export default function SysadminPlans({ token }: { token: string }) {
   const openCreate = () => { setForm(emptyForm); setError(""); setEditTarget(null); setDialog("create"); };
   const openEdit = (p: Plan) => {
     setEditTarget(p);
-    setForm({ name: p.name, slug: p.slug, description: p.description, priceMonthly: p.priceMonthly, priceYearly: p.priceYearly, maxUsers: p.maxUsers, durationMonths: p.durationMonths, maxTemplates: p.maxTemplates, isActive: p.isActive, sortOrder: p.sortOrder });
+    setForm({ name: p.name, slug: p.slug, description: p.description, features: p.features ?? "", priceMonthly: p.priceMonthly, priceYearly: p.priceYearly, maxUsers: p.maxUsers, durationMonths: p.durationMonths, maxTemplates: p.maxTemplates, isActive: p.isActive, sortOrder: p.sortOrder });
     setError(""); setDialog("edit");
   };
 
@@ -204,6 +204,16 @@ export default function SysadminPlans({ token }: { token: string }) {
             <div>
               <Label>Deskripsi</Label>
               <Textarea value={form.description} onChange={e => setField("description", e.target.value)} rows={2} className="resize-none" />
+            </div>
+            <div>
+              <Label>Fitur-fitur <span className="text-gray-400 text-xs">(satu per baris, tampil sebagai bullet di landing page)</span></Label>
+              <Textarea
+                value={form.features}
+                onChange={e => setField("features", e.target.value)}
+                rows={5}
+                className="resize-none font-mono text-sm"
+                placeholder={"Semua fitur dasar\nMaks. 5 pengguna\nPenyimpanan Google Drive\nSupport email"}
+              />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>

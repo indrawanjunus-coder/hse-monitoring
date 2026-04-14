@@ -1,244 +1,102 @@
-# Workspace
+# Overview
 
-## Overview
+This project is a pnpm workspace monorepo using TypeScript, designed for a multi-tenant SaaS platform called HSE Monitor. It aims to provide comprehensive Health, Safety, and Environment monitoring solutions through web and mobile applications.
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+The platform offers features for incident reporting, inspection management, schedule tracking, and master data management, with a strong focus on compliance and user-friendly interfaces. It supports different user roles (Employee, Supervisor, Admin, Sysadmin) and provides a company-branded portal for each tenant.
 
-## Stack
+Key capabilities include:
+- API server built with Express.js.
+- Web dashboard with rich analytics and reporting.
+- Mobile application for on-the-go HSE monitoring.
+- Multi-tenancy with isolated data for each company.
+- Subscription management and payment processing.
+- Dynamic plan and testimonial management by sysadmin.
 
+The business vision is to provide a robust, scalable, and secure HSE monitoring solution that can be easily adopted by various companies to improve their safety compliance and operational efficiency.
+
+# User Preferences
+
+- I prefer clear and concise explanations.
+- I prefer an iterative development approach where I can review changes frequently.
+- Please ask for confirmation before implementing significant architectural changes or adding new external dependencies.
+- Ensure that all generated code is type-safe and follows best practices.
+
+# System Architecture
+
+The project utilizes a pnpm workspace monorepo structure.
+
+**Technology Stack:**
 - **Monorepo tool**: pnpm workspaces
 - **Node.js version**: 24
 - **Package manager**: pnpm
 - **TypeScript version**: 5.9
 - **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
+- **Database**: PostgreSQL with Drizzle ORM
+- **Validation**: Zod
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 
-## Structure
+**Monorepo Structure:**
+- `artifacts/`: Deployable applications (e.g., `api-server`, `hse-mobile`, `hse-web`).
+- `lib/`: Shared libraries (e.g., `api-spec`, `api-client-react`, `api-zod`, `db`).
+- `scripts/`: Utility scripts.
 
-```text
-artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
-```
+**TypeScript & Composite Projects:**
+- All packages extend a base `tsconfig.base.json` with `composite: true`.
+- Root `tsconfig.json` lists all packages as project references for correct cross-package typechecking and build order.
+- `emitDeclarationOnly` is used for typechecking, with actual JS bundling handled by esbuild/tsx/vite.
 
-## TypeScript & Composite Projects
+**API Server (`artifacts/api-server`):**
+- Express 5 server with routes in `src/routes/`.
+- Uses `@workspace/api-zod` for validation and `@workspace/db` for persistence.
+- Bundled using esbuild for production.
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+**Database Layer (`lib/db`):**
+- Drizzle ORM with PostgreSQL.
+- Exports a Drizzle client and schema models.
+- Migrations handled by Drizzle Kit and Replit publishing.
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+**API Specification & Codegen (`lib/api-spec`):**
+- Manages `openapi.yaml` and `orval.config.ts`.
+- Generates React Query hooks (`lib/api-client-react`) and Zod schemas (`lib/api-zod`).
 
-## Root Scripts
+**Mobile Application (`artifacts/hse-mobile`):**
+- Expo React Native app using Expo Router for file-based routing.
+- **Features**: JWT auth, Dashboard (charts, risk matrix), Schedules, Incidents (reporting, detail), Inspection forms, Master Data (admin only).
+- **UI/UX**: Uses `constants/colors.ts` for design tokens, `AuthContext` for JWT state, `useApi` for typed API client.
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+**Web Application (`artifacts/hse-web`):**
+- React + Vite web dashboard using `shadcn/ui`, Recharts, wouter, TanStack React Query.
+- **Features**: Login, Dashboard (incident charts, reports), Schedules (CRUD), Incidents (reporting, attachments), My Inspections, Inspection History, Follow-up Reports, Schedule Compliance Reports, Master Data (extensive CRUD for Users, Categories, Groups, Templates, Plants, Actions), Profile.
+- **UI/UX**: Uses `shadcn/ui` components, `src/components/layout.tsx` for sidebar navigation, `src/components/badges.tsx` for visual status indicators.
+- **Template/Question System**: Questions can have `expectedAnswer` which triggers incident creation if not met.
+- **Google Drive Attachment System**: For incident attachments, configurable via admin panel.
 
-## Packages
+**Multi-Tenancy Architecture:**
+- SaaS platform with isolated data per company via `company_id` foreign keys in all main tables.
+- **Company Portal**: `url: /c/{slug}/`, company-branded login, redirects to payment if subscription issues.
+- **Sysadmin Panel**: `/sysadmin` URL, dark-themed admin panel for managing companies, payments, plans, testimonials, and global settings.
+- **Auth Token**: `hse_` + base64(JSON) payload including `companyId`. Sysadmin tokens have `companyId: null`.
 
-### `artifacts/api-server` (`@workspace/api-server`)
+**Multi-Tenancy Features:**
+- **Companies & Plans**: Tables for `companies`, `payments`, `system_settings`. Supports `free`, `monthly`, `yearly` plans with `pending`, `active`, `suspended` statuses.
+- **Testimonials**: `testimonials` table, user submission, sysadmin review, public display.
+- **Layanan (Plans Master)**: `plans` table, sysadmin CRUD, dynamically drives pricing section.
+- **Registration**: Public `/register` form to create new companies (pending status).
+- **Payment Flow**: Users submit payment proof, sysadmin approves to activate subscription. Payment info displayed on a dedicated page.
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+**Authentication:**
+- JWT-based authentication with NIK and password (SHA-256 + salt "hse_salt_2024").
+- Sysadmin login uses a specific NIK/password and `companyId: null`.
+- **KCI credentials**: NIK `admin` / password `admin123` (via /c/kci/); NIK `risang` / `admin123`; NIK `okta` / `admin123`
+- **Sysadmin credentials**: NIK `SYSADMIN` / password `sysadmin2024` (via /sysadmin)
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
+# External Dependencies
 
-### `lib/db` (`@workspace/db`)
-
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
-
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
-
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
-
-### `lib/api-spec` (`@workspace/api-spec`)
-
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
-
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
-
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
-
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
-
-### `artifacts/hse-mobile` (`@workspace/hse-mobile`)
-
-Expo React Native mobile app for HSE monitoring. Uses Expo Router with file-based routing.
-
-**Features:**
-- JWT auth (hse_ prefix + base64 JSON), login with NIK + password (SHA-256 + salt "hse_salt_2024")
-- Dashboard: monthly incident bar chart, open/closed status chart, risk matrix, category trend
-- Schedules: weekly inspection list with status filter (pending/completed), filterable by supervisor
-- Incidents: list with status filter (open/in_progress/closed), new incident form, detail view with status update
-- Inspection: template-driven form with Yes/No and text questions, mandatory validation, progress bar
-- Master Data (admin only): Users, Categories, Groups, Templates, Plants, Actions with CRUD modals
-
-**Screens:**
-- `app/login.tsx` — login screen
-- `app/(tabs)/index.tsx` — dashboard
-- `app/(tabs)/schedules.tsx` — inspection schedules
-- `app/(tabs)/incidents.tsx` — incident list
-- `app/(tabs)/profile.tsx` — user profile + navigation
-- `app/inspection/[id].tsx` — fill out inspection template
-- `app/incident/new.tsx` — report new incident
-- `app/incident/[id].tsx` — incident detail + status update
-- `app/master/index.tsx` — master data menu
-- `app/master/{users,categories,groups,plants,actions,templates}.tsx` — CRUD screens
-
-**Key files:**
-- `context/AuthContext.tsx` — JWT auth state, login/logout
-- `hooks/useApi.ts` — typed API client (get/post/put/del)
-- `constants/colors.ts` — design token colors
-- `components/{RiskBadge,StatusBadge,ErrorBoundary}.tsx` — shared components
-
-**Auth credentials:**
-- Admin: NIK ADM001 / password admin123
-- Supervisor: NIK SUP001 / password user123
-- Employee: NIK EMP001 / password user123
-
-### `artifacts/hse-web` (`@workspace/hse-web`)
-
-React + Vite web dashboard for HSE monitoring. Uses shadcn/ui, Recharts, wouter, TanStack React Query.
-
-**Features:**
-- Login page (NIK + password, same auth as mobile)
-- Dashboard: monthly incident charts (daily bar, open/closed stacked bar, risk matrix table, category trend bar)
-- Schedules: CRUD for inspection schedules with frequency (daily/weekly/biweekly/monthly/custom), assign to Group or User
-- Incidents: list with status filter, new incident form (with file upload: photo/PDF), detail view with status update + attachment viewer
-- Attachments: upload foto (JPG/PNG/WEBP) atau PDF saat lapor H&I — disimpan ke Google Drive dengan struktur folder Tahun/Bulan, nama file format `{incidentId}-YYYY-MM-DD-{increment}`
-- Inspeksi Saya (/my-inspections): personal inspection task list for the logged-in user; shows pending/completed schedules and allows filling inspection template inline
-- Riwayat Inspeksi (/history): table of all submitted inspections; click row to view answer detail including expected vs actual answer comparison
-- Laporan Followup H&I (/reports/followup): incidents bucketed by time since creation (< 24h, 24–48h, 48–72h, > 72h) with recharts bar chart and per-bucket detail table
-- Laporan Kepatuhan Jadwal (/reports/schedule-compliance): per-schedule compliance report showing expected vs actual inspection count, assignee, frequency, and compliance %; filterable by status/frequency/search
-- Master Data (admin only): Users (CRUD + password reset), Categories (CRUD + PIC Group assignment), Groups (CRUD + member/PIC management), Templates with Question Builder (full CRUD with type/mandatory/photo/category/expectedAnswer/order), Plants (CRUD), Actions (CRUD)
-- Profile: view info + self-service change password
-
-**Template/Question System:**
-- Questions have `expectedAnswer` field (yes/no type only): "yes", "no", or null
-- On inspection submission, if answer != expectedAnswer → auto-creates an open H&I incident with `needsFurtherAction=true`
-- Only Supervisors and Admins can create/edit templates and questions (lock shown for Employee role)
-
-**API Routes:**
-- `GET/POST /api/questions` — question CRUD with `expectedAnswer` field
-- `GET /api/inspections` — all inspections with supervisor/template/plant names
-- `POST /api/inspections` — submit inspection, auto-creates incidents for wrong answers
-- `GET /api/reports/followup` — time-bucketed incident report
-- `GET /api/reports/schedule-compliance?to=YYYY-MM-DD` — per-schedule compliance: expected count (from createdAt to `to`) vs actual inspections count
-- `GET/PUT /api/settings/gdrive` — Google Drive service account settings (admin only)
-- `GET /api/attachments?incidentId=X` — list attachments for an incident
-- `POST /api/attachments/upload` — upload file (multipart/form-data) to Google Drive, saves record in DB
-- `DELETE /api/attachments/:id` — delete attachment from Drive + DB
-
-**Google Drive Attachment System:**
-- Service account: configured via /settings/gdrive (admin only)
-- Folder structure: `{rootFolderId}/{year}/{MM - MonthName}/`
-- File naming: `{incidentId}-YYYY-MM-DD-{00001}.ext`
-- Increment counter is per-month (resets to 1 each month), max file size 20MB
-- Accepted types: JPG, PNG, WEBP, PDF
-- New DB tables: `gdrive_settings`, `incident_attachments`
-
-**Key files:**
-- `src/App.tsx` — router setup with auth guard
-- `src/lib/api.ts` — fetch wrapper with Bearer token
-- `src/lib/auth-context.tsx` — auth state (login/logout/user)
-- `src/components/layout.tsx` — sidebar nav + Layout wrapper
-- `src/components/badges.tsx` — RiskBadge, StatusBadge, FrequencyBadge (statuses: open, in_progress, in-progress, closed, pending, completed, active, resolved)
-- `src/pages/dashboard.tsx` — dashboard with recharts
-- `src/pages/schedules.tsx` — schedule CRUD
-- `src/pages/incidents.tsx` — incident CRUD
-- `src/pages/my-inspections.tsx` — personal inspection task page
-- `src/pages/history.tsx` — inspection history with detail dialog
-- `src/pages/reports/followup-report.tsx` — H&I followup time-bucket report
-- `src/pages/profile.tsx` — user profile + change password
-- `src/pages/master/` — templates (w/ expectedAnswer), users, categories (w/ PIC Group), groups, plants, actions
-
-**Important notes:**
-- Radix Select does not allow empty string (`""`) as SelectItem value — use `"none"` for "no selection" and convert in save handler
-- TemplateBuilder uses `staleTime: 0` + `queryClient.setQueryData` pattern to avoid stale cache on re-open
-
-**Served at:** `/` (port 5174 in dev)
-
-## Multi-Tenancy Architecture
-
-HSE Monitor is a multi-tenant SaaS platform. Each company has isolated data.
-
-### Companies & Plans
-- Tables: `companies`, `payments`, `system_settings`
-- All main tables have `company_id` FK: users, incidents, plants, groups, categories, actions, templates, preventive_actions, schedules, indicators, incident_types, smtp_settings, gdrive_settings
-- Plans: `free` (1 month trial), `monthly` (Rp 250k/mo), `yearly` (Rp 2.25M/yr)
-- Company status: `pending` | `active` | `suspended`
-
-### Company Portal
-- URL: `/c/{slug}/` — company-branded login portal
-- Auth: `POST /api/auth/login` with `{ nik, password, companySlug }` — resolves company, verifies subscription
-- Paywall: 402 response with `code: SUBSCRIPTION_EXPIRED|PENDING_ACTIVATION|SUSPENDED` → redirect to `/c/{slug}/payment`
-- KCI company: slug=`kci`, plan=`yearly`, subscriptionEndsAt=2036
-
-### Sysadmin Panel
-- URL: `/sysadmin` — separate dark-themed admin panel
-- Login: NIK `SYSADMIN` / password `sysadmin2024` (role=`sysadmin`, companyId=null)
-- **IMPORTANT**: sysadmin password hash is SHA256 format (`hashPassword()` in auth.ts = `sha256(pass + "hse_salt_2024")`). Auto-migrate now uses SHA256 (not pgcrypto bcrypt). If DB has `$2...` bcrypt hash, auto-migrate automatically fixes it on startup.
-- Features: company list + activate/suspend, payment verification, **layanan/plans CRUD**, **testimoni management** (activate/deactivate/edit/delete), reports (monthly), settings (QRIS image upload, pricing)
-- Routes: `GET/POST /api/sysadmin/companies`, `GET/PUT /api/sysadmin/payments`, `GET/POST/PUT/DELETE /api/sysadmin/plans`, `GET/PUT/DELETE /api/sysadmin/testimonials`, `GET /api/sysadmin/reports/*`, `GET/PUT /api/sysadmin/settings`, `POST /api/sysadmin/settings/qris`
-
-### Testimoni
-- Tables: `testimonials` (id, company_id, user_id, author_name, author_role, author_company, content, rating 1-5, is_active)
-- User route: `GET /api/testimonials/mine`, `POST /api/testimonials` (submit/update own testimonial; is_active=false, pending review)
-- Public route: `GET /api/testimonials/public` — active testimonials for landing page
-- Landing page fetches from API; falls back to static data if no active testimonials
-- User page: `/testimonial` — star rating + textarea form, shows pending/approved status
-
-### Layanan (Plans Master)
-- Table: `plans` (id, name, slug, description, price_monthly, price_yearly, max_users, duration_months, max_templates, is_active, sort_order)
-- Sysadmin CRUD at `/sysadmin` → Layanan tab
-- Will eventually drive landing page pricing section dynamically
-
-### Registration
-- URL: `/register` — public company registration form (step 1: plan, step 2: company + admin details)
-- Route: `POST /api/auth/register` — creates company (status=pending) + admin user
-- After registration: sysadmin must activate via sysadmin panel
-
-### Payment Flow
-- Company admin submits payment proof: `POST /api/payments/submit` (multipart: proof file + plan)
-- Proof uploaded to Google Drive, record saved in `payments` table with status=`pending`
-- Sysadmin reviews: `PUT /api/sysadmin/payments/:id/approve` → extends subscription, updates company status
-- Payment page shown when subscription expired: `/c/{slug}/payment` or `/payment`
-
-### Auth Token
-- Format: `hse_` + base64(JSON) — payload includes `companyId`
-- Sysadmin token: `companyId: null`
-- Company users: `companyId: {number}` — all API queries filter by this
+- **PostgreSQL**: Primary database for all application data.
+- **Google Drive API**: Used for storing incident attachments (photos, PDFs) and payment proofs. Configured via service account.
+- **Recharts**: For data visualization and charting in the web dashboard.
+- **TanStack React Query**: For data fetching, caching, and state management in web and mobile applications.
+- **shadcn/ui**: UI component library used in the web application.
+- **wouter**: A tiny router for React used in the web application.
+- **Expo / Expo Router**: Framework and routing library for the mobile React Native application.
