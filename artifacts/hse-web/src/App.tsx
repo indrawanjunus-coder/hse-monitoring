@@ -29,6 +29,7 @@ import ScheduleCompliancePage from "@/pages/reports/schedule-compliance";
 import LogsPage from "@/pages/admin/logs";
 import RegisterPage from "@/pages/register";
 import PaymentPage from "@/pages/payment";
+import LandingPage from "@/pages/landing";
 import SysadminApp from "@/pages/sysadmin/index";
 
 const queryClient = new QueryClient({
@@ -48,13 +49,24 @@ function isSysadminRoute() {
 function isRegisterRoute() {
   return window.location.pathname.startsWith("/register");
 }
+function isCompanyPortalRoute() {
+  return /^\/c\/[^/]+/.test(window.location.pathname);
+}
 
 function MainApp() {
   const { user, paywallInfo } = useAuth();
 
   // Paywall: subscription expired / suspended / pending
   if (!user && paywallInfo) return <PaymentPage />;
-  if (!user) return <LoginPage />;
+
+  // Not logged in:
+  // - Company portal route → show company login page
+  // - Root or other → show landing page
+  if (!user) {
+    if (isCompanyPortalRoute()) return <LoginPage />;
+    return <LandingPage />;
+  }
+
   if (user.role === "sysadmin") return <SysadminApp />;
 
   return (
