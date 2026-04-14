@@ -1,11 +1,56 @@
 import { Router } from "express";
 import { db, companiesTable, paymentsTable, usersTable, systemSettingsTable, testimonialsTable, plansTable, auditLogsTable } from "@workspace/db";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
-import { sysadminMiddleware } from "../lib/auth";
+import { sysadminMiddleware, hashPassword } from "../lib/auth";
 import { uploadToGdrive } from "../lib/gdrive";
 import { enforcePlanLimits } from "../lib/plan-limits";
 import { writeAuditLog } from "../lib/audit-log";
+import { sendEmail, companyActivationEmailHtml } from "../lib/email";
 import multer from "multer";
+
+function generatePassword(length = 10): string {
+  const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  let pw = "";
+  for (let i = 0; i < length; i++) pw += chars[Math.floor(Math.random() * chars.length)];
+  return pw;
+}
+
+async function provisionCompanyAdmin(company: { id: number; slug: string; name: string; contactName: string; contactEmail: string }) {
+  const existing = await db.select({ id: usersTable.id }).from(usersTable)
+    .where(and(eq(usersTable.companyId, company.id), eq(usersTable.role, "admin")));
+  if (existing.length > 0) return { alreadyExists: true, nik: null, password: null };
+
+  const nik = "admin";
+  const password = generatePassword();
+  const pwHash = await hashPassword(password);
+  await db.insert(usersTable).values({
+    companyId: company.id,
+    nik,
+    name: company.contactName,
+    email: company.contactEmail,
+    passwordHash: pwHash,
+    role: "admin",
+  });
+
+  const baseUrl = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : "https://app.ha-monitoring.com";
+  const portalUrl = `${baseUrl}/c/${company.slug}/`;
+
+  await sendEmail(
+    company.contactEmail,
+    `[H&A Monitoring] Akun Admin ${company.name} Telah Diaktifkan`,
+    companyActivationEmailHtml({
+      companyName: company.name,
+      contactName: company.contactName,
+      portalUrl,
+      nik,
+      password,
+    }),
+  );
+
+  return { alreadyExists: false, nik, password };
+}
 
 const router = Router();
 router.use(sysadminMiddleware);
@@ -72,17 +117,69 @@ router.post("/companies/:id/activate", async (req, res) => {
   // Enforce plan limits after plan change (auto-deactivate excess users/templates)
   const enforced = await enforcePlanLimits(id);
 
+  // Auto-create admin user and send email credentials if not yet exists
+  const adminResult = co ? await provisionCompanyAdmin(co) : null;
+
   await writeAuditLog({
     action: "ACTIVATE_COMPANY",
     performedByNik: req.user?.nik ?? "sysadmin",
     performedByName: req.user?.name ?? "Sysadmin",
     companyId: id,
     companyName: co?.name ?? String(id),
-    details: `Paket: ${plan}, Durasi: ${months ?? 1} bulan, Berakhir: ${endDate.toLocaleDateString("id-ID")}${note ? `, Catatan: ${note}` : ""}. Deactivated: ${enforced.deactivatedUsers} users, ${enforced.deactivatedTemplates} templates.`,
+    details: `Paket: ${plan}, Durasi: ${months ?? 1} bulan, Berakhir: ${endDate.toLocaleDateString("id-ID")}${note ? `, Catatan: ${note}` : ""}. Deactivated: ${enforced.deactivatedUsers} users, ${enforced.deactivatedTemplates} templates.${adminResult && !adminResult.alreadyExists ? ` Admin dibuat: NIK=${adminResult.nik}, email dikirim ke ${co?.contactEmail}.` : ""}`,
     req,
   });
 
-  res.json({ success: true, company: updated, enforced });
+  res.json({ success: true, company: updated, enforced, adminProvisioned: adminResult });
+});
+
+router.post("/companies/:id/resend-credentials", async (req, res) => {
+  const id = Number(req.params.id);
+  const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, id));
+  if (!co) { res.status(404).json({ error: "Perusahaan tidak ditemukan" }); return; }
+
+  const admins = await db.select().from(usersTable)
+    .where(and(eq(usersTable.companyId, id), eq(usersTable.role, "admin")));
+  
+  if (admins.length === 0) {
+    const result = await provisionCompanyAdmin(co);
+    res.json({ success: true, created: true, nik: result.nik, emailSentTo: co.contactEmail });
+    return;
+  }
+
+  const admin = admins[0];
+  const newPassword = generatePassword();
+  const pwHash = await hashPassword(newPassword);
+  await db.update(usersTable).set({ passwordHash: pwHash }).where(eq(usersTable.id, admin.id));
+
+  const baseUrl = process.env.REPLIT_DEV_DOMAIN
+    ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+    : "https://app.ha-monitoring.com";
+  const portalUrl = `${baseUrl}/c/${co.slug}/`;
+
+  await sendEmail(
+    co.contactEmail,
+    `[H&A Monitoring] Reset Kredensial Admin ${co.name}`,
+    companyActivationEmailHtml({
+      companyName: co.name,
+      contactName: co.contactName,
+      portalUrl,
+      nik: admin.nik,
+      password: newPassword,
+    }),
+  );
+
+  await writeAuditLog({
+    action: "RESEND_CREDENTIALS",
+    performedByNik: req.user?.nik ?? "sysadmin",
+    performedByName: req.user?.name ?? "Sysadmin",
+    companyId: id,
+    companyName: co.name,
+    details: `Kredensial admin (NIK: ${admin.nik}) dikirim ulang ke ${co.contactEmail}`,
+    req,
+  });
+
+  res.json({ success: true, created: false, nik: admin.nik, emailSentTo: co.contactEmail });
 });
 
 router.post("/companies/:id/suspend", async (req, res) => {
@@ -172,6 +269,8 @@ router.put("/payments/:id/approve", async (req, res) => {
     await db.update(companiesTable).set({ status: "active", plan: payment.plan as any, subscriptionEndsAt: newEnd, activatedAt: new Date(), updatedAt: new Date() }).where(eq(companiesTable.id, company.id));
     // Enforce plan limits after plan change
     await enforcePlanLimits(company.id);
+    // Auto-create admin user and send email credentials if not yet exists
+    const adminResult = await provisionCompanyAdmin(company);
 
     await writeAuditLog({
       action: "APPROVE_PAYMENT",
@@ -179,7 +278,7 @@ router.put("/payments/:id/approve", async (req, res) => {
       performedByName: req.user?.name ?? "Sysadmin",
       companyId: company.id,
       companyName: company.name,
-      details: `Payment #${id} disetujui. Paket: ${payment.plan}, ${payment.periodMonths} bulan, Rp ${payment.amount.toLocaleString()}${note ? `. Catatan: ${note}` : ""}`,
+      details: `Payment #${id} disetujui. Paket: ${payment.plan}, ${payment.periodMonths} bulan, Rp ${payment.amount.toLocaleString()}${note ? `. Catatan: ${note}` : ""}${!adminResult.alreadyExists ? `. Admin dibuat: NIK=${adminResult.nik}, email dikirim ke ${company.contactEmail}.` : ""}`,
       req,
     });
   }

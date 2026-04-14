@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, CheckCircle, XCircle, AlertCircle, ChevronDown, ExternalLink, CalendarDays } from "lucide-react";
+import { Building2, CheckCircle, XCircle, AlertCircle, ChevronDown, ExternalLink, CalendarDays, Mail, RefreshCw, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -37,6 +37,15 @@ interface Company {
   trialEndsAt: string | null; createdAt: string; userCount: number; pendingPaymentCount: number;
 }
 
+interface ActivateResult {
+  company: { status: string; plan: string };
+  adminProvisioned: { alreadyExists: boolean; nik: string | null } | null;
+}
+
+interface ResendResult {
+  success: boolean; created: boolean; nik: string | null; emailSentTo: string;
+}
+
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {
   pending: { label: "Menunggu", className: "bg-amber-100 text-amber-700" },
   active: { label: "Aktif", className: "bg-green-100 text-green-700" },
@@ -64,21 +73,70 @@ function ActivateDialog({ company, token, onClose }: ActivateDialogProps) {
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [result, setResult] = useState<ActivateResult | null>(null);
   const qc = useQueryClient();
 
   const activate = async () => {
     setError("");
     setLoading(true);
     try {
-      await sysApi(token).post(`/sysadmin/companies/${company.id}/activate`, { plan, months: parseInt(months), note });
+      const res = await sysApi(token).post<ActivateResult>(`/sysadmin/companies/${company.id}/activate`, { plan, months: parseInt(months), note });
+      setResult(res);
       qc.invalidateQueries({ queryKey: ["sys-companies"] });
-      onClose();
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
   };
+
+  if (result) {
+    const ap = result.adminProvisioned;
+    return (
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-700">
+              <CheckCircle className="w-5 h-5" /> Aktivasi Berhasil
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-gray-700">
+              <strong>{company.name}</strong> telah diaktifkan dengan paket <strong className="capitalize">{plan}</strong>.
+            </p>
+            {ap && !ap.alreadyExists && ap.nik ? (
+              <div className="p-4 bg-green-50 border border-green-200 rounded-xl space-y-2">
+                <div className="flex items-center gap-2 font-semibold text-green-800 text-sm">
+                  <UserCheck className="w-4 h-4" /> Akun Admin Dibuat
+                </div>
+                <div className="text-sm text-gray-700 space-y-1">
+                  <div className="flex gap-2">
+                    <span className="text-gray-500 w-24 shrink-0">NIK (Login)</span>
+                    <strong className="font-mono text-base text-green-800 tracking-wide">{ap.nik}</strong>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-gray-500 w-24 shrink-0">Dikirim ke</span>
+                    <span className="text-gray-800">{company.contactEmail}</span>
+                  </div>
+                </div>
+                <div className="flex items-start gap-2 mt-2 pt-2 border-t border-green-200">
+                  <Mail className="w-4 h-4 text-green-600 mt-0.5 shrink-0" />
+                  <p className="text-xs text-green-700">Email berisi kredensial login telah dikirimkan ke alamat email di atas.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
+                Akun admin sudah ada sebelumnya. Kredensial tidak berubah.
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={onClose} className="bg-green-600 hover:bg-green-700 text-white w-full">Tutup</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -88,6 +146,10 @@ function ActivateDialog({ company, token, onClose }: ActivateDialogProps) {
         </DialogHeader>
         {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
         <div className="space-y-4 py-2">
+          <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-800">
+            <Mail className="w-3.5 h-3.5 inline mr-1" />
+            Akun admin akan otomatis dibuat dan kredensial dikirim ke <strong>{company.contactEmail}</strong>
+          </div>
           <div className="space-y-1.5">
             <Label>Paket</Label>
             <Select value={plan} onValueChange={setPlan}>
@@ -99,7 +161,7 @@ function ActivateDialog({ company, token, onClose }: ActivateDialogProps) {
               </SelectContent>
             </Select>
           </div>
-          {plan !== "free" && (
+          {plan !== "free" && plan !== "yearly" && (
             <div className="space-y-1.5">
               <Label>Durasi (bulan)</Label>
               <Input type="number" min="1" max="24" value={months} onChange={e => setMonths(e.target.value)} />
@@ -197,10 +259,92 @@ function EditExpiryDialog({ company, token, onClose }: EditExpiryDialogProps) {
   );
 }
 
+interface ResendCredentialsDialogProps {
+  company: Company;
+  token: string;
+  onClose: () => void;
+}
+function ResendCredentialsDialog({ company, token, onClose }: ResendCredentialsDialogProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<ResendResult | null>(null);
+
+  const resend = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await sysApi(token).post<ResendResult>(`/sysadmin/companies/${company.id}/resend-credentials`, {});
+      setResult(res);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Mail className="w-4 h-4 text-blue-600" />
+            Kirim Ulang Kredensial Admin
+          </DialogTitle>
+        </DialogHeader>
+
+        {result ? (
+          <div className="space-y-3 py-2">
+            <div className="p-4 bg-green-50 border border-green-200 rounded-xl space-y-2">
+              <div className="flex items-center gap-2 font-semibold text-green-800 text-sm">
+                <CheckCircle className="w-4 h-4" /> Email Berhasil Dikirim
+              </div>
+              <div className="text-sm text-gray-700 space-y-1">
+                <div className="flex gap-2">
+                  <span className="text-gray-500 w-24 shrink-0">NIK Admin</span>
+                  <strong className="font-mono text-green-800">{result.nik}</strong>
+                </div>
+                <div className="flex gap-2">
+                  <span className="text-gray-500 w-24 shrink-0">Dikirim ke</span>
+                  <span>{result.emailSentTo}</span>
+                </div>
+                {result.created && (
+                  <p className="text-xs text-blue-700 mt-1">Admin baru dibuat karena belum ada akun admin sebelumnya.</p>
+                )}
+              </div>
+            </div>
+            <Button onClick={onClose} className="w-full">Tutup</Button>
+          </div>
+        ) : (
+          <>
+            {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+            <div className="py-2 space-y-3">
+              <p className="text-sm text-gray-600">
+                Password admin <strong>{company.name}</strong> akan direset dan kredensial baru dikirimkan ke:
+              </p>
+              <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-sm font-medium text-gray-800">
+                {company.contactEmail}
+              </div>
+              <p className="text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg border border-amber-200">
+                ⚠️ Password admin yang lama akan dinonaktifkan.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose} disabled={loading}>Batal</Button>
+              <Button onClick={resend} disabled={loading} className="bg-blue-600 hover:bg-blue-700 text-white">
+                {loading ? "Mengirim..." : "Kirim Ulang"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function SysadminCompanies({ token }: { token: string }) {
   const [activateTarget, setActivateTarget] = useState<Company | null>(null);
   const [editExpiryTarget, setEditExpiryTarget] = useState<Company | null>(null);
-  const [detail, setDetail] = useState<Company | null>(null);
+  const [resendTarget, setResendTarget] = useState<Company | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const qc = useQueryClient();
@@ -317,7 +461,7 @@ export default function SysadminCompanies({ token }: { token: string }) {
                     </td>
                     <td className="px-4 py-3 text-gray-600">{co.userCount}</td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <Button
                           size="sm"
                           variant="outline"
@@ -325,6 +469,15 @@ export default function SysadminCompanies({ token }: { token: string }) {
                           className="h-7 text-xs"
                         >
                           Aktifkan
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setResendTarget(co)}
+                          className="h-7 text-xs text-blue-600 border-blue-200 hover:bg-blue-50"
+                          title="Kirim ulang kredensial admin"
+                        >
+                          <Mail className="w-3 h-3 mr-1" /> Kredensial
                         </Button>
                         {co.status !== "suspended" && (
                           <Button
@@ -366,6 +519,13 @@ export default function SysadminCompanies({ token }: { token: string }) {
           company={editExpiryTarget}
           token={token}
           onClose={() => setEditExpiryTarget(null)}
+        />
+      )}
+      {resendTarget && (
+        <ResendCredentialsDialog
+          company={resendTarget}
+          token={token}
+          onClose={() => setResendTarget(null)}
         />
       )}
     </div>

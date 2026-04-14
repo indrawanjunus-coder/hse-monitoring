@@ -83,6 +83,49 @@ export function newUserEmailHtml(user: {
   `;
 }
 
+export function companyActivationEmailHtml(data: {
+  companyName: string; contactName: string; portalUrl: string; nik: string; password: string;
+}) {
+  return `
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+      <div style="background:#1e3a5f;color:white;padding:24px 20px;border-radius:8px 8px 0 0">
+        <h2 style="margin:0">🎉 Akun Perusahaan Anda Telah Diaktifkan</h2>
+        <p style="margin:8px 0 0;opacity:0.8;font-size:14px">H&A Monitoring System</p>
+      </div>
+      <div style="background:#f9fafb;padding:24px 20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
+        <p style="color:#374151;margin-top:0">Halo <strong>${data.contactName}</strong>,</p>
+        <p style="color:#374151">Selamat! Akun perusahaan <strong>${data.companyName}</strong> telah berhasil diaktifkan di H&A Monitoring System.</p>
+        <p style="color:#374151;font-weight:600">Berikut adalah informasi login admin portal Anda:</p>
+        <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin:16px 0">
+          <table style="width:100%;border-collapse:collapse">
+            <tr>
+              <td style="padding:10px 8px;color:#6b7280;width:40%;border-bottom:1px solid #f3f4f6">URL Portal</td>
+              <td style="padding:10px 8px;font-weight:600;color:#1d4ed8;border-bottom:1px solid #f3f4f6">
+                <a href="${data.portalUrl}" style="color:#1d4ed8">${data.portalUrl}</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:10px 8px;color:#6b7280;border-bottom:1px solid #f3f4f6">NIK (Username)</td>
+              <td style="padding:10px 8px;font-weight:700;font-size:18px;color:#1e3a5f;border-bottom:1px solid #f3f4f6;letter-spacing:1px">${data.nik}</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 8px;color:#6b7280">Password</td>
+              <td style="padding:10px 8px;font-weight:700;font-size:18px;color:#1e3a5f;letter-spacing:2px">${data.password}</td>
+            </tr>
+          </table>
+        </div>
+        <div style="padding:14px;background:#fef3c7;border-radius:6px;border-left:4px solid #f59e0b;margin:16px 0">
+          <p style="margin:0;color:#92400e;font-size:13px">⚠️ <strong>Penting:</strong> Simpan informasi ini dengan aman. Segera ganti password Anda setelah login pertama kali.</p>
+        </div>
+        <div style="padding:14px;background:#eff6ff;border-radius:6px;border-left:4px solid #3b82f6;margin:16px 0">
+          <p style="margin:0;color:#1e40af;font-size:13px">💡 Setelah login, Anda dapat menambahkan pengguna lain, mengatur inspeksi, dan mengelola insiden HSE perusahaan Anda.</p>
+        </div>
+        <p style="margin-top:20px;color:#9ca3af;font-size:12px">Email ini dikirim secara otomatis oleh Sistem H&A Monitoring. Jika Anda tidak merasa mendaftar, abaikan email ini.</p>
+      </div>
+    </div>
+  `;
+}
+
 export function passwordResetEmailHtml(user: {
   name: string; nik: string; newPassword: string; resetBy: string;
 }) {

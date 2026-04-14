@@ -115,10 +115,10 @@ router.get("/company/:slug", async (req, res) => {
   res.json(co);
 });
 
-// Public: register new company
+// Public: register new company (no admin created here — created on activation)
 router.post("/register", async (req, res) => {
-  const { companyName, companySlug, contactName, contactEmail, contactPhone, plan, adminNik, adminPassword } = req.body;
-  if (!companyName || !companySlug || !contactName || !contactEmail || !plan || !adminNik || !adminPassword) {
+  const { companyName, companySlug, contactName, contactEmail, contactPhone, plan } = req.body;
+  if (!companyName || !companySlug || !contactName || !contactEmail || !plan) {
     res.status(400).json({ message: "Semua field harus diisi" }); return;
   }
   const slug = companySlug.toLowerCase().replace(/[^a-z0-9-]/g, "-");
@@ -134,16 +134,6 @@ router.post("/register", async (req, res) => {
   }).returning();
 
   if (!company) { res.status(500).json({ message: "Gagal membuat company" }); return; }
-
-  const pwHash = await hashPassword(adminPassword);
-  await db.insert(usersTable).values({
-    companyId: company.id,
-    nik: adminNik,
-    name: contactName,
-    email: contactEmail,
-    passwordHash: pwHash,
-    role: "admin",
-  });
 
   res.json({ success: true, company: { id: company.id, slug: company.slug, name: company.name, plan: company.plan, status: company.status } });
 });

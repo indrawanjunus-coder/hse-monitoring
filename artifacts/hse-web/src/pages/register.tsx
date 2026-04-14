@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Shield, Building2, ChevronRight, CheckCircle } from "lucide-react";
+import { Shield, Building2, ChevronRight, CheckCircle, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,12 +19,11 @@ export default function RegisterPage() {
   const [step, setStep] = useState<"plan" | "form" | "success">(urlPlan && validPlanIds.includes(urlPlan) ? "form" : "plan");
   const [selectedPlan, setSelectedPlan] = useState(initialPlan);
   const [form, setForm] = useState({
-    companyName: "", companySlug: "", contactName: "", contactEmail: "",
-    contactPhone: "", adminNik: "", adminPassword: "", adminPasswordConfirm: "",
+    companyName: "", companySlug: "", contactName: "", contactEmail: "", contactPhone: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [result, setResult] = useState<{ slug: string; name: string } | null>(null);
+  const [result, setResult] = useState<{ slug: string; name: string; contactEmail?: string } | null>(null);
 
   const handleSlugAuto = (name: string) => {
     const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 30);
@@ -34,8 +33,6 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (form.adminPassword !== form.adminPasswordConfirm) { setError("Password tidak cocok"); return; }
-    if (form.adminPassword.length < 6) { setError("Password minimal 6 karakter"); return; }
     setLoading(true);
     try {
       const res = await api.post<{ company: { slug: string; name: string } }>("/auth/register", {
@@ -45,10 +42,8 @@ export default function RegisterPage() {
         contactEmail: form.contactEmail,
         contactPhone: form.contactPhone,
         plan: selectedPlan,
-        adminNik: form.adminNik,
-        adminPassword: form.adminPassword,
       });
-      setResult(res.company);
+      setResult({ ...res.company, contactEmail: form.contactEmail });
       setStep("success");
     } catch (err: any) {
       setError(err.message ?? "Gagal mendaftar");
@@ -127,13 +122,20 @@ export default function RegisterPage() {
               ← Kembali
             </button>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Data Perusahaan</h1>
-            <p className="text-gray-500 mb-8">Lengkapi informasi perusahaan dan akun admin</p>
+            <p className="text-gray-500 mb-6">Lengkapi informasi perusahaan. Akun admin akan dikirim ke email Anda setelah diaktivasi.</p>
 
             {error && (
               <Alert variant="destructive" className="mb-5 py-3">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+
+            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 mb-6 flex items-start gap-3">
+              <Mail className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
+              <div className="text-sm text-blue-800">
+                <strong>Informasi penting:</strong> Setelah pendaftaran disetujui oleh admin sistem, kredensial login admin perusahaan Anda akan otomatis dikirimkan ke email kontak yang Anda daftarkan.
+              </div>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="p-5 bg-white rounded-xl border border-gray-200 space-y-4">
@@ -160,28 +162,11 @@ export default function RegisterPage() {
                   <div className="space-y-1.5">
                     <Label>Email Kontak *</Label>
                     <Input type="email" value={form.contactEmail} onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))} placeholder="pic@perusahaan.com" required />
+                    <p className="text-xs text-gray-400">Kredensial admin akan dikirim ke email ini</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label>No. HP Kontak</Label>
                     <Input value={form.contactPhone} onChange={e => setForm(f => ({ ...f, contactPhone: e.target.value }))} placeholder="08xxxxxxxxxx" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-5 bg-white rounded-xl border border-gray-200 space-y-4">
-                <h2 className="font-semibold text-gray-900">Akun Admin</h2>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label>NIK Admin *</Label>
-                    <Input value={form.adminNik} onChange={e => setForm(f => ({ ...f, adminNik: e.target.value }))} placeholder="ADM001" required />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Password *</Label>
-                    <Input type="password" value={form.adminPassword} onChange={e => setForm(f => ({ ...f, adminPassword: e.target.value }))} placeholder="Min. 6 karakter" required />
-                  </div>
-                  <div className="col-span-2 space-y-1.5">
-                    <Label>Konfirmasi Password *</Label>
-                    <Input type="password" value={form.adminPasswordConfirm} onChange={e => setForm(f => ({ ...f, adminPasswordConfirm: e.target.value }))} placeholder="Ulangi password" required />
                   </div>
                 </div>
               </div>
@@ -211,19 +196,27 @@ export default function RegisterPage() {
             <p className="text-gray-600 mb-2">
               Perusahaan <strong>{result.name}</strong> telah terdaftar.
             </p>
-            <p className="text-gray-500 text-sm mb-8">
-              Akun Anda sedang dalam proses verifikasi oleh admin sistem. Anda akan dihubungi melalui email setelah diaktivasi.
+            <p className="text-gray-500 text-sm mb-6">
+              Pendaftaran Anda sedang dalam proses verifikasi oleh admin sistem.
             </p>
+
+            <div className="p-5 bg-amber-50 border border-amber-200 rounded-xl text-left mb-6">
+              <div className="flex items-start gap-3">
+                <Mail className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                <div>
+                  <div className="font-semibold text-amber-900 mb-1">Cek Email Anda</div>
+                  <p className="text-sm text-amber-800">
+                    Setelah akun diaktivasi, kredensial login admin akan otomatis dikirimkan ke:<br />
+                    <strong>{result.contactEmail}</strong>
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <div className="p-4 bg-gray-100 rounded-xl text-sm text-gray-600 mb-8">
               <div className="font-medium mb-1">Portal perusahaan Anda:</div>
               <code className="text-blue-700">/c/{result.slug}/</code>
             </div>
-            <a
-              href={`/c/${result.slug}/`}
-              className="inline-block bg-blue-600 text-white px-6 py-2.5 rounded-lg font-medium hover:bg-blue-700"
-            >
-              Buka Portal Perusahaan
-            </a>
           </div>
         )}
       </div>
