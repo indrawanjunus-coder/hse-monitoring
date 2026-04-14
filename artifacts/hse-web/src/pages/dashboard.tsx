@@ -494,44 +494,124 @@ export default function DashboardPage() {
           ) : departments.length === 0 ? (
             <div className="h-24 flex items-center justify-center text-gray-400 text-sm">Belum ada jadwal atau data untuk template ini</div>
           ) : (
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-gray-50">
-                    <th className="text-left py-2.5 px-3 font-medium text-gray-600">Nama Departemen</th>
-                    <th className="text-center py-2.5 px-2 font-medium text-gray-600">Jadwal</th>
-                    <th className="text-center py-2.5 px-2 font-medium text-gray-600">Jml User Pelapor</th>
-                    <th className="text-center py-2.5 px-2 font-medium text-gray-600">Target Pelapor</th>
-                    <th className="text-center py-2.5 px-2 font-medium text-gray-600">% Pelapor</th>
-                    <th className="text-center py-2.5 px-2 font-medium text-gray-600">Laporan Masuk</th>
-                    <th className="text-center py-2.5 px-2 font-medium text-gray-600">Target Laporan</th>
-                    <th className="text-center py-2.5 px-2 font-medium text-gray-600">% Laporan</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {departments.map((dept, i) => (
-                    <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
-                      <td className="py-2.5 px-3 font-medium text-gray-800">{dept.name}</td>
-                      <td className="py-2.5 px-2 text-center">
-                        <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">
-                          {FREQ_LABEL[dept.frequency] ?? dept.frequency}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-2 text-center font-bold text-gray-800">{dept.reporterCount}</td>
-                      <td className="py-2.5 px-2 text-center text-gray-600">{dept.targetReporterCount}</td>
-                      <td className="py-2.5 px-2 text-center">
-                        <PctBadge value={dept.pctReporter} />
-                      </td>
-                      <td className="py-2.5 px-2 text-center font-bold text-gray-800">{dept.reportCount}</td>
-                      <td className="py-2.5 px-2 text-center text-gray-600">{dept.targetReports}</td>
-                      <td className="py-2.5 px-2 text-center">
-                        <PctBadge value={dept.pctReport} />
-                      </td>
+            <>
+              {/* Bar Chart */}
+              <div className="w-full overflow-x-auto mb-4">
+                <div style={{ minWidth: Math.max(departments.length * 130, 400), height: 260 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={departments.map(d => ({
+                        name: d.name.length > 18 ? d.name.slice(0, 16) + "…" : d.name,
+                        fullName: d.name,
+                        pelapor: d.pctReporter,
+                        laporan: d.pctReport,
+                      }))}
+                      margin={{ top: 20, right: 20, left: 0, bottom: departments.length > 4 ? 60 : 24 }}
+                      barCategoryGap="28%"
+                      barGap={3}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        tick={{ fontSize: 11, fill: "#6b7280" }}
+                        tickLine={false}
+                        axisLine={false}
+                        angle={departments.length > 4 ? -35 : 0}
+                        textAnchor={departments.length > 4 ? "end" : "middle"}
+                        interval={0}
+                        height={departments.length > 4 ? 68 : 28}
+                      />
+                      <YAxis
+                        domain={[0, 100]}
+                        tickFormatter={v => `${v}%`}
+                        tick={{ fontSize: 11, fill: "#6b7280" }}
+                        tickLine={false}
+                        axisLine={false}
+                        width={44}
+                      />
+                      <Tooltip
+                        formatter={(value: number, name: string) => [
+                          `${Number(value).toFixed(1)}%`,
+                          name === "laporan" ? "% Laporan Masuk" : "% Pelapor",
+                        ]}
+                        labelFormatter={(_label, payload) => {
+                          const item = payload?.[0]?.payload;
+                          return item?.fullName ?? _label;
+                        }}
+                        contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb", boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
+                      />
+                      <Legend
+                        formatter={name => name === "laporan" ? "% Laporan Masuk" : "% Pelapor"}
+                        wrapperStyle={{ fontSize: 12, paddingTop: 4 }}
+                        iconType="square"
+                      />
+                      <Bar
+                        dataKey="laporan"
+                        name="laporan"
+                        fill="#3b82f6"
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={44}
+                        label={{ position: "top", fontSize: 10, fill: "#374151", formatter: (v: number) => `${Number(v).toFixed(0)}%` }}
+                      />
+                      <Bar
+                        dataKey="pelapor"
+                        name="pelapor"
+                        fill="#8b5cf6"
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={44}
+                        label={{ position: "top", fontSize: 10, fill: "#374151", formatter: (v: number) => `${Number(v).toFixed(0)}%` }}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-gray-50">
+                      <th className="text-left py-2.5 px-3 font-medium text-gray-600">Nama Departemen</th>
+                      <th className="text-center py-2.5 px-2 font-medium text-gray-600">Jadwal</th>
+                      <th className="text-center py-2.5 px-2 font-medium text-gray-600">Jml User Pelapor</th>
+                      <th className="text-center py-2.5 px-2 font-medium text-gray-600">Target Pelapor</th>
+                      <th className="text-center py-2.5 px-2 font-medium text-gray-600">% Pelapor</th>
+                      <th className="text-center py-2.5 px-2 font-medium text-gray-600">Laporan Masuk</th>
+                      <th className="text-center py-2.5 px-2 font-medium text-gray-600">Target Laporan</th>
+                      <th className="text-center py-2.5 px-2 font-medium text-gray-600">% Laporan</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {departments.map((dept, i) => (
+                      <tr key={i} className="border-b last:border-0 hover:bg-gray-50">
+                        <td className="py-2.5 px-3 font-medium text-gray-800">{dept.name}</td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                            {FREQ_LABEL[dept.frequency] ?? dept.frequency}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-center font-bold text-gray-800">{dept.reporterCount}</td>
+                        <td className="py-2.5 px-2 text-center text-gray-600">{dept.targetReporterCount}</td>
+                        <td className="py-2.5 px-2 text-center">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <PctBadge value={dept.pctReporter} />
+                            <PctBar value={dept.pctReporter} color="bg-violet-500" />
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-2 text-center font-bold text-gray-800">{dept.reportCount}</td>
+                        <td className="py-2.5 px-2 text-center text-gray-600">{dept.targetReports}</td>
+                        <td className="py-2.5 px-2 text-center">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <PctBadge value={dept.pctReport} />
+                            <PctBar value={dept.pctReport} color="bg-blue-500" />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
