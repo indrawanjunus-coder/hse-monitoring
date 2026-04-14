@@ -82,8 +82,8 @@ export async function autoMigrate() {
       logger.info("autoMigrate: seeding initial KCI company data...");
 
       await pool.query(`
-        INSERT INTO companies (id, slug, name, status, plan, subscription_ends_at, created_at)
-        VALUES (1, 'kci', 'KCI', 'active', 'yearly', NOW() + INTERVAL '1 year', NOW())
+        INSERT INTO companies (id, slug, name, contact_name, contact_email, status, plan, subscription_ends_at, created_at, updated_at)
+        VALUES (1, 'kci', 'KCI', 'KCI Admin', 'admin@kci.co.id', 'active', 'yearly', NOW() + INTERVAL '1 year', NOW(), NOW())
         ON CONFLICT (id) DO NOTHING
       `);
 
