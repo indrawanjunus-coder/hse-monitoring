@@ -15,6 +15,7 @@ interface Plan {
   features: string;
   priceMonthly: number;
   priceYearly: number;
+  durationMonths: number;
   sortOrder: number;
 }
 
@@ -25,48 +26,48 @@ interface PublicInfo {
   bankAccountNumber: string;
   bankAccountName: string;
   bankNote: string;
-  priceMonthly: number;
-  priceYearly: number;
   plans: Plan[];
 }
 
-type BillingPeriod = "monthly" | "yearly";
+type PlanView = "monthly" | "yearly";
+type Step = "plan" | "form" | "payment" | "success";
 
 function formatRp(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
 }
 
+function getPlanBillingType(plan: Plan): "free" | "monthly" | "yearly" {
+  if (plan.priceMonthly === 0 && plan.priceYearly === 0) return "free";
+  if (plan.durationMonths >= 12) return "yearly";
+  return "monthly";
+}
+
 function isFree(plan: Plan): boolean {
-  return plan.priceMonthly === 0 && plan.priceYearly === 0;
+  return getPlanBillingType(plan) === "free";
 }
 
-function getActivePrice(plan: Plan, period: BillingPeriod): number {
-  return period === "yearly" ? plan.priceYearly : plan.priceMonthly;
+function getPlanPrice(plan: Plan): number {
+  const bt = getPlanBillingType(plan);
+  if (bt === "free") return 0;
+  if (bt === "yearly") return plan.priceYearly;
+  return plan.priceMonthly;
 }
 
-function getPeriodMonths(period: BillingPeriod): number {
-  return period === "yearly" ? 12 : 1;
+function getPlanPeriodMonths(plan: Plan): number {
+  return plan.durationMonths >= 12 ? 12 : 1;
 }
-
-function calcSavingPct(plan: Plan): number {
-  if (plan.priceMonthly <= 0 || plan.priceYearly <= 0) return 0;
-  const monthly12 = plan.priceMonthly * 12;
-  if (monthly12 <= plan.priceYearly) return 0;
-  return Math.round((1 - plan.priceYearly / monthly12) * 100);
-}
-
-type Step = "plan" | "form" | "payment" | "success";
 
 export default function RegisterPage() {
   const urlPlan = new URLSearchParams(window.location.search).get("plan");
+  const urlView = new URLSearchParams(window.location.search).get("view") as PlanView | null;
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [publicInfo, setPublicInfo] = useState<PublicInfo | null>(null);
   const [plansLoading, setPlansLoading] = useState(true);
 
   const [step, setStep] = useState<Step>("plan");
+  const [planView, setPlanView] = useState<PlanView>(urlView === "yearly" ? "yearly" : "monthly");
   const [selectedPlanSlug, setSelectedPlanSlug] = useState<string>("");
-  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
   const [form, setForm] = useState({
     companyName: "", companySlug: "", contactName: "", contactEmail: "", contactPhone: "",
   });
@@ -86,20 +87,46 @@ export default function RegisterPage() {
         const activePlans: Plan[] = data.plans ?? [];
         setPlans(activePlans);
 
-        const initialSlug = urlPlan && activePlans.some(p => p.slug === urlPlan)
-          ? urlPlan
-          : activePlans.find(p => p.slug === "monthly")?.slug ?? activePlans[0]?.slug ?? "";
-        setSelectedPlanSlug(initialSlug);
-
-        if (urlPlan && activePlans.some(p => p.slug === urlPlan)) {
-          setStep("form");
+        if (urlPlan) {
+          const found = activePlans.find(p => p.slug === urlPlan);
+          if (found) {
+            setSelectedPlanSlug(urlPlan);
+            const bt = getPlanBillingType(found);
+            if (bt === "yearly") setPlanView("yearly");
+            setStep("form");
+            return;
+          }
         }
+
+        const defaultMonthly = activePlans.find(p => getPlanBillingType(p) === "monthly");
+        setSelectedPlanSlug(defaultMonthly?.slug ?? activePlans[0]?.slug ?? "");
       })
       .catch(() => {})
       .finally(() => setPlansLoading(false));
   }, []);
 
+  const freePlans = plans.filter(p => getPlanBillingType(p) === "free");
+  const visiblePlans = plans.filter(p => {
+    const bt = getPlanBillingType(p);
+    if (bt === "free") return true;
+    return planView === "yearly" ? bt === "yearly" : bt === "monthly";
+  });
+
   const selectedPlan = plans.find(p => p.slug === selectedPlanSlug) ?? null;
+
+  const handlePlanViewSwitch = (view: PlanView) => {
+    setPlanView(view);
+    const newVisible = plans.filter(p => {
+      const bt = getPlanBillingType(p);
+      if (bt === "free") return true;
+      return view === "yearly" ? bt === "yearly" : bt === "monthly";
+    });
+    const currentStillVisible = newVisible.some(p => p.slug === selectedPlanSlug);
+    if (!currentStillVisible && newVisible.length > 0) {
+      const preferred = newVisible.find(p => getPlanBillingType(p) !== "free") ?? newVisible[0];
+      setSelectedPlanSlug(preferred?.slug ?? "");
+    }
+  };
 
   const handleSlugAuto = (name: string) => {
     const slug = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "").slice(0, 30);
@@ -150,7 +177,7 @@ export default function RegisterPage() {
       fd.append("proof", proofFile);
       fd.append("companyId", String(result.id));
       fd.append("plan", selectedPlanSlug);
-      fd.append("periodMonths", String(selectedPlan && isFree(selectedPlan) ? 1 : getPeriodMonths(billingPeriod)));
+      fd.append("periodMonths", String(selectedPlan ? getPlanPeriodMonths(selectedPlan) : 1));
       const r = await fetch(`${API_BASE}/payments/public-submit`, { method: "POST", body: fd });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error ?? "Gagal mengirim bukti");
@@ -163,16 +190,10 @@ export default function RegisterPage() {
   };
 
   const isQris = !publicInfo || publicInfo.paymentMethod === "qris";
+  const selectedAmount = selectedPlan ? formatRp(getPlanPrice(selectedPlan)) : "...";
 
-  const getSelectedAmount = () => {
-    if (!selectedPlan || !publicInfo) return "...";
-    if (isFree(selectedPlan)) return "Rp 0";
-    return formatRp(getActivePrice(selectedPlan, billingPeriod));
-  };
-
-  const getPeriodLabel = (period: BillingPeriod) => period === "yearly" ? "/tahun" : "/bulan";
-
-  const otherPeriod: BillingPeriod = billingPeriod === "monthly" ? "yearly" : "monthly";
+  const monthlyPlanCount = plans.filter(p => getPlanBillingType(p) === "monthly").length;
+  const yearlyPlanCount = plans.filter(p => getPlanBillingType(p) === "yearly").length;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -192,27 +213,29 @@ export default function RegisterPage() {
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Pilih Paket Langganan</h1>
             <p className="text-gray-500 mb-6">Mulai kelola HSE perusahaan Anda dengan mudah</p>
 
-            {/* Billing period toggle */}
+            {/* Billing period filter toggle */}
             <div className="flex bg-gray-100 rounded-xl p-1 mb-6 max-w-xs">
               <button
-                onClick={() => setBillingPeriod("monthly")}
+                onClick={() => handlePlanViewSwitch("monthly")}
                 className={`flex-1 py-2 px-4 text-sm font-semibold rounded-lg transition-all ${
-                  billingPeriod === "monthly"
-                    ? "bg-white shadow text-gray-900"
-                    : "text-gray-500 hover:text-gray-700"
+                  planView === "monthly" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 Bulanan
+                {monthlyPlanCount > 0 && (
+                  <span className="ml-1.5 text-xs text-gray-400 font-normal">({monthlyPlanCount})</span>
+                )}
               </button>
               <button
-                onClick={() => setBillingPeriod("yearly")}
-                className={`flex-1 py-2 px-4 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${
-                  billingPeriod === "yearly"
-                    ? "bg-white shadow text-gray-900"
-                    : "text-gray-500 hover:text-gray-700"
+                onClick={() => handlePlanViewSwitch("yearly")}
+                className={`flex-1 py-2 px-4 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+                  planView === "yearly" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
                 }`}
               >
                 Tahunan
+                {yearlyPlanCount > 0 && (
+                  <span className="text-xs text-gray-400 font-normal">({yearlyPlanCount})</span>
+                )}
                 <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">Hemat</span>
               </button>
             </div>
@@ -223,12 +246,11 @@ export default function RegisterPage() {
               </div>
             ) : (
               <div className="grid gap-4 mb-8">
-                {plans.map((plan) => {
-                  const activePrice = getActivePrice(plan, billingPeriod);
-                  const otherPrice = getActivePrice(plan, otherPeriod);
-                  const savingPct = calcSavingPct(plan);
-                  const isRecommended = plan.slug === "monthly";
+                {visiblePlans.map((plan) => {
+                  const bt = getPlanBillingType(plan);
+                  const price = getPlanPrice(plan);
                   const isSelected = selectedPlanSlug === plan.slug;
+                  const isRecommended = plan.slug === "monthly" || (planView === "yearly" && plan.slug === "yearly");
 
                   return (
                     <button
@@ -242,50 +264,42 @@ export default function RegisterPage() {
                     >
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <span className="font-semibold text-gray-900">{plan.name}</span>
-                            {isRecommended && (
+                            {isRecommended && !isFree(plan) && (
                               <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full shrink-0">Rekomendasi</span>
                             )}
-                            {isFree(plan) && (
-                              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full shrink-0">Trial</span>
+                            {bt === "free" ? (
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full shrink-0">Trial Gratis</span>
+                            ) : bt === "yearly" ? (
+                              <span className="text-xs bg-purple-50 text-purple-600 border border-purple-200 px-2 py-0.5 rounded-full shrink-0">Tahunan</span>
+                            ) : (
+                              <span className="text-xs bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded-full shrink-0">Bulanan</span>
                             )}
                           </div>
                           {plan.description && (
-                            <p className="text-sm text-gray-500 mb-3">{plan.description}</p>
+                            <p className="text-sm text-gray-500">{plan.description}</p>
                           )}
                         </div>
 
-                        {/* Price section */}
-                        <div className="text-right shrink-0 min-w-[120px]">
-                          {isFree(plan) ? (
+                        {/* Price */}
+                        <div className="text-right shrink-0 min-w-[110px]">
+                          {bt === "free" ? (
                             <div>
                               <div className="font-bold text-gray-900 text-xl">Gratis</div>
-                              <div className="text-xs text-gray-400">Trial 1 bulan</div>
+                              <div className="text-xs text-gray-400">{plan.durationMonths} bulan trial</div>
                             </div>
                           ) : (
                             <div>
-                              {/* Active period price — large */}
                               <div className={`font-bold text-xl ${isSelected ? "text-blue-700" : "text-gray-900"}`}>
-                                {formatRp(activePrice)}
+                                {formatRp(price)}
                               </div>
                               <div className={`text-xs font-medium ${isSelected ? "text-blue-500" : "text-gray-400"}`}>
-                                {getPeriodLabel(billingPeriod)}
+                                {bt === "yearly" ? "/tahun" : "/bulan"}
                               </div>
-
-                              {/* Other period price — small */}
-                              <div className="text-xs text-gray-400 mt-1.5 border-t border-gray-100 pt-1.5">
-                                {otherPeriod === "yearly" ? "Tahunan:" : "Bulanan:"}{" "}
-                                <span className="font-medium text-gray-500">{formatRp(otherPrice)}</span>
-                                {getPeriodLabel(otherPeriod)}
-                              </div>
-
-                              {/* Savings badge for yearly */}
-                              {billingPeriod === "yearly" && savingPct > 0 && (
-                                <div className="mt-1">
-                                  <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
-                                    Hemat {savingPct}%
-                                  </span>
+                              {bt === "yearly" && (
+                                <div className="text-xs text-gray-400 mt-0.5">
+                                  ≈ {formatRp(Math.round(price / 12))}/bulan
                                 </div>
                               )}
                             </div>
@@ -295,6 +309,19 @@ export default function RegisterPage() {
                     </button>
                   );
                 })}
+
+                {/* No plans in this view */}
+                {visiblePlans.filter(p => !isFree(p)).length === 0 && !plansLoading && (
+                  <div className="text-center py-8 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+                    <p className="text-sm">Tidak ada paket {planView === "yearly" ? "tahunan" : "bulanan"} tersedia</p>
+                    <button
+                      onClick={() => handlePlanViewSwitch(planView === "yearly" ? "monthly" : "yearly")}
+                      className="text-sm text-blue-600 hover:underline mt-1"
+                    >
+                      Lihat paket {planView === "yearly" ? "bulanan" : "tahunan"}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -335,7 +362,7 @@ export default function RegisterPage() {
             <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 mb-6 flex items-start gap-3">
               <Mail className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
               <div className="text-sm text-blue-800">
-                <strong>Informasi penting:</strong> Setelah pendaftaran disetujui oleh admin sistem, kredensial login admin perusahaan Anda akan otomatis dikirimkan ke email kontak yang Anda daftarkan.
+                <strong>Informasi penting:</strong> Setelah pendaftaran disetujui, kredensial login admin perusahaan Anda akan otomatis dikirimkan ke email kontak yang Anda daftarkan.
               </div>
             </div>
 
@@ -375,27 +402,29 @@ export default function RegisterPage() {
 
               {selectedPlan && (
                 <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-semibold text-gray-900">Ringkasan Langganan</div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="text-sm font-semibold text-gray-900">Paket Dipilih</div>
                     <button type="button" onClick={() => setStep("plan")} className="text-xs text-blue-600 hover:underline">Ubah</button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-sm text-gray-700">{selectedPlan.name}</div>
+                      <div className="text-sm text-gray-800">{selectedPlan.name}</div>
                       <div className="text-xs text-gray-500">
                         {isFree(selectedPlan)
-                          ? "Trial 1 bulan"
-                          : billingPeriod === "yearly"
+                          ? `Trial ${selectedPlan.durationMonths} bulan`
+                          : getPlanBillingType(selectedPlan) === "yearly"
                           ? "Berlangganan Tahunan (12 bulan)"
                           : "Berlangganan Bulanan (1 bulan)"}
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-blue-700 text-base">
-                        {isFree(selectedPlan) ? "Gratis" : formatRp(getActivePrice(selectedPlan, billingPeriod))}
+                      <div className="font-bold text-blue-700">
+                        {isFree(selectedPlan) ? "Gratis" : selectedAmount}
                       </div>
                       {!isFree(selectedPlan) && (
-                        <div className="text-xs text-gray-400">{getPeriodLabel(billingPeriod)}</div>
+                        <div className="text-xs text-gray-400">
+                          {getPlanBillingType(selectedPlan) === "yearly" ? "/tahun" : "/bulan"}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -429,12 +458,16 @@ export default function RegisterPage() {
                 <div>
                   <div className="text-sm font-semibold text-gray-900">{selectedPlan.name}</div>
                   <div className="text-xs text-gray-500">
-                    {billingPeriod === "yearly" ? "Berlangganan Tahunan (12 bulan)" : "Berlangganan Bulanan (1 bulan)"}
+                    {getPlanBillingType(selectedPlan) === "yearly"
+                      ? "Berlangganan Tahunan — masa aktif 12 bulan"
+                      : "Berlangganan Bulanan — masa aktif 1 bulan"}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-bold text-blue-700 text-lg">{getSelectedAmount()}</div>
-                  <div className="text-xs text-gray-400">{getPeriodLabel(billingPeriod)}</div>
+                  <div className="font-bold text-blue-700 text-lg">{selectedAmount}</div>
+                  <div className="text-xs text-gray-400">
+                    {getPlanBillingType(selectedPlan) === "yearly" ? "/tahun" : "/bulan"}
+                  </div>
                 </div>
               </div>
             </div>
@@ -445,7 +478,7 @@ export default function RegisterPage() {
                   <QrCode className="w-4 h-4 text-blue-600" /> Scan QRIS
                 </h2>
                 <p className="text-sm text-gray-500 mb-4">
-                  Transfer <span className="font-semibold text-gray-800">{getSelectedAmount()}</span> ke QRIS berikut:
+                  Transfer <span className="font-semibold text-gray-800">{selectedAmount}</span> ke QRIS berikut:
                 </p>
                 <div className="flex justify-center">
                   <img
@@ -462,7 +495,7 @@ export default function RegisterPage() {
               <div className="bg-white rounded-xl border border-gray-200 p-5 mb-5">
                 <h2 className="font-semibold text-gray-900 mb-3">Transfer Rekening Bank</h2>
                 <p className="text-sm text-gray-500 mb-4">
-                  Transfer <span className="font-semibold text-gray-800">{getSelectedAmount()}</span> ke rekening berikut:
+                  Transfer <span className="font-semibold text-gray-800">{selectedAmount}</span> ke rekening berikut:
                 </p>
                 <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-100">
                   {publicInfo.bankName && (
