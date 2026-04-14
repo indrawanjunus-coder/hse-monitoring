@@ -5,9 +5,11 @@ import { PageHeader } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
+} from "recharts";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2, XCircle, AlertCircle, Printer, Users, User, Calendar, TrendingUp, FileSpreadsheet, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle2, XCircle, AlertCircle, Printer, Users, User, Calendar, TrendingUp, FileSpreadsheet, ChevronLeft, ChevronRight, BarChart2 } from "lucide-react";
 
 interface AssignedMember { type: "user" | "group"; name: string; nik?: string }
 interface ScheduleCompliance {

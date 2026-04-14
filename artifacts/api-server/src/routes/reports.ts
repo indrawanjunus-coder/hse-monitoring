@@ -471,16 +471,22 @@ router.get("/schedule-compliance", async (req, res) => {
   const tmplMap = Object.fromEntries(templates.map(t => [t.id, t.name]));
   const plantMap = Object.fromEntries(plants.map(p => [p.id, p.name]));
 
-  // Load all inspections grouped by scheduleId
+  // Load all inspections grouped by scheduleId (include supervisorId for unique reporter count)
   const allInspections = await db.select({
     scheduleId: inspectionsTable.scheduleId,
     inspectedAt: inspectionsTable.inspectedAt,
+    supervisorId: inspectionsTable.supervisorId,
   }).from(inspectionsTable);
 
+  // Build per-schedule maps filtered to toDate
   const inspBySchedule: Record<number, string[]> = {};
+  const reportersBySchedule: Record<number, Set<number>> = {};
   for (const insp of allInspections) {
+    if (new Date(insp.inspectedAt) > toDate) continue;
     if (!inspBySchedule[insp.scheduleId]) inspBySchedule[insp.scheduleId] = [];
     inspBySchedule[insp.scheduleId].push(insp.inspectedAt);
+    if (!reportersBySchedule[insp.scheduleId]) reportersBySchedule[insp.scheduleId] = new Set();
+    if (insp.supervisorId) reportersBySchedule[insp.scheduleId].add(insp.supervisorId);
   }
 
   // Load schedule users and groups
@@ -513,9 +519,12 @@ router.get("/schedule-compliance", async (req, res) => {
   }
 
   const rows = schedules.map(s => {
-    const inspDates = (inspBySchedule[s.id] ?? []).filter(d => new Date(d) <= toDate);
+    const inspDates = inspBySchedule[s.id] ?? [];
     const actualCount = inspDates.length;
-    const lastInspectedAt = inspDates.length > 0 ? inspDates.sort().at(-1)! : null;
+    const lastInspectedAt = inspDates.length > 0 ? inspDates.slice().sort().at(-1)! : null;
+
+    // Unique reporters (distinct supervisorId within the period) — already filtered in map above
+    const uniqueReporterCount = (reportersBySchedule[s.id] ?? new Set()).size;
 
     const expected = calcExpected(s.frequency, s.createdAt, s.dayOfWeek, s.dayOfMonth, s.customDays);
 
@@ -529,7 +538,18 @@ router.get("/schedule-compliance", async (req, res) => {
       if (sup) assigned.push({ type: "user", name: sup.name, nik: sup.nik ?? undefined });
     }
 
+    // Count assigned individual users (not groups); used to compute % pelapor
+    const assignedUserCount = (schedUserMap[s.id] ?? []).length
+      + (s.supervisorId && !schedUserMap[s.id]?.length && !schedGroupMap[s.id]?.length ? 1 : 0);
+
     const complianceRate = expected === 0 ? 100 : Math.min(100, (actualCount / expected) * 100);
+
+    // % Pelapor: if we have assigned users, use uniqueReporterCount/assignedUserCount
+    // Otherwise (only groups or no assignment), fall back to whether anyone submitted at all
+    const reporterRate = assignedUserCount > 0
+      ? Math.min(100, (uniqueReporterCount / assignedUserCount) * 100)
+      : actualCount > 0 ? 100 : 0;
+
     const status: "compliant" | "partial" | "none" =
       actualCount >= expected ? "compliant" : actualCount > 0 ? "partial" : "none";
 
@@ -546,6 +566,9 @@ router.get("/schedule-compliance", async (req, res) => {
       expectedCount: expected,
       actualCount,
       complianceRate,
+      reporterRate,
+      uniqueReporterCount,
+      assignedUserCount,
       lastInspectedAt,
       status,
     };
