@@ -76,7 +76,7 @@ export default function LoginPage() {
           <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
             <Shield className="w-5 h-5 text-white" />
           </div>
-          <span className="text-white font-bold text-lg tracking-tight">HSE Monitor</span>
+          <span className="text-white font-bold text-lg tracking-tight">H&A Monitoring System</span>
         </div>
 
         {company ? (
@@ -113,7 +113,7 @@ export default function LoginPage() {
 
         <div className="flex items-center gap-4">
           <div className="h-px flex-1 bg-slate-700" />
-          <span className="text-slate-500 text-xs">HSE Monitor · v2.0</span>
+          <span className="text-slate-500 text-xs">H&A Monitoring System · v2.0</span>
           <div className="h-px flex-1 bg-slate-700" />
         </div>
       </div>
@@ -126,7 +126,7 @@ export default function LoginPage() {
             <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
               <Shield className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-gray-900 text-lg">HSE Monitor</span>
+            <span className="font-bold text-gray-900 text-lg">H&A Monitoring System</span>
           </div>
 
           {company && (
@@ -194,7 +194,7 @@ export default function LoginPage() {
           )}
 
           <p className="text-xs text-gray-400 text-center mt-6">
-            © 2026 HSE Monitor. Hak cipta dilindungi.
+            © 2026 H&A Monitoring System. Hak cipta dilindungi.
           </p>
         </div>
       </div>

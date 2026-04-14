@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Building2, CheckCircle, XCircle, AlertCircle, ChevronDown, ExternalLink } from "lucide-react";
+import { Building2, CheckCircle, XCircle, AlertCircle, ChevronDown, ExternalLink, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 const API_BASE = "/api";
 function sysApi(token: string) {
@@ -120,8 +121,85 @@ function ActivateDialog({ company, token, onClose }: ActivateDialogProps) {
   );
 }
 
+interface EditExpiryDialogProps {
+  company: Company;
+  token: string;
+  onClose: () => void;
+}
+function EditExpiryDialog({ company, token, onClose }: EditExpiryDialogProps) {
+  const currentExpiry = company.subscriptionEndsAt
+    ? new Date(company.subscriptionEndsAt).toISOString().slice(0, 10)
+    : "";
+  const [expiryDate, setExpiryDate] = useState(currentExpiry);
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const qc = useQueryClient();
+
+  const save = async () => {
+    if (!expiryDate) { setError("Tanggal berakhir wajib diisi"); return; }
+    setError("");
+    setLoading(true);
+    try {
+      await sysApi(token).post(`/sysadmin/companies/${company.id}/edit-expiry`, {
+        subscriptionEndsAt: new Date(expiryDate).toISOString(),
+        note: note.trim() || undefined,
+      });
+      qc.invalidateQueries({ queryKey: ["sys-companies"] });
+      onClose();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-blue-600" />
+            Edit Tanggal Berakhir: {company.name}
+          </DialogTitle>
+        </DialogHeader>
+        {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label>Tanggal Berakhir Baru</Label>
+            <Input
+              type="date"
+              value={expiryDate}
+              onChange={e => setExpiryDate(e.target.value)}
+            />
+            {currentExpiry && (
+              <p className="text-xs text-gray-400">Saat ini: {fmt(company.subscriptionEndsAt)}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Catatan (opsional)</Label>
+            <Textarea
+              value={note}
+              onChange={e => setNote(e.target.value)}
+              placeholder="Alasan perubahan tanggal..."
+              rows={2}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Batal</Button>
+          <Button onClick={save} disabled={loading || !expiryDate} className="bg-blue-600 hover:bg-blue-700 text-white">
+            {loading ? "Menyimpan..." : "Simpan"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function SysadminCompanies({ token }: { token: string }) {
   const [activateTarget, setActivateTarget] = useState<Company | null>(null);
+  const [editExpiryTarget, setEditExpiryTarget] = useState<Company | null>(null);
   const [detail, setDetail] = useState<Company | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -227,7 +305,16 @@ export default function SysadminCompanies({ token }: { token: string }) {
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sb.className}`}>{sb.label}</span>
                       {isExpired && <div className="text-xs text-red-500 mt-0.5">Expired</div>}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{fmt(co.subscriptionEndsAt ?? co.trialEndsAt)}</td>
+                    <td className="px-4 py-3 text-xs">
+                      <button
+                        className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline"
+                        title="Edit tanggal berakhir"
+                        onClick={() => setEditExpiryTarget(co)}
+                      >
+                        <CalendarDays className="w-3 h-3" />
+                        {fmt(co.subscriptionEndsAt ?? co.trialEndsAt)}
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{co.userCount}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -272,6 +359,13 @@ export default function SysadminCompanies({ token }: { token: string }) {
           company={activateTarget}
           token={token}
           onClose={() => setActivateTarget(null)}
+        />
+      )}
+      {editExpiryTarget && (
+        <EditExpiryDialog
+          company={editExpiryTarget}
+          token={token}
+          onClose={() => setEditExpiryTarget(null)}
         />
       )}
     </div>

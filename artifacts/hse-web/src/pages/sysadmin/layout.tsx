@@ -1,4 +1,4 @@
-import { Building2, CreditCard, BarChart2, Settings, Shield, LogOut, MessageSquare, Package } from "lucide-react";
+import { Building2, CreditCard, BarChart2, Settings, Shield, LogOut, MessageSquare, Package, ClipboardList } from "lucide-react";
 import type { SysadminTab } from "./index";
 
 const NAV = [
@@ -7,6 +7,7 @@ const NAV = [
   { key: "plans" as SysadminTab, label: "Layanan", icon: Package },
   { key: "testimonials" as SysadminTab, label: "Testimoni", icon: MessageSquare },
   { key: "reports" as SysadminTab, label: "Laporan", icon: BarChart2 },
+  { key: "audit" as SysadminTab, label: "Log Audit", icon: ClipboardList },
   { key: "settings" as SysadminTab, label: "Pengaturan", icon: Settings },
 ];
 
@@ -29,7 +30,7 @@ export default function SysadminLayout({ user, tab, setTab, onLogout, children }
               <Shield className="w-4 h-4 text-white" />
             </div>
             <div>
-              <div className="text-white font-semibold text-sm">HSE Monitor</div>
+              <div className="text-white font-semibold text-sm leading-tight">H&A Monitoring</div>
               <div className="text-slate-500 text-xs">Sysadmin</div>
             </div>
           </div>

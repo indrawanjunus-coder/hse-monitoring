@@ -65,7 +65,7 @@ export default function RegisterPage() {
           <div className="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center">
             <Shield className="w-5 h-5 text-white" />
           </div>
-          <span className="font-bold text-gray-900 text-lg">HSE Monitor</span>
+          <span className="font-bold text-gray-900 text-lg">H&A Monitoring System</span>
           <span className="text-gray-300 mx-2">·</span>
           <span className="text-gray-500 text-sm">Daftar Perusahaan</span>
         </div>

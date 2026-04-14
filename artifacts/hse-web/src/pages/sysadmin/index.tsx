@@ -7,8 +7,9 @@ import SysadminSettings from "./settings";
 import SysadminReports from "./reports";
 import SysadminTestimonials from "./testimonials";
 import SysadminPlans from "./plans";
+import SysadminAudit from "./audit";
 
-export type SysadminTab = "companies" | "payments" | "plans" | "testimonials" | "reports" | "settings";
+export type SysadminTab = "companies" | "payments" | "plans" | "testimonials" | "reports" | "settings" | "audit";
 
 function getSysToken() { return localStorage.getItem("sys_token"); }
 function getSysUser() {
@@ -47,6 +48,7 @@ export default function SysadminApp() {
       {tab === "testimonials" && <SysadminTestimonials token={token} />}
       {tab === "reports" && <SysadminReports token={token} />}
       {tab === "settings" && <SysadminSettings token={token} />}
+      {tab === "audit" && <SysadminAudit token={token} />}
     </SysadminLayout>
   );
 }

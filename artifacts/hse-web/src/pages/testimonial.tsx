@@ -67,7 +67,7 @@ export default function TestimonialPage() {
     <div className="p-6 max-w-2xl">
       <PageHeader
         title="Berikan Testimoni"
-        subtitle="Bagikan pengalaman Anda menggunakan HSE Monitor"
+        subtitle="Bagikan pengalaman Anda menggunakan H&A Monitoring System"
       />
 
       {/* Existing testimonial display */}
@@ -134,7 +134,7 @@ export default function TestimonialPage() {
                 id="content"
                 value={content}
                 onChange={e => setContent(e.target.value)}
-                placeholder="Bagaimana HSE Monitor membantu pekerjaan HSE Anda? Fitur apa yang paling berguna?"
+                placeholder="Bagaimana H&A Monitoring System membantu pekerjaan HSE Anda? Fitur apa yang paling berguna?"
                 rows={5}
                 className="resize-none"
                 maxLength={500}
@@ -165,7 +165,7 @@ export default function TestimonialPage() {
         <ol className="text-xs text-gray-500 space-y-1.5 list-decimal list-inside">
           <li>Testimoni Anda masuk ke antrian review admin</li>
           <li>Admin akan meninjau dan memilih yang akan ditampilkan</li>
-          <li>Jika disetujui, testimoni Anda akan muncul di halaman utama HSE Monitor</li>
+          <li>Jika disetujui, testimoni Anda akan muncul di halaman utama H&A Monitoring System</li>
         </ol>
       </div>
     </div>

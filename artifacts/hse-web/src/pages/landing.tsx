@@ -106,7 +106,7 @@ function Navbar({ onPortalOpen }: { onPortalOpen: () => void }) {
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
             <Shield className="w-4.5 h-4.5 text-white w-5 h-5" />
           </div>
-          <span className="font-bold text-gray-900 text-lg">HSE Monitor</span>
+          <span className="font-bold text-gray-900 text-lg">H&A Monitoring System</span>
         </div>
 
         {/* Desktop nav */}
@@ -329,12 +329,13 @@ export default function LandingPage() {
               Platform HSE Terpadu untuk Industri Indonesia
             </div>
             <h1 className="text-4xl md:text-5xl font-bold leading-tight mb-5">
-              Kelola HSE Perusahaan<br />
+              Kelola HSE Dan Audit Operasional Perusahaan<br />
               <span className="text-blue-400">Lebih Mudah & Efisien</span>
             </h1>
             <p className="text-slate-300 text-lg mb-8 leading-relaxed">
-              Satu platform untuk pelaporan insiden, jadwal inspeksi, laporan kepatuhan, dan manajemen tim HSE — 
-              tersedia di web dan mobile.
+              Satu platform untuk pelaporan insiden, jadwal inspeksi, laporan kepatuhan, dan manajemen tim — 
+              tersedia di web dan mobile.<br /><br />
+              <span className="font-semibold text-white">Cukup 5 menit Untuk Setup!!</span>
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <a

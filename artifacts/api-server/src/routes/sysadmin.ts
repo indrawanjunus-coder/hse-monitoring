@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { db, companiesTable, paymentsTable, usersTable, systemSettingsTable, testimonialsTable, plansTable } from "@workspace/db";
+import { db, companiesTable, paymentsTable, usersTable, systemSettingsTable, testimonialsTable, plansTable, auditLogsTable } from "@workspace/db";
 import { eq, desc, and, gte, lte, sql } from "drizzle-orm";
 import { sysadminMiddleware } from "../lib/auth";
 import { uploadToGdrive } from "../lib/gdrive";
 import { enforcePlanLimits } from "../lib/plan-limits";
+import { writeAuditLog } from "../lib/audit-log";
 import multer from "multer";
 
 const router = Router();
@@ -51,12 +52,14 @@ router.put("/companies/:id", async (req, res) => {
 router.post("/companies/:id/activate", async (req, res) => {
   const id = Number(req.params.id);
   const { plan, months, note } = req.body as { plan: string; months: number; note?: string };
+  
 
   const endDate = new Date();
   if (plan === "free") endDate.setMonth(endDate.getMonth() + 1);
   else if (plan === "monthly") endDate.setMonth(endDate.getMonth() + (months ?? 1));
   else if (plan === "yearly") endDate.setFullYear(endDate.getFullYear() + 1);
 
+  const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, id));
   const [updated] = await db.update(companiesTable).set({
     status: "active",
     plan: plan as any,
@@ -69,12 +72,65 @@ router.post("/companies/:id/activate", async (req, res) => {
   // Enforce plan limits after plan change (auto-deactivate excess users/templates)
   const enforced = await enforcePlanLimits(id);
 
+  await writeAuditLog({
+    action: "ACTIVATE_COMPANY",
+    performedByNik: req.user?.nik ?? "sysadmin",
+    performedByName: req.user?.name ?? "Sysadmin",
+    companyId: id,
+    companyName: co?.name ?? String(id),
+    details: `Paket: ${plan}, Durasi: ${months ?? 1} bulan, Berakhir: ${endDate.toLocaleDateString("id-ID")}${note ? `, Catatan: ${note}` : ""}. Deactivated: ${enforced.deactivatedUsers} users, ${enforced.deactivatedTemplates} templates.`,
+    req,
+  });
+
   res.json({ success: true, company: updated, enforced });
 });
 
 router.post("/companies/:id/suspend", async (req, res) => {
   const id = Number(req.params.id);
+  
+  const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, id));
   const [updated] = await db.update(companiesTable).set({ status: "suspended", updatedAt: new Date() }).where(eq(companiesTable.id, id)).returning();
+
+  await writeAuditLog({
+    action: "SUSPEND_COMPANY",
+    performedByNik: req.user?.nik ?? "sysadmin",
+    performedByName: req.user?.name ?? "Sysadmin",
+    companyId: id,
+    companyName: co?.name ?? String(id),
+    details: `Perusahaan ditangguhkan`,
+    req,
+  });
+
+  res.json({ success: true, company: updated });
+});
+
+// Edit expiry date manually
+router.post("/companies/:id/edit-expiry", async (req, res) => {
+  const id = Number(req.params.id);
+  const { subscriptionEndsAt, note } = req.body as { subscriptionEndsAt: string; note?: string };
+  
+
+  if (!subscriptionEndsAt) { res.status(400).json({ error: "Tanggal berakhir wajib diisi" }); return; }
+
+  const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, id));
+  if (!co) { res.status(404).json({ error: "Perusahaan tidak ditemukan" }); return; }
+
+  const newEnd = new Date(subscriptionEndsAt);
+  const [updated] = await db.update(companiesTable).set({
+    subscriptionEndsAt: newEnd,
+    updatedAt: new Date(),
+  }).where(eq(companiesTable.id, id)).returning();
+
+  await writeAuditLog({
+    action: "EDIT_EXPIRY",
+    performedByNik: req.user?.nik ?? "sysadmin",
+    performedByName: req.user?.name ?? "Sysadmin",
+    companyId: id,
+    companyName: co.name,
+    details: `Tanggal berakhir diubah ke ${newEnd.toLocaleDateString("id-ID")}${note ? `. Catatan: ${note}` : ""}`,
+    req,
+  });
+
   res.json({ success: true, company: updated });
 });
 
@@ -100,6 +156,7 @@ router.get("/payments", async (req, res) => {
 router.put("/payments/:id/approve", async (req, res) => {
   const id = Number(req.params.id);
   const { note } = req.body;
+  
   const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
   if (!payment) { res.status(404).json({ error: "Tidak ditemukan" }); return; }
 
@@ -115,6 +172,16 @@ router.put("/payments/:id/approve", async (req, res) => {
     await db.update(companiesTable).set({ status: "active", plan: payment.plan as any, subscriptionEndsAt: newEnd, activatedAt: new Date(), updatedAt: new Date() }).where(eq(companiesTable.id, company.id));
     // Enforce plan limits after plan change
     await enforcePlanLimits(company.id);
+
+    await writeAuditLog({
+      action: "APPROVE_PAYMENT",
+      performedByNik: req.user?.nik ?? "sysadmin",
+      performedByName: req.user?.name ?? "Sysadmin",
+      companyId: company.id,
+      companyName: company.name,
+      details: `Payment #${id} disetujui. Paket: ${payment.plan}, ${payment.periodMonths} bulan, Rp ${payment.amount.toLocaleString()}${note ? `. Catatan: ${note}` : ""}`,
+      req,
+    });
   }
 
   res.json({ success: true });
@@ -123,8 +190,30 @@ router.put("/payments/:id/approve", async (req, res) => {
 router.put("/payments/:id/reject", async (req, res) => {
   const id = Number(req.params.id);
   const { note } = req.body;
+  
+  const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
+  const [company] = payment ? await db.select().from(companiesTable).where(eq(companiesTable.id, payment.companyId)) : [];
   await db.update(paymentsTable).set({ status: "rejected", reviewedAt: new Date(), reviewedByNote: note ?? null }).where(eq(paymentsTable.id, id));
+
+  await writeAuditLog({
+    action: "REJECT_PAYMENT",
+    performedByNik: req.user?.nik ?? "sysadmin",
+    performedByName: req.user?.name ?? "Sysadmin",
+    companyId: payment?.companyId ?? null,
+    companyName: company?.name ?? null,
+    details: `Payment #${id} ditolak${note ? `. Alasan: ${note}` : ""}`,
+    req,
+  });
+
   res.json({ success: true });
+});
+
+// --- Audit Logs ---
+router.get("/audit-logs", async (req, res) => {
+  const { limit = "100", offset = "0", companyId } = req.query as Record<string, string>;
+  let rows = await db.select().from(auditLogsTable).orderBy(desc(auditLogsTable.createdAt)).limit(Number(limit)).offset(Number(offset));
+  if (companyId) rows = rows.filter(r => r.companyId === Number(companyId));
+  res.json(rows.map(r => ({ ...r, createdAt: r.createdAt.toISOString() })));
 });
 
 // --- Reports ---

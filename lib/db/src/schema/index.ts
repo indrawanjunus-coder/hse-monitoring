@@ -24,3 +24,4 @@ export * from "./companies";
 export * from "./payments";
 export * from "./testimonials";
 export * from "./plans";
+export * from "./audit-logs";

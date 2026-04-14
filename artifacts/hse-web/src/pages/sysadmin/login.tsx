@@ -37,7 +37,7 @@ export default function SysadminLoginPage({ onLogin }: Props) {
             <Shield className="w-6 h-6 text-white" />
           </div>
           <div>
-            <div className="text-white font-bold text-lg">HSE Monitor</div>
+            <div className="text-white font-bold text-lg">H&A Monitoring System</div>
             <div className="text-slate-400 text-xs">Panel Administrator Sistem</div>
           </div>
         </div>
