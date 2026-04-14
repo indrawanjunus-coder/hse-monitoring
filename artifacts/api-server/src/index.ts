@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { pool } from "@workspace/db";
 import { startReminderCron } from "./lib/reminders";
+import { autoMigrate } from "./lib/auto-migrate";
 
 const rawPort = process.env["PORT"];
 
@@ -46,7 +47,7 @@ async function fixSequences() {
   logger.info("DB sequences synced");
 }
 
-fixSequences().then(() => {
+autoMigrate().then(() => fixSequences()).then(() => {
   app.listen(port, (err) => {
     if (err) {
       logger.error({ err }, "Error listening on port");
