@@ -25,12 +25,38 @@ interface ScheduleCompliance {
   expectedCount: number;
   actualCount: number;
   complianceRate: number;
+  reporterRate: number;
+  uniqueReporterCount: number;
+  assignedUserCount: number;
   lastInspectedAt: string | null;
   status: "compliant" | "partial" | "none";
 }
 interface ComplianceReport {
   rows: ScheduleCompliance[];
   summary: { total: number; compliant: number; partial: number; none: number; avgRate: number };
+}
+
+type ChartGroupBy = "template" | "plant" | "frequency";
+
+function buildChartData(rows: ScheduleCompliance[], groupBy: ChartGroupBy) {
+  const groups: Record<string, { complianceRates: number[]; reporterRates: number[] }> = {};
+  for (const r of rows) {
+    const key = groupBy === "template" ? r.templateName
+      : groupBy === "plant" ? r.plantName
+      : r.frequencyLabel;
+    if (!groups[key]) groups[key] = { complianceRates: [], reporterRates: [] };
+    groups[key].complianceRates.push(r.complianceRate);
+    groups[key].reporterRates.push(r.reporterRate ?? 0);
+  }
+  return Object.entries(groups)
+    .map(([name, { complianceRates, reporterRates }]) => ({
+      name: name.length > 22 ? name.slice(0, 20) + "…" : name,
+      fullName: name,
+      laporan: parseFloat((complianceRates.reduce((a, b) => a + b, 0) / complianceRates.length).toFixed(1)),
+      pelapor: parseFloat((reporterRates.reduce((a, b) => a + b, 0) / reporterRates.length).toFixed(1)),
+      count: complianceRates.length,
+    }))
+    .sort((a, b) => b.laporan - a.laporan);
 }
 
 const FREQ_COLORS: Record<string, string> = {
@@ -134,6 +160,7 @@ export default function ScheduleCompliancePage() {
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState(20);
   const [page, setPage] = useState(1);
+  const [chartGroupBy, setChartGroupBy] = useState<ChartGroupBy>("template");
 
   const years = Array.from({ length: 5 }, (_, i) => String(curYear - i));
 
@@ -161,6 +188,8 @@ export default function ScheduleCompliancePage() {
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pagedRows = filteredRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const chartData = useMemo(() => buildChartData(filteredRows, chartGroupBy), [filteredRows, chartGroupBy]);
 
   const handleApply = () => {
     const yr = parseInt(selYear);
@@ -296,6 +325,111 @@ export default function ScheduleCompliancePage() {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* Bar Chart: % Pelapor vs % Laporan Masuk */}
+      {filteredRows.length > 0 && (
+        <div className="bg-white border rounded-lg p-4 mb-4 print:break-inside-avoid">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-blue-600" />
+              <h2 className="font-semibold text-gray-900">Grafik % Pelapor vs % Laporan Masuk</h2>
+              <span className="text-xs text-gray-400">— rata-rata per kelompok</span>
+            </div>
+            <div className="flex items-center gap-2 print:hidden">
+              <span className="text-xs text-gray-500">Kelompokkan per:</span>
+              <div className="flex rounded-lg border overflow-hidden text-xs font-medium">
+                {(["template", "plant", "frequency"] as ChartGroupBy[]).map(v => (
+                  <button
+                    key={v}
+                    onClick={() => setChartGroupBy(v)}
+                    className={`px-3 py-1.5 transition-colors ${chartGroupBy === v ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                  >
+                    {v === "template" ? "Template" : v === "plant" ? "Plant" : "Frekuensi"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {chartData.length === 0 ? (
+            <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Tidak ada data untuk ditampilkan</div>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={chartData.length > 6 ? 360 : 260}>
+                <BarChart
+                  data={chartData}
+                  margin={{ top: 8, right: 24, left: 0, bottom: chartData.length > 4 ? 60 : 20 }}
+                  barCategoryGap="25%"
+                  barGap={4}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 11, fill: "#6b7280" }}
+                    tickLine={false}
+                    axisLine={false}
+                    angle={chartData.length > 4 ? -30 : 0}
+                    textAnchor={chartData.length > 4 ? "end" : "middle"}
+                    interval={0}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    tickFormatter={v => `${v}%`}
+                    tick={{ fontSize: 11, fill: "#6b7280" }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={42}
+                  />
+                  <Tooltip
+                    formatter={(value: number, name: string) => [
+                      `${value.toFixed(1)}%`,
+                      name === "laporan" ? "% Laporan Masuk" : "% Pelapor",
+                    ]}
+                    labelFormatter={(label, payload) => {
+                      const item = payload?.[0]?.payload;
+                      return `${item?.fullName ?? label} (${item?.count ?? ""} jadwal)`;
+                    }}
+                    contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e5e7eb" }}
+                  />
+                  <Legend
+                    formatter={name => name === "laporan" ? "% Laporan Masuk" : "% Pelapor"}
+                    wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
+                  />
+                  <Bar dataKey="laporan" name="laporan" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                    {chartData.map((entry) => (
+                      <Cell
+                        key={entry.name}
+                        fill={entry.laporan >= 80 ? "#22c55e" : entry.laporan >= 50 ? "#f59e0b" : "#ef4444"}
+                      />
+                    ))}
+                  </Bar>
+                  <Bar dataKey="pelapor" name="pelapor" fill="#8b5cf6" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                </BarChart>
+              </ResponsiveContainer>
+
+              {/* Legend description */}
+              <div className="mt-2 flex flex-wrap gap-4 text-xs text-gray-500 justify-center">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-green-500 inline-block" />
+                  <span>% Laporan Masuk ≥ 80% (Sesuai)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-amber-500 inline-block" />
+                  <span>% Laporan Masuk 50–79% (Sebagian)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" />
+                  <span>% Laporan Masuk &lt;50% (Kurang)</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-sm bg-violet-500 inline-block" />
+                  <span>% Pelapor (unik)</span>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
