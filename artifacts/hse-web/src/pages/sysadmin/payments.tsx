@@ -12,12 +12,12 @@ const API_BASE = "/api";
 function sysApi(token: string) {
   const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   return {
-    get: async <T>(path: string): Promise<T> => {
+    get: async <T,>(path: string): Promise<T> => {
       const res = await fetch(`${API_BASE}${path}`, { headers: h });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
-    put: async <T>(path: string, body: unknown): Promise<T> => {
+    put: async <T,>(path: string, body: unknown): Promise<T> => {
       const res = await fetch(`${API_BASE}${path}`, { method: "PUT", headers: h, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await res.text());
       return res.json();

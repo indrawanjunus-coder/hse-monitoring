@@ -7,7 +7,7 @@ const API_BASE = "/api";
 function sysApi(token: string) {
   const h = { Authorization: `Bearer ${token}` };
   return {
-    get: async <T>(path: string): Promise<T> => {
+    get: async <T,>(path: string): Promise<T> => {
       const res = await fetch(`${API_BASE}${path}`, { headers: h });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
