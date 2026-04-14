@@ -60,6 +60,7 @@ export function IncidentTypeBadge({ type }: { type: string }) {
 }
 
 const frequencyLabels: Record<string, string> = {
+  always: "Tampil Selalu",
   daily: "Setiap Hari",
   weekly: "Setiap Minggu",
   biweekly: "Dua Minggu Sekali",

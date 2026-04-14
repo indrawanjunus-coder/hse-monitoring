@@ -56,8 +56,29 @@ async function formatSchedule(s: typeof schedulesTable.$inferSelect) {
   };
 }
 
+function isScheduleActiveToday(s: typeof schedulesTable.$inferSelect): boolean {
+  const today = new Date();
+  const todayDow = today.getDay(); // 0=Sun..6=Sat
+  const todayDom = today.getDate();
+  switch (s.frequency) {
+    case "always":
+    case "daily":
+    case "custom":
+      return true;
+    case "weekly":
+      return s.dayOfWeek !== null && s.dayOfWeek === todayDow;
+    case "biweekly":
+      return s.dayOfWeek !== null && s.dayOfWeek === todayDow;
+    case "monthly":
+      return s.dayOfMonth !== null && s.dayOfMonth === todayDom;
+    default:
+      return true;
+  }
+}
+
 router.get("/", async (req, res) => {
   const authUser = req.user!;
+  const todayOnly = req.query.todayOnly === "true";
 
   let schedules: (typeof schedulesTable.$inferSelect)[];
 
@@ -90,6 +111,11 @@ router.get("/", async (req, res) => {
     schedules = allIds.size
       ? await db.select().from(schedulesTable).where(inArray(schedulesTable.id, [...allIds]))
       : [];
+  }
+
+  // Filter by today's schedule if requested (for my-inspections)
+  if (todayOnly) {
+    schedules = schedules.filter(s => s.isActive !== 0 && isScheduleActiveToday(s));
   }
 
   const result = await Promise.all(schedules.map(formatSchedule));

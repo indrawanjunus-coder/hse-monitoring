@@ -278,7 +278,7 @@ export default function MyInspectionsPage() {
 
   const { data: schedules = [], isLoading } = useQuery<Schedule[]>({
     queryKey: ["schedules"],
-    queryFn: () => api.get("/schedules"),
+    queryFn: () => api.get("/schedules?todayOnly=true"),
   });
 
   const mySchedules = schedules.filter(s => {

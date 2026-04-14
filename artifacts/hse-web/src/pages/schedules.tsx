@@ -44,17 +44,21 @@ interface UserItem { id: number; name: string; nik: string; role: string }
 
 const DAY_NAMES = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
 const FREQUENCY_OPTIONS = [
+  { value: "always", label: "Tampil Selalu (Tanpa Jadwal)" },
   { value: "daily", label: "Setiap Hari" },
   { value: "weekly", label: "Setiap Minggu (pilih hari)" },
-  { value: "biweekly", label: "Dua Minggu Sekali" },
+  { value: "biweekly", label: "Dua Minggu Sekali (pilih hari)" },
   { value: "monthly", label: "Setiap Bulan (pilih tanggal)" },
   { value: "custom", label: "Kustom" },
 ];
 
 function frequencyLabel(s: Schedule): string {
+  if (s.frequency === "always") return "Tampil Selalu";
   if (s.frequency === "daily") return "Setiap Hari";
   if (s.frequency === "weekly" && s.dayOfWeek !== null && s.dayOfWeek !== undefined)
     return `Setiap ${DAY_NAMES[s.dayOfWeek]}`;
+  if (s.frequency === "biweekly" && s.dayOfWeek !== null && s.dayOfWeek !== undefined)
+    return `2 Minggu/sekali (${DAY_NAMES[s.dayOfWeek]})`;
   if (s.frequency === "biweekly") return "Dua Minggu Sekali";
   if (s.frequency === "monthly" && s.dayOfMonth)
     return `Setiap tgl ${s.dayOfMonth}`;
@@ -170,6 +174,32 @@ function ScheduleForm({
             {FREQUENCY_OPTIONS.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
           </SelectContent>
         </Select>
+        {frequency === "always" && (
+          <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-3 py-2 flex items-start gap-1.5">
+            <span className="mt-0.5">✅</span>
+            <span>Template akan <strong>selalu muncul</strong> di halaman Inspeksi user yang diassign, tanpa batasan hari/tanggal tertentu.</span>
+          </p>
+        )}
+        {frequency === "daily" && (
+          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+            📅 Template muncul setiap hari untuk user yang diassign.
+          </p>
+        )}
+        {frequency === "weekly" && (
+          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+            📅 Template hanya muncul pada hari yang dipilih setiap minggunya.
+          </p>
+        )}
+        {frequency === "biweekly" && (
+          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+            📅 Template muncul setiap 2 minggu pada hari yang dipilih.
+          </p>
+        )}
+        {frequency === "monthly" && (
+          <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-3 py-2">
+            📅 Template hanya muncul pada tanggal yang dipilih setiap bulannya.
+          </p>
+        )}
       </div>
 
       {(frequency === "weekly" || frequency === "biweekly") && (

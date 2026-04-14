@@ -15,7 +15,7 @@ export const schedulesTable = pgTable("schedules", {
   groupId: integer("group_id").references(() => groupsTable.id),
   templateId: integer("template_id").notNull().references(() => templatesTable.id),
   plantId: integer("plant_id").notNull().references(() => plantsTable.id),
-  frequency: text("frequency", { enum: ["daily", "weekly", "biweekly", "monthly", "custom"] }).notNull().default("weekly"),
+  frequency: text("frequency", { enum: ["always", "daily", "weekly", "biweekly", "monthly", "custom"] }).notNull().default("weekly"),
   dayOfWeek: integer("day_of_week"),
   dayOfMonth: integer("day_of_month"),
   customDays: text("custom_days"),
