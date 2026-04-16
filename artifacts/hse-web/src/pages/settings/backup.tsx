@@ -49,6 +49,7 @@ interface GithubConfig {
   repo: string;
   branch: string;
   hasToken: boolean;
+  hasEnvToken: boolean;
   path: string;
 }
 
@@ -266,39 +267,51 @@ export default function BackupPage() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs flex items-center gap-1.5">
-                    <FolderOpen className="w-3.5 h-3.5" />Folder di Repo
+                    <FolderOpen className="w-3.5 h-3.5" />Folder di Repo <span className="text-gray-400">(opsional)</span>
                   </Label>
                   <Input
-                    placeholder="backups/"
+                    placeholder="backups"
                     value={ghForm.path}
                     onChange={e => setGhForm(f => ({ ...f, path: e.target.value }))}
                     className="text-sm h-9"
                   />
+                  <p className="text-xs text-gray-400">
+                    Nama folder di dalam repo (contoh: <code className="bg-gray-100 px-1 rounded">backups</code>). Kosongkan untuk simpan di root. Bukan "/tree/main".
+                  </p>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs flex items-center gap-1.5">
                     <KeyRound className="w-3.5 h-3.5" />Personal Access Token (PAT)
                   </Label>
-                  <div className="relative">
-                    <Input
-                      type={showToken ? "text" : "password"}
-                      placeholder={ghConfig?.hasToken ? "••••••••••••• (tersimpan)" : "ghp_xxxxxxxxxxxx"}
-                      value={tokenInput}
-                      onChange={e => setTokenInput(e.target.value)}
-                      className="text-sm h-9 pr-9"
-                    />
-                    <button
-                      type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                      onClick={() => setShowToken(s => !s)}
-                    >
-                      {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                  {ghConfig?.hasToken && !tokenInput && (
-                    <p className="text-xs text-green-600 flex items-center gap-1">
-                      <Check className="w-3 h-3" />Token sudah tersimpan. Kosongkan untuk tidak mengubah.
-                    </p>
+                  {ghConfig?.hasEnvToken ? (
+                    <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700 flex items-start gap-2">
+                      <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                      <span>Token otomatis digunakan dari konfigurasi server (<code className="bg-green-100 px-1 rounded">GITHUB_PERSONAL_ACCESS_TOKEN</code>). Tidak perlu diisi.</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <Input
+                          type={showToken ? "text" : "password"}
+                          placeholder={ghConfig?.hasToken ? "••••••••••••• (tersimpan)" : "ghp_xxxxxxxxxxxx"}
+                          value={tokenInput}
+                          onChange={e => setTokenInput(e.target.value)}
+                          className="text-sm h-9 pr-9"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          onClick={() => setShowToken(s => !s)}
+                        >
+                          {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {ghConfig?.hasToken && !tokenInput && (
+                        <p className="text-xs text-green-600 flex items-center gap-1">
+                          <Check className="w-3 h-3" />Token sudah tersimpan. Kosongkan untuk tidak mengubah.
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -317,7 +330,7 @@ export default function BackupPage() {
                 <Button
                   size="sm"
                   onClick={() => { setPushResult(null); pushMutation.mutate(); }}
-                  disabled={isAnyLoading || (!ghConfig?.hasToken && !tokenInput.trim()) || !ghForm.repo}
+                  disabled={isAnyLoading || (!ghConfig?.hasToken && !ghConfig?.hasEnvToken && !tokenInput.trim()) || !ghForm.repo}
                   className="gap-1.5 bg-gray-900 hover:bg-gray-800 text-white"
                 >
                   {pushMutation.isPending ? (

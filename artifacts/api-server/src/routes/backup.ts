@@ -205,10 +205,12 @@ router.get("/github-config", async (req, res) => {
   const companyId = req.user!.companyId;
   try {
     const cfg = await getGhConfig(companyId);
+    const hasEnvToken = !!(process.env["GITHUB_PERSONAL_ACCESS_TOKEN"]);
     res.json({
       repo: cfg[ghKey(companyId, "repo")] ?? "",
       branch: cfg[ghKey(companyId, "branch")] || "main",
-      hasToken: !!(cfg[ghKey(companyId, "token")]),
+      hasToken: !!(cfg[ghKey(companyId, "token")]) || hasEnvToken,
+      hasEnvToken,
       path: cfg[ghKey(companyId, "path")] || "backups/",
     });
   } catch (err) {
@@ -254,11 +256,18 @@ router.post("/github-push", async (req, res) => {
 
     const repo = cfg[ghKey(companyId, "repo")];
     const branch = cfg[ghKey(companyId, "branch")] || "main";
-    const token = cfg[ghKey(companyId, "token")];
-    const backupPath = (cfg[ghKey(companyId, "path")] || "backups/").replace(/\/?$/, "/");
+    // Use manually-configured token first, fall back to env var
+    const token = cfg[ghKey(companyId, "token")] || process.env["GITHUB_PERSONAL_ACCESS_TOKEN"] || "";
+    // Strip leading/trailing slashes, then ensure trailing slash
+    const rawPath = cfg[ghKey(companyId, "path")] || "backups";
+    const backupPath = rawPath.replace(/^\/+|\/+$/g, "").replace(/^$/, "backups") + "/";
 
-    if (!repo || !token) {
-      res.status(400).json({ error: "Konfigurasi GitHub belum lengkap. Isi Repo dan Token terlebih dahulu." });
+    if (!repo) {
+      res.status(400).json({ error: "Nama repository belum diisi. Masukkan format: owner/nama-repo (contoh: indrawanjunus-coder/HSE)" });
+      return;
+    }
+    if (!token) {
+      res.status(400).json({ error: "Token GitHub belum tersedia. Isi Personal Access Token di form atau set environment variable GITHUB_PERSONAL_ACCESS_TOKEN." });
       return;
     }
 
