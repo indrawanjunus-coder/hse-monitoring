@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 import {
   Download, Database, FileText, FileCode2, Loader2,
   Github, PackageOpen, Check, Eye, EyeOff, Save, RefreshCw,
-  FolderOpen, GitBranch, KeyRound, BookOpen,
+  FolderOpen, GitBranch, KeyRound, BookOpen, XCircle,
 } from "lucide-react";
 
 interface BackupFormat {
@@ -86,6 +86,7 @@ export default function BackupPage() {
   const [showToken, setShowToken] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
   const [pushResult, setPushResult] = useState<PushResult | null>(null);
+  const [pushError, setPushError] = useState<string | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -125,9 +126,19 @@ export default function BackupPage() {
     mutationFn: () => api.post("/backup/github-push", {}),
     onSuccess: (data: PushResult) => {
       setPushResult(data);
+      setPushError(null);
       toast({ title: "Push ke GitHub berhasil!", description: data.message });
     },
-    onError: (e: Error) => toast({ title: "Push gagal", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => {
+      setPushError(e.message);
+      setPushResult(null);
+      toast({
+        title: "Push ke GitHub gagal",
+        description: e.message,
+        variant: "destructive",
+        duration: 10000,
+      });
+    },
   });
 
   const handleDownload = async (fmt: BackupFormat) => {
@@ -328,6 +339,15 @@ export default function BackupPage() {
                       <li key={f}>✓ {f}</li>
                     ))}
                   </ul>
+                </div>
+              )}
+
+              {pushError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm">
+                  <p className="font-medium flex items-center gap-1.5 text-red-800 mb-1">
+                    <XCircle className="w-4 h-4 flex-shrink-0" />Gagal push ke GitHub
+                  </p>
+                  <p className="text-xs text-red-700 break-words">{pushError}</p>
                 </div>
               )}
 

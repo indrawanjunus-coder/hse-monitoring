@@ -267,7 +267,7 @@ router.post("/github-push", async (req, res) => {
     const pgSql = await buildSqlBackup(companyId, "postgresql");
     const csvData = await buildCsvBackup(companyId);
 
-    const headers: Record<string, string> = {
+    const ghHeaders: Record<string, string> = {
       "Authorization": `Bearer ${token}`,
       "Accept": "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
@@ -275,20 +275,34 @@ router.post("/github-push", async (req, res) => {
       "User-Agent": "HSE-Monitoring-System",
     };
 
-    async function pushFile(filename: string, content: string, message: string) {
+    // Validate token & repo first
+    const repoCheck = await fetch(`https://api.github.com/repos/${repo}`, { headers: ghHeaders });
+    if (!repoCheck.ok) {
+      const repoErr = await repoCheck.json().catch(() => ({})) as { message?: string };
+      const hint = repoCheck.status === 401
+        ? "Token tidak valid atau sudah kadaluarsa. Buat PAT baru di GitHub Settings → Developer settings → Personal access tokens."
+        : repoCheck.status === 404
+          ? `Repository "${repo}" tidak ditemukan. Pastikan nama repo benar (format: owner/repo) dan token punya akses ke repo ini.`
+          : `GitHub error ${repoCheck.status}: ${repoErr.message ?? repoCheck.statusText}`;
+      console.error("[backup/github-push] repo check failed:", repoCheck.status, repoErr);
+      res.status(400).json({ error: hint });
+      return;
+    }
+
+    async function pushFile(filename: string, content: string, commitMsg: string) {
       const filePath = `${backupPath}${filename}`;
       const apiUrl = `https://api.github.com/repos/${repo}/contents/${filePath}`;
 
-      // Check if file exists to get SHA
+      // Get existing SHA (to update) — ignore if file doesn't exist yet
       let sha: string | undefined;
-      const existing = await fetch(apiUrl + `?ref=${branch}`, { headers });
+      const existing = await fetch(`${apiUrl}?ref=${branch}`, { headers: ghHeaders });
       if (existing.ok) {
         const data = await existing.json() as { sha?: string };
         sha = data.sha;
       }
 
       const body: Record<string, unknown> = {
-        message,
+        message: commitMsg,
         content: Buffer.from(content, "utf-8").toString("base64"),
         branch,
       };
@@ -296,22 +310,37 @@ router.post("/github-push", async (req, res) => {
 
       const put = await fetch(apiUrl, {
         method: "PUT",
-        headers,
+        headers: ghHeaders,
         body: JSON.stringify(body),
       });
 
       if (!put.ok) {
-        const err = await put.json().catch(() => ({})) as { message?: string };
-        throw new Error(`GitHub: ${err.message ?? put.statusText} (${filePath})`);
+        const ghErr = await put.json().catch(() => ({})) as { message?: string; errors?: { message?: string }[] };
+        const detail = ghErr.errors?.[0]?.message ?? ghErr.message ?? put.statusText;
+        const hint = put.status === 422 && detail?.includes("sha")
+          ? `Konflik SHA pada file ${filePath}. Coba lagi.`
+          : put.status === 422
+            ? `Branch "${branch}" tidak ditemukan di repo. Pastikan branch sudah ada di repository.`
+            : `GitHub: ${detail} (file: ${filePath})`;
+        console.error("[backup/github-push] pushFile failed:", put.status, ghErr);
+        throw new Error(hint);
       }
       return filePath;
     }
 
-    const [pgPath, csvPath] = await Promise.all([
-      pushFile(`hse-backup-postgresql-${now}.sql`, pgSql, `chore: backup data HSE (postgresql) — ${now}`),
-      pushFile(`hse-backup-data-${now}.csv`, csvData, `chore: backup data HSE (csv) — ${now}`),
-    ]);
+    // Push files sequentially (not parallel) to avoid race condition on branch/tree
+    const pgPath = await pushFile(
+      `hse-backup-postgresql-${now}.sql`,
+      pgSql,
+      `chore: backup data HSE (postgresql) — ${now}`
+    );
+    const csvPath = await pushFile(
+      `hse-backup-data-${now}.csv`,
+      csvData,
+      `chore: backup data HSE (csv) — ${now}`
+    );
 
+    console.info(`[backup/github-push] success: ${repo}/${branch} — ${pgPath}, ${csvPath}`);
     res.json({
       ok: true,
       pushed: [pgPath, csvPath],
@@ -320,7 +349,9 @@ router.post("/github-push", async (req, res) => {
       message: `Backup berhasil di-push ke ${repo} (branch: ${branch})`,
     });
   } catch (err) {
-    res.status(500).json({ error: "Push ke GitHub gagal", detail: String(err) });
+    const detail = err instanceof Error ? err.message : String(err);
+    console.error("[backup/github-push] error:", detail);
+    res.status(500).json({ error: detail });
   }
 });
 
