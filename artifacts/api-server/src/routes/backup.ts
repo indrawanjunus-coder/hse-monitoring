@@ -25,6 +25,19 @@ const BACKUP_TABLES = [
   "plans", "payments", "system_settings", "system_logs",
 ];
 
+// Tables safe to push to GitHub — excludes tables with secrets/credentials
+const GITHUB_SAFE_TABLES = [
+  "companies", "users", "groups", "group_members",
+  "plants", "categories", "category_groups", "category_users",
+  "actions", "preventive_actions", "incident_types", "templates", "questions",
+  "schedules", "schedule_groups", "schedule_users", "inspections", "inspection_answers",
+  "incidents", "incident_comments", "incident_attachments", "incident_escalations",
+  "indicators", "indicator_values",
+  "plans", "payments", "system_logs",
+  // NOTE: smtp_settings, gdrive_settings, system_settings intentionally EXCLUDED
+  // to prevent leaking credentials/tokens via GitHub secret scanning
+];
+
 async function getTableData(table: string, companyId?: number | null) {
   try {
     const hasCompanyId = await pool.query(
@@ -106,6 +119,70 @@ async function buildCsvBackup(companyId: number | null): Promise<string> {
     const cols = Object.keys(rows[0]!);
     output += cols.join(",") + "\n";
     for (const row of rows) {
+      output += cols.map(c => escapeCSV(row[c])).join(",") + "\n";
+    }
+    output += "\n";
+  }
+  return output;
+}
+
+// Sensitive column names to redact when pushing to GitHub
+const REDACTED_COLUMNS = new Set([
+  "password", "password_hash", "token", "secret", "access_token",
+  "refresh_token", "client_secret", "api_key", "private_key",
+]);
+
+function redactRow(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[k] = REDACTED_COLUMNS.has(k.toLowerCase()) && v ? "[REDACTED]" : v;
+  }
+  return out;
+}
+
+async function buildSqlBackupForGitHub(companyId: number | null, dialect: "postgresql" | "mysql"): Promise<string> {
+  const isMysql = dialect === "mysql";
+  let sql = "";
+  if (isMysql) {
+    sql += `-- H&A Monitoring System - MySQL Backup (GitHub safe — credentials excluded)\n-- Generated: ${new Date().toISOString()}\nSET FOREIGN_KEY_CHECKS=0;\nSET NAMES utf8mb4;\n\n`;
+  } else {
+    sql += `-- H&A Monitoring System - PostgreSQL Backup (GitHub safe — credentials excluded)\n-- Generated: ${new Date().toISOString()}\nSET session_replication_role = 'replica';\n\n`;
+  }
+  for (const table of GITHUB_SAFE_TABLES) {
+    const rows = await getTableData(table, companyId);
+    if (rows.length === 0) continue;
+    sql += `-- =====================\n-- Table: ${table}\n-- =====================\n`;
+    if (isMysql) sql += `TRUNCATE TABLE \`${table}\`;\n`;
+    else sql += `TRUNCATE TABLE "${table}" RESTART IDENTITY CASCADE;\n`;
+    const safeRows = rows.map(redactRow);
+    const cols = Object.keys(safeRows[0]!);
+    const colList = isMysql ? cols.map(c => `\`${c}\``).join(", ") : cols.map(c => `"${c}"`).join(", ");
+    const chunkSize = 100;
+    for (let i = 0; i < safeRows.length; i += chunkSize) {
+      const chunk = safeRows.slice(i, i + chunkSize);
+      const values = chunk.map(row =>
+        `(${cols.map(c => escapeSQL(row[c], isMysql ? "mysql" : "postgresql")).join(", ")})`
+      ).join(",\n  ");
+      if (isMysql) sql += `INSERT INTO \`${table}\` (${colList}) VALUES\n  ${values};\n`;
+      else sql += `INSERT INTO "${table}" (${colList}) VALUES\n  ${values}\n  ON CONFLICT DO NOTHING;\n`;
+    }
+    sql += "\n";
+  }
+  if (isMysql) sql += "SET FOREIGN_KEY_CHECKS=1;\n";
+  else sql += "SET session_replication_role = 'origin';\n";
+  return sql;
+}
+
+async function buildCsvBackupForGitHub(companyId: number | null): Promise<string> {
+  let output = `# H&A Monitoring System - Data Backup (CSV, GitHub safe — credentials excluded)\n# Generated: ${new Date().toISOString()}\n\n`;
+  for (const table of GITHUB_SAFE_TABLES) {
+    const rows = await getTableData(table, companyId);
+    if (rows.length === 0) continue;
+    output += `### TABLE: ${table} ###\n`;
+    const safeRows = rows.map(redactRow);
+    const cols = Object.keys(safeRows[0]!);
+    output += cols.join(",") + "\n";
+    for (const row of safeRows) {
       output += cols.map(c => escapeCSV(row[c])).join(",") + "\n";
     }
     output += "\n";
@@ -273,8 +350,8 @@ router.post("/github-push", async (req, res) => {
 
     const now = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
 
-    const pgSql = await buildSqlBackup(companyId, "postgresql");
-    const csvData = await buildCsvBackup(companyId);
+    const pgSql = await buildSqlBackupForGitHub(companyId, "postgresql");
+    const csvData = await buildCsvBackupForGitHub(companyId);
 
     const ghHeaders: Record<string, string> = {
       "Authorization": `Bearer ${token}`,
