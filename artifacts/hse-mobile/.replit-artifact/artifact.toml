@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/hse-mobile/"
+title = "HSE Mobile App"
+version = "1.0.0"
+id = "artifacts/hse-mobile"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/hse-mobile" ]
+localPort = 23543
+
+[services.development]
+run = "pnpm --filter @workspace/hse-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/hse-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/hse-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "23543"
+BASE_PATH = "/hse-mobile/"
