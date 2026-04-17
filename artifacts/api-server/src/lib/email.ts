@@ -1,6 +1,18 @@
 import nodemailer from "nodemailer";
 import { db, smtpSettingsTable } from "@workspace/db";
 
+// [SECURITY H6] Escape all user-supplied values before embedding in HTML email templates
+// Prevents HTML/script injection via incident details, names, categories, etc.
+function e(value: unknown): string {
+  if (value === null || value === undefined) return "-";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 export async function getSmtpTransporter() {
   const [settings] = await db.select().from(smtpSettingsTable);
   if (!settings || !settings.host || !settings.username) return null;
@@ -41,15 +53,15 @@ export function incidentEmailHtml(incident: {
       </div>
       <div style="background:#f9fafb;padding:20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
         <table style="width:100%;border-collapse:collapse">
-          <tr><td style="padding:8px;color:#6b7280;width:40%">Tanggal Kejadian</td><td style="padding:8px;font-weight:600">${incident.incidentDate}</td></tr>
-          <tr style="background:white"><td style="padding:8px;color:#6b7280">Kategori</td><td style="padding:8px;font-weight:600">${incident.categoryName ?? "-"}</td></tr>
-          <tr><td style="padding:8px;color:#6b7280">Plant</td><td style="padding:8px;font-weight:600">${incident.plantName ?? "-"}</td></tr>
-          <tr style="background:white"><td style="padding:8px;color:#6b7280">Dilaporkan Oleh</td><td style="padding:8px;font-weight:600">${incident.reporterName ?? "-"}</td></tr>
-          <tr><td style="padding:8px;color:#6b7280">Ditugaskan ke Group</td><td style="padding:8px;font-weight:600;color:#1e3a5f">${incident.assignedGroupName ?? "-"}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280;width:40%">Tanggal Kejadian</td><td style="padding:8px;font-weight:600">${e(incident.incidentDate)}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Kategori</td><td style="padding:8px;font-weight:600">${e(incident.categoryName)}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Plant</td><td style="padding:8px;font-weight:600">${e(incident.plantName)}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Dilaporkan Oleh</td><td style="padding:8px;font-weight:600">${e(incident.reporterName)}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Ditugaskan ke Group</td><td style="padding:8px;font-weight:600;color:#1e3a5f">${e(incident.assignedGroupName)}</td></tr>
         </table>
         <div style="margin-top:16px;padding:12px;background:white;border-radius:6px;border-left:4px solid #ef4444">
           <p style="margin:0;color:#374151"><strong>Detail:</strong></p>
-          <p style="margin:8px 0 0;color:#4b5563">${incident.detail}</p>
+          <p style="margin:8px 0 0;color:#4b5563">${e(incident.detail)}</p>
         </div>
         <p style="margin-top:20px;color:#9ca3af;font-size:12px">Harap segera tindak lanjuti incident ini di Sistem HSE.</p>
       </div>
@@ -67,12 +79,12 @@ export function newUserEmailHtml(user: {
         <h2 style="margin:0">👋 Selamat Datang di Sistem HSE</h2>
       </div>
       <div style="background:#f9fafb;padding:20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
-        <p style="color:#374151">Halo <strong>${user.name}</strong>, akun Anda telah dibuat. Berikut adalah informasi login Anda:</p>
+        <p style="color:#374151">Halo <strong>${e(user.name)}</strong>, akun Anda telah dibuat. Berikut adalah informasi login Anda:</p>
         <table style="width:100%;border-collapse:collapse;margin:12px 0">
-          <tr><td style="padding:8px;color:#6b7280;width:40%">Nama</td><td style="padding:8px;font-weight:600">${user.name}</td></tr>
-          <tr style="background:white"><td style="padding:8px;color:#6b7280">NIK (Username)</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${user.nik}</td></tr>
-          <tr><td style="padding:8px;color:#6b7280">Password</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${user.password}</td></tr>
-          <tr style="background:white"><td style="padding:8px;color:#6b7280">Role</td><td style="padding:8px">${roleLabel[user.role] ?? user.role}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280;width:40%">Nama</td><td style="padding:8px;font-weight:600">${e(user.name)}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">NIK (Username)</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${e(user.nik)}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Password</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${e(user.password)}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Role</td><td style="padding:8px">${e(roleLabel[user.role] ?? user.role)}</td></tr>
         </table>
         <div style="margin-top:12px;padding:12px;background:#fef3c7;border-radius:6px;border-left:4px solid #f59e0b">
           <p style="margin:0;color:#92400e;font-size:13px">⚠️ Harap simpan informasi ini dengan aman dan segera ganti password Anda setelah login pertama.</p>
@@ -93,24 +105,24 @@ export function companyActivationEmailHtml(data: {
         <p style="margin:8px 0 0;opacity:0.8;font-size:14px">H&A Monitoring System</p>
       </div>
       <div style="background:#f9fafb;padding:24px 20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
-        <p style="color:#374151;margin-top:0">Halo <strong>${data.contactName}</strong>,</p>
-        <p style="color:#374151">Selamat! Akun perusahaan <strong>${data.companyName}</strong> telah berhasil diaktifkan di H&A Monitoring System.</p>
+        <p style="color:#374151;margin-top:0">Halo <strong>${e(data.contactName)}</strong>,</p>
+        <p style="color:#374151">Selamat! Akun perusahaan <strong>${e(data.companyName)}</strong> telah berhasil diaktifkan di H&A Monitoring System.</p>
         <p style="color:#374151;font-weight:600">Berikut adalah informasi login admin portal Anda:</p>
         <div style="background:white;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin:16px 0">
           <table style="width:100%;border-collapse:collapse">
             <tr>
               <td style="padding:10px 8px;color:#6b7280;width:40%;border-bottom:1px solid #f3f4f6">URL Portal</td>
               <td style="padding:10px 8px;font-weight:600;color:#1d4ed8;border-bottom:1px solid #f3f4f6">
-                <a href="${data.portalUrl}" style="color:#1d4ed8">${data.portalUrl}</a>
+                <a href="${e(data.portalUrl)}" style="color:#1d4ed8">${e(data.portalUrl)}</a>
               </td>
             </tr>
             <tr>
               <td style="padding:10px 8px;color:#6b7280;border-bottom:1px solid #f3f4f6">NIK (Username)</td>
-              <td style="padding:10px 8px;font-weight:700;font-size:18px;color:#1e3a5f;border-bottom:1px solid #f3f4f6;letter-spacing:1px">${data.nik}</td>
+              <td style="padding:10px 8px;font-weight:700;font-size:18px;color:#1e3a5f;border-bottom:1px solid #f3f4f6;letter-spacing:1px">${e(data.nik)}</td>
             </tr>
             <tr>
               <td style="padding:10px 8px;color:#6b7280">Password</td>
-              <td style="padding:10px 8px;font-weight:700;font-size:18px;color:#1e3a5f;letter-spacing:2px">${data.password}</td>
+              <td style="padding:10px 8px;font-weight:700;font-size:18px;color:#1e3a5f;letter-spacing:2px">${e(data.password)}</td>
             </tr>
           </table>
         </div>
@@ -135,10 +147,10 @@ export function passwordResetEmailHtml(user: {
         <h2 style="margin:0">🔑 Password Anda Telah Direset</h2>
       </div>
       <div style="background:#f9fafb;padding:20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
-        <p style="color:#374151">Halo <strong>${user.name}</strong>, password akun Anda telah direset oleh administrator (<strong>${user.resetBy}</strong>).</p>
+        <p style="color:#374151">Halo <strong>${e(user.name)}</strong>, password akun Anda telah direset oleh administrator (<strong>${e(user.resetBy)}</strong>).</p>
         <table style="width:100%;border-collapse:collapse;margin:12px 0">
-          <tr><td style="padding:8px;color:#6b7280;width:40%">NIK (Username)</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${user.nik}</td></tr>
-          <tr style="background:white"><td style="padding:8px;color:#6b7280">Password Baru</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${user.newPassword}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280;width:40%">NIK (Username)</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${e(user.nik)}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Password Baru</td><td style="padding:8px;font-weight:700;font-size:16px;color:#1e3a5f">${e(user.newPassword)}</td></tr>
         </table>
         <div style="margin-top:12px;padding:12px;background:#fef3c7;border-radius:6px;border-left:4px solid #f59e0b">
           <p style="margin:0;color:#92400e;font-size:13px">⚠️ Harap segera login dan ganti password Anda ke password yang lebih aman.</p>
@@ -161,12 +173,12 @@ export function scheduleReminderHtml(schedule: {
         <h2 style="margin:0">📋 Pengingat Jadwal Inspeksi</h2>
       </div>
       <div style="background:#f9fafb;padding:20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
-        <p style="color:#374151">Jadwal inspeksi berikut jatuh tempo besok (<strong>${schedule.dueDate}</strong>):</p>
+        <p style="color:#374151">Jadwal inspeksi berikut jatuh tempo besok (<strong>${e(schedule.dueDate)}</strong>):</p>
         <table style="width:100%;border-collapse:collapse">
-          <tr><td style="padding:8px;color:#6b7280;width:40%">Template</td><td style="padding:8px;font-weight:600">${schedule.templateName ?? "-"}</td></tr>
-          <tr style="background:white"><td style="padding:8px;color:#6b7280">Plant</td><td style="padding:8px;font-weight:600">${schedule.plantName ?? "-"}</td></tr>
-          <tr><td style="padding:8px;color:#6b7280">Frekuensi</td><td style="padding:8px">${freqLabel[schedule.frequency] ?? schedule.frequency}</td></tr>
-          <tr style="background:white"><td style="padding:8px;color:#6b7280">Group Bertugas</td><td style="padding:8px;font-weight:600">${schedule.groupName ?? schedule.supervisorName ?? "-"}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280;width:40%">Template</td><td style="padding:8px;font-weight:600">${e(schedule.templateName)}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Plant</td><td style="padding:8px;font-weight:600">${e(schedule.plantName)}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Frekuensi</td><td style="padding:8px">${e(freqLabel[schedule.frequency] ?? schedule.frequency)}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Group Bertugas</td><td style="padding:8px;font-weight:600">${e(schedule.groupName ?? schedule.supervisorName)}</td></tr>
         </table>
         <p style="margin-top:20px;color:#9ca3af;font-size:12px">Harap lakukan inspeksi sesuai jadwal yang telah ditetapkan.</p>
       </div>
@@ -202,15 +214,15 @@ export function incidentTargetReminderHtml(incident: {
       <div style="background:#f9fafb;padding:20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
         <p style="color:#374151">${subtitle}</p>
         <table style="width:100%;border-collapse:collapse">
-          <tr><td style="padding:8px;color:#6b7280;width:40%">Target Penyelesaian</td><td style="padding:8px;font-weight:700;color:${headerColor}">${incident.targetDate}</td></tr>
-          <tr style="background:white"><td style="padding:8px;color:#6b7280">Kategori</td><td style="padding:8px;font-weight:600">${incident.categoryName ?? "-"}</td></tr>
-          <tr><td style="padding:8px;color:#6b7280">Plant</td><td style="padding:8px;font-weight:600">${incident.plantName ?? "-"}</td></tr>
-          <tr style="background:white"><td style="padding:8px;color:#6b7280">Dilaporkan Oleh</td><td style="padding:8px;font-weight:600">${incident.reporterName ?? "-"}</td></tr>
-          <tr><td style="padding:8px;color:#6b7280">PIC Group</td><td style="padding:8px;font-weight:600;color:#1e3a5f">${incident.assignedGroupName ?? "-"}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280;width:40%">Target Penyelesaian</td><td style="padding:8px;font-weight:700;color:${headerColor}">${e(incident.targetDate)}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Kategori</td><td style="padding:8px;font-weight:600">${e(incident.categoryName)}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Plant</td><td style="padding:8px;font-weight:600">${e(incident.plantName)}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Dilaporkan Oleh</td><td style="padding:8px;font-weight:600">${e(incident.reporterName)}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">PIC Group</td><td style="padding:8px;font-weight:600;color:#1e3a5f">${e(incident.assignedGroupName)}</td></tr>
         </table>
         <div style="margin-top:16px;padding:12px;background:white;border-radius:6px;border-left:4px solid ${headerColor}">
           <p style="margin:0;color:#374151"><strong>Detail Incident:</strong></p>
-          <p style="margin:8px 0 0;color:#4b5563">${incident.detail}</p>
+          <p style="margin:8px 0 0;color:#4b5563">${e(incident.detail)}</p>
         </div>
         <div style="margin-top:16px;padding:12px;background:${isH ? "#fee2e2" : "#fef3c7"};border-radius:6px">
           <p style="margin:0;color:${isH ? "#991b1b" : "#92400e"};font-weight:600;font-size:13px">
@@ -247,16 +259,16 @@ export function incidentEscalationHtml(incident: {
       </div>
       <div style="background:#f9fafb;padding:20px;border:1px solid #e5e7eb;border-radius:0 0 8px 8px">
         <table style="width:100%;border-collapse:collapse">
-          <tr><td style="padding:8px;color:#6b7280;width:40%">Dibuat Pada</td><td style="padding:8px;font-weight:600">${incident.createdAt}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280;width:40%">Dibuat Pada</td><td style="padding:8px;font-weight:600">${e(incident.createdAt)}</td></tr>
           <tr style="background:white"><td style="padding:8px;color:#6b7280">Sudah Terbuka</td><td style="padding:8px;font-weight:700;color:${color}">${Math.floor(incident.hoursOpen)} jam</td></tr>
-          <tr><td style="padding:8px;color:#6b7280">Kategori</td><td style="padding:8px;font-weight:600">${incident.categoryName ?? "-"}</td></tr>
-          <tr style="background:white"><td style="padding:8px;color:#6b7280">Plant</td><td style="padding:8px;font-weight:600">${incident.plantName ?? "-"}</td></tr>
-          <tr><td style="padding:8px;color:#6b7280">Dilaporkan Oleh</td><td style="padding:8px;font-weight:600">${incident.reporterName ?? "-"}</td></tr>
-          <tr style="background:white"><td style="padding:8px;color:#6b7280">PIC Group</td><td style="padding:8px;font-weight:600;color:#1e3a5f">${incident.assignedGroupName ?? "-"}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Kategori</td><td style="padding:8px;font-weight:600">${e(incident.categoryName)}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">Plant</td><td style="padding:8px;font-weight:600">${e(incident.plantName)}</td></tr>
+          <tr><td style="padding:8px;color:#6b7280">Dilaporkan Oleh</td><td style="padding:8px;font-weight:600">${e(incident.reporterName)}</td></tr>
+          <tr style="background:white"><td style="padding:8px;color:#6b7280">PIC Group</td><td style="padding:8px;font-weight:600;color:#1e3a5f">${e(incident.assignedGroupName)}</td></tr>
         </table>
         <div style="margin-top:16px;padding:12px;background:white;border-radius:6px;border-left:4px solid ${color}">
           <p style="margin:0;color:#374151"><strong>Detail Incident:</strong></p>
-          <p style="margin:8px 0 0;color:#4b5563">${incident.detail}</p>
+          <p style="margin:8px 0 0;color:#4b5563">${e(incident.detail)}</p>
         </div>
         <div style="margin-top:16px;padding:12px;background:#fef2f2;border-radius:6px">
           <p style="margin:0;color:#991b1b;font-weight:700;font-size:14px">
@@ -301,15 +313,15 @@ export function subscriptionExpiryEmailHtml(params: {
   const paymentSection = paymentMethod === "qris" && qrisImageUrl ? `
     <div style="margin-top:16px;padding:16px;background:#f9fafb;border-radius:8px;text-align:center">
       <p style="margin:0 0 12px;font-size:14px;color:#374151;font-weight:600">Scan QRIS untuk membayar:</p>
-      <img src="${qrisImageUrl}" alt="QRIS" style="max-width:200px;border-radius:8px;border:1px solid #e5e7eb" />
+      <img src="${e(qrisImageUrl)}" alt="QRIS" style="max-width:200px;border-radius:8px;border:1px solid #e5e7eb" />
     </div>
   ` : paymentMethod === "transfer" && bankAccountNumber ? `
     <div style="margin-top:16px;padding:16px;background:#f9fafb;border-radius:8px">
       <p style="margin:0 0 12px;font-size:14px;color:#374151;font-weight:600">Transfer ke rekening:</p>
       <table style="width:100%;font-size:14px;border-collapse:collapse">
-        ${bankName ? `<tr><td style="color:#6b7280;padding:4px 0">Bank</td><td style="font-weight:600;color:#111827;text-align:right">${bankName}</td></tr>` : ""}
-        ${bankAccountNumber ? `<tr><td style="color:#6b7280;padding:4px 0">No. Rekening</td><td style="font-weight:700;color:#111827;text-align:right;letter-spacing:1px">${bankAccountNumber}</td></tr>` : ""}
-        ${bankAccountName ? `<tr><td style="color:#6b7280;padding:4px 0">Atas Nama</td><td style="font-weight:600;color:#111827;text-align:right">${bankAccountName}</td></tr>` : ""}
+        ${bankName ? `<tr><td style="color:#6b7280;padding:4px 0">Bank</td><td style="font-weight:600;color:#111827;text-align:right">${e(bankName)}</td></tr>` : ""}
+        ${bankAccountNumber ? `<tr><td style="color:#6b7280;padding:4px 0">No. Rekening</td><td style="font-weight:700;color:#111827;text-align:right;letter-spacing:1px">${e(bankAccountNumber)}</td></tr>` : ""}
+        ${bankAccountName ? `<tr><td style="color:#6b7280;padding:4px 0">Atas Nama</td><td style="font-weight:600;color:#111827;text-align:right">${e(bankAccountName)}</td></tr>` : ""}
       </table>
     </div>
   ` : `<p style="font-size:14px;color:#6b7280;margin-top:12px">Hubungi admin untuk informasi pembayaran.</p>`;
@@ -322,12 +334,12 @@ export function subscriptionExpiryEmailHtml(params: {
           <p style="margin:4px 0 0;color:#bfdbfe;font-size:13px">Notifikasi Perpanjangan Langganan</p>
         </div>
         <div style="padding:24px">
-          <p style="margin:0 0 16px;font-size:15px;color:#374151">Yth. <strong>${contactName}</strong>,</p>
+          <p style="margin:0 0 16px;font-size:15px;color:#374151">Yth. <strong>${e(contactName)}</strong>,</p>
 
           <div style="padding:14px 16px;background:${urgencyBg};border-radius:8px;border-left:4px solid ${urgencyColor};margin-bottom:20px">
-            <p style="margin:0;color:${urgencyColor};font-weight:700;font-size:15px">${urgencyLabel}</p>
+            <p style="margin:0;color:${urgencyColor};font-weight:700;font-size:15px">${e(urgencyLabel)}</p>
             <p style="margin:6px 0 0;color:#374151;font-size:14px">
-              Langganan <strong>${companyName}</strong> (${planLabel}) akan berakhir pada <strong>${subscriptionEndsAt}</strong>.
+              Langganan <strong>${e(companyName)}</strong> (${e(planLabel)}) akan berakhir pada <strong>${e(subscriptionEndsAt)}</strong>.
             </p>
           </div>
 
@@ -339,7 +351,7 @@ export function subscriptionExpiryEmailHtml(params: {
           ${paymentSection}
 
           <div style="margin-top:20px;text-align:center">
-            <a href="${portalUrl}" style="display:inline-block;background:#1d4ed8;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">
+            <a href="${e(portalUrl)}" style="display:inline-block;background:#1d4ed8;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">
               Upload Bukti Bayar →
             </a>
           </div>
@@ -350,7 +362,7 @@ export function subscriptionExpiryEmailHtml(params: {
           </p>
         </div>
         <div style="padding:16px 24px;border-top:1px solid #f3f4f6;background:#f9fafb">
-          <p style="margin:0;font-size:12px;color:#9ca3af">Notifikasi otomatis dari H&A Monitoring System · <a href="${portalUrl}" style="color:#6b7280">${portalUrl}</a></p>
+          <p style="margin:0;font-size:12px;color:#9ca3af">Notifikasi otomatis dari H&A Monitoring System · <a href="${e(portalUrl)}" style="color:#6b7280">${e(portalUrl)}</a></p>
         </div>
       </div>
     </div>

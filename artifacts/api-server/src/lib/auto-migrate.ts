@@ -108,8 +108,10 @@ export async function autoMigrate() {
 
       const { rows: existingSysadmin } = await pool.query(`SELECT id FROM users WHERE nik = 'SYSADMIN' LIMIT 1`);
       if (existingSysadmin.length === 0) {
-        const { createHash } = await import("crypto");
-        const sysadminPwHash = createHash("sha256").update("sysadmin2024" + "hse_salt_2024").digest("hex");
+        // [SECURITY H3] Use env var for default sysadmin password — never hardcode in source
+        const bcrypt = await import("bcryptjs");
+        const defaultPw = process.env["SYSADMIN_DEFAULT_PASSWORD"] ?? "ChangeMe_" + Math.random().toString(36).slice(2, 10);
+        const sysadminPwHash = await bcrypt.hash(defaultPw, 12);
         await pool.query(`
           INSERT INTO users (nik, name, email, password_hash, role, is_head, company_id)
           VALUES (
@@ -123,15 +125,14 @@ export async function autoMigrate() {
           )
           ON CONFLICT DO NOTHING
         `, [sysadminPwHash]);
-        logger.info("autoMigrate: sysadmin user created");
+        logger.info("autoMigrate: sysadmin user created with bcrypt hash");
       } else {
-        // Fix: ensure sysadmin password_hash is in SHA256 format (not bcrypt)
+        // [SECURITY H2] If existing sysadmin still has legacy SHA-256 hash (64-char hex), migrate to bcrypt
         const { rows: [sysadminUser] } = await pool.query(`SELECT password_hash FROM users WHERE nik = 'SYSADMIN' LIMIT 1`);
-        if (sysadminUser?.password_hash?.startsWith("$2")) {
-          const { createHash } = await import("crypto");
-          const sysadminPwHash = createHash("sha256").update("sysadmin2024" + "hse_salt_2024").digest("hex");
-          await pool.query(`UPDATE users SET password_hash = $1 WHERE nik = 'SYSADMIN'`, [sysadminPwHash]);
-          logger.info("autoMigrate: sysadmin password hash migrated from bcrypt to SHA256");
+        const isLegacyHash = sysadminUser?.password_hash && /^[0-9a-f]{64}$/.test(sysadminUser.password_hash);
+        if (isLegacyHash) {
+          // Keep hash as-is — it will be migrated to bcrypt automatically on next successful login via verifyPassword()
+          logger.info("autoMigrate: sysadmin has legacy SHA-256 hash — will auto-migrate to bcrypt on next login");
         }
       }
 
@@ -147,15 +148,6 @@ export async function autoMigrate() {
       logger.info("autoMigrate: initial production seed completed");
     } else {
       logger.info("autoMigrate: schema already migrated, skipping data seed");
-    }
-
-    // Always ensure sysadmin password_hash format is correct
-    const { rows: [sysadminCheck] } = await pool.query(`SELECT password_hash FROM users WHERE nik = 'SYSADMIN' LIMIT 1`);
-    if (sysadminCheck?.password_hash?.startsWith("$2")) {
-      const { createHash: ch2 } = await import("crypto");
-      const fixedHash = ch2("sha256").update("sysadmin2024" + "hse_salt_2024").digest("hex");
-      await pool.query(`UPDATE users SET password_hash = $1 WHERE nik = 'SYSADMIN'`, [fixedHash]);
-      logger.info("autoMigrate: sysadmin bcrypt hash fixed to SHA256");
     }
 
     // Always seed default plans if not exists

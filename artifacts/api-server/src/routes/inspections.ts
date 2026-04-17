@@ -64,9 +64,18 @@ router.get("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
+  const authUser = req.user!;
   const inspections = await db.select().from(inspectionsTable).where(eq(inspectionsTable.id, id));
   if (!inspections[0]) { res.status(404).json({ message: "Not found" }); return; }
   const i = inspections[0];
+
+  // [SECURITY H5] Verify the inspection belongs to the caller's company via its schedule
+  if (authUser.role !== "sysadmin" && authUser.companyId) {
+    const [sched] = await db.select().from(schedulesTable).where(
+      and(eq(schedulesTable.id, i.scheduleId), eq(schedulesTable.companyId, authUser.companyId))
+    );
+    if (!sched) { res.status(403).json({ message: "Akses ditolak" }); return; }
+  }
   const [supervisor] = await db.select().from(usersTable).where(eq(usersTable.id, i.supervisorId));
   const [template] = await db.select().from(templatesTable).where(eq(templatesTable.id, i.templateId));
   const [plant] = i.plantId ? await db.select().from(plantsTable).where(eq(plantsTable.id, i.plantId)) : [undefined];

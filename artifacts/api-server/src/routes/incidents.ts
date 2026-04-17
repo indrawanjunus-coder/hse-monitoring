@@ -107,7 +107,14 @@ router.get("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const [inc] = await db.select().from(incidentsTable).where(eq(incidentsTable.id, id));
+  const authUser = req.user!;
+
+  // [SECURITY H5] Scope fetch to company — prevents cross-tenant BOLA enumeration
+  const where = authUser.role === "sysadmin" || !authUser.companyId
+    ? eq(incidentsTable.id, id)
+    : and(eq(incidentsTable.id, id), eq(incidentsTable.companyId, authUser.companyId));
+
+  const [inc] = await db.select().from(incidentsTable).where(where);
   if (!inc) { res.status(404).json({ message: "Not found" }); return; }
   res.json(await formatIncident(inc));
 });

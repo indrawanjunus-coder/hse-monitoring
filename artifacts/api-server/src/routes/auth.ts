@@ -34,7 +34,8 @@ router.post("/login", async (req, res) => {
     res.status(401).json({ message: "NIK atau password salah" }); return;
   }
   const user = users[0]!;
-  const valid = await verifyPassword(password, user.passwordHash);
+  // [SECURITY H2] Pass userId so legacy SHA-256 hashes auto-migrate to bcrypt on login
+  const valid = await verifyPassword(password, user.passwordHash, user.id);
   if (!valid) {
     res.status(401).json({ message: "NIK atau password salah" }); return;
   }

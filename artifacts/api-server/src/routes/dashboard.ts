@@ -14,6 +14,11 @@ router.get("/summary", async (req, res) => {
   const year = req.query.year ? parseInt(req.query.year as string) : now.getFullYear();
   const cid = req.user!.companyId;
 
+  // [SECURITY H4] Reject non-sysadmin callers with no company — no "fetch all" fallback
+  if (!cid && req.user!.role !== "sysadmin") {
+    res.status(403).json({ error: "Akses ditolak" }); return;
+  }
+
   const allIncidents = cid
     ? await db.select().from(incidentsTable).where(eq(incidentsTable.companyId, cid))
     : await db.select().from(incidentsTable);
@@ -118,6 +123,11 @@ router.get("/hazard-by-area", async (req, res) => {
   const month = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
   const year = req.query.year ? parseInt(req.query.year as string) : now.getFullYear();
   const cid = req.user!.companyId;
+
+  // [SECURITY H4] Reject non-sysadmin callers with no company — no "fetch all" fallback
+  if (!cid && req.user!.role !== "sysadmin") {
+    res.status(403).json({ error: "Akses ditolak" }); return;
+  }
 
   const prefix = `${year}-${String(month).padStart(2, "0")}`;
   const allIncidents = cid

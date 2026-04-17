@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
+import bcrypt from "bcryptjs";
+import { createHash } from "crypto";
 
 export interface AuthUser {
   id: number;
@@ -71,12 +73,45 @@ export function sysadminMiddleware(req: Request, res: Response, next: NextFuncti
   next();
 }
 
+const BCRYPT_ROUNDS = 12;
+
+// [SECURITY H2] Use bcrypt (cost 12) instead of SHA-256 + fixed pepper
 export async function hashPassword(password: string): Promise<string> {
-  const { createHash } = await import("crypto");
-  return createHash("sha256").update(password + "hse_salt_2024").digest("hex");
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
 }
 
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  const computed = await hashPassword(password);
-  return computed === hash;
+// [SECURITY H3] Legacy SHA-256 verifier — only used during hash migration on login
+// Uses AUTH_PEPPER env var; falls back to legacy pepper only if not set
+function legacySha256Hash(password: string): string {
+  const pepper = process.env["AUTH_PEPPER"] ?? "hse_salt_2024";
+  return createHash("sha256").update(password + pepper).digest("hex");
+}
+
+function isLegacyHash(hash: string): boolean {
+  // Legacy hashes are 64-char hex strings; bcrypt hashes start with $2b$
+  return /^[0-9a-f]{64}$/.test(hash);
+}
+
+// [SECURITY H2] Verify password — handles both new bcrypt and legacy SHA-256 hashes
+// Legacy hashes trigger automatic rehash (migration) on successful login
+export async function verifyPassword(
+  password: string,
+  hash: string,
+  userId?: number,
+): Promise<boolean> {
+  if (isLegacyHash(hash)) {
+    // Old SHA-256 hash — verify with legacy method
+    const legacy = legacySha256Hash(password);
+    if (legacy !== hash) return false;
+
+    // [SECURITY H2] Automatically migrate to bcrypt on successful login
+    if (userId) {
+      const newHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+      await db.update(usersTable).set({ passwordHash: newHash }).where(eq(usersTable.id, userId));
+    }
+    return true;
+  }
+
+  // New bcrypt hash
+  return bcrypt.compare(password, hash);
 }
