@@ -1,0 +1,33 @@
+One-shot privilege escalation — PUT /api/users/:id accepts role from body, no check [A01:2025 · API5:2023 BFLA · API3:2023 BOPLA · BLA-6 Missing Roles · ASVS V4.1] NEW (v4, state-machine pass)
+File
+artifacts/api-server/src/routes/users.ts:161-183
+Evidence
+router.put("/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { name, email, password, role, departmentId, isHead, groupIds } = req.body;
+  // ... no authz check beyond router.use(authMiddleware) at top
+  if (role) updateData.role = role;   // 🚨 ANY USER CAN SET ANY ROLE
+  // ... no company check either
+  const [u] = await db.update(usersTable).set(updateData).where(eq(usersTable.id, id)).returning();
+Exploit
+1. Log in as any employee (or, combined with H1, don't even bother — craft a forged token).
+2. PUT /api/users/<your-own-id> {"role":"sysadmin"}.
+3. You are now sysadmin across every tenant.
+Worse: the target-id isn't checked against the caller either, so an employee can promote any other user to sysadmin — or demote the real sysadmin to lock them out. Reset any user's password to a known value in the same request by also passing password.
+Why
+The handler has zero role or company check. It's gated only by authMiddleware (which per H1 accepts forgeable tokens) and then blindly applies whatever fields come in the body to usersTable.set(). This is the composition of H5 (no ownership check) + H7 (mass-assignment BOPLA) + missing BFLA. It's classified CRITICAL rather than HIGH because the impact is total system takeover from a single HTTP request, not a staged exploit chain.
+Fix
+// 1. Reject role changes from non-sysadmin callers
+if (role && authUser.role !== "sysadmin") {
+  return res.status(403).json({ error: "Cannot change role" });
+}
+// 2. Enforce tenant boundary
+const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+if (!target) return res.status(404);
+if (authUser.role !== "sysadmin" && target.companyId !== authUser.companyId) {
+  return res.status(403);
+}
+// 3. Require admin role to edit other users at all
+if (authUser.id !== id && authUser.role !== "admin" && authUser.role !== "sysadmin") {
+  return res.status(403);
+}

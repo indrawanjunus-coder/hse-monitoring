@@ -50,9 +50,17 @@ router.get("/:id", async (req, res) => {
   try {
     const id = parseInt(req.params.id);
     if (isNaN(id)) { res.status(400).json({ error: "ID tidak valid" }); return; }
+    const authUser = req.user!;
+
     const users = await db.select().from(usersTable).where(eq(usersTable.id, id));
     if (!users[0]) { res.status(404).json({ error: "User tidak ditemukan" }); return; }
     const u = users[0];
+
+    // [SECURITY] Enforce tenant boundary — non-sysadmin cannot read users from another company
+    if (authUser.role !== "sysadmin" && u.companyId !== authUser.companyId) {
+      res.status(403).json({ error: "Akses ditolak" }); return;
+    }
+
     const gms = await db.select().from(groupMembersTable).where(eq(groupMembersTable.userId, u.id));
     let departmentName: string | undefined;
     if (u.departmentId) {
@@ -71,11 +79,24 @@ router.get("/:id", async (req, res) => {
 });
 
 router.post("/", async (req, res) => {
+  const authUser = req.user!;
+  // [SECURITY] Only admin/sysadmin may create users
+  if (authUser.role !== "admin" && authUser.role !== "sysadmin") {
+    res.status(403).json({ error: "Hanya admin yang dapat membuat user" }); return;
+  }
+
   const { nik, name, email, password, role, departmentId, isHead, groupIds } = req.body;
 
   if (!nik?.trim()) { res.status(400).json({ error: "NIK wajib diisi" }); return; }
   if (!name?.trim()) { res.status(400).json({ error: "Nama wajib diisi" }); return; }
   if (!password) { res.status(400).json({ error: "Password wajib diisi" }); return; }
+
+  // [SECURITY] Non-sysadmin cannot create sysadmin accounts
+  const allowedRoles = ["employee", "admin"];
+  const safeRole = allowedRoles.includes(role) ? role : "employee";
+  if (role === "sysadmin" && authUser.role !== "sysadmin") {
+    res.status(403).json({ error: "Tidak diizinkan membuat akun sysadmin" }); return;
+  }
 
   const deptId = departmentId != null && departmentId !== "" && departmentId !== "none"
     ? parseInt(String(departmentId)) : null;
@@ -99,12 +120,12 @@ router.post("/", async (req, res) => {
     const passwordHash = await hashPassword(password);
 
     const [u] = await db.insert(usersTable).values({
-      companyId: req.user!.companyId,
+      companyId: authUser.companyId,
       nik: nik.trim(),
       name: name.trim(),
       email: email?.trim() || null,
       passwordHash,
-      role: role ?? "employee",
+      role: safeRole ?? "employee",
       departmentId: deptId && !isNaN(deptId) ? deptId : null,
       isHead: isHead === true || isHead === "true" || false,
       isActive: true,
@@ -165,31 +186,69 @@ router.put("/:id", async (req, res) => {
   const { name, email, password, role, departmentId, isHead, groupIds } = req.body;
   const authUser = req.user!;
 
-  const deptId = departmentId != null && departmentId !== "" && departmentId !== "none"
-    ? parseInt(String(departmentId)) : undefined;
-
   try {
+    // [SECURITY] Fetch target user first — verify existence and company boundary
+    const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+    if (!target) { res.status(404).json({ error: "User tidak ditemukan" }); return; }
+
+    // [SECURITY] Enforce tenant boundary
+    if (authUser.role !== "sysadmin" && target.companyId !== authUser.companyId) {
+      res.status(403).json({ error: "Akses ditolak" }); return;
+    }
+
+    // [SECURITY] Non-admin/non-sysadmin can only edit their own profile
+    const isSelf = authUser.id === id;
+    const isAdminOrAbove = authUser.role === "admin" || authUser.role === "sysadmin";
+    if (!isSelf && !isAdminOrAbove) {
+      res.status(403).json({ error: "Tidak diizinkan mengedit user lain" }); return;
+    }
+
+    // [SECURITY] Only sysadmin can change role
+    if (role !== undefined && authUser.role !== "sysadmin") {
+      res.status(403).json({ error: "Tidak diizinkan mengubah role user" }); return;
+    }
+
+    // [SECURITY] Validate role value — prevent setting invalid/unknown roles
+    const validRoles = ["employee", "admin", "sysadmin"];
+    if (role !== undefined && !validRoles.includes(role)) {
+      res.status(400).json({ error: "Role tidak valid" }); return;
+    }
+
+    // [SECURITY] Non-admin cannot change departmentId, isHead, groupIds of other users
+    const canEditAdminFields = isAdminOrAbove;
+
+    const deptId = departmentId != null && departmentId !== "" && departmentId !== "none"
+      ? parseInt(String(departmentId)) : undefined;
+
     const updateData: Record<string, unknown> = {};
     if (name) updateData.name = name.trim();
     if (email !== undefined) updateData.email = email?.trim() || null;
-    if (password) updateData.passwordHash = await hashPassword(password);
-    if (role) updateData.role = role;
-    if (departmentId !== undefined) {
+    // [SECURITY] Password change via PUT is admin-only for other users; self can use change-password endpoint
+    if (password && isAdminOrAbove) updateData.passwordHash = await hashPassword(password);
+    if (role !== undefined && authUser.role === "sysadmin") updateData.role = role;
+    if (canEditAdminFields && departmentId !== undefined) {
       updateData.departmentId = deptId && !isNaN(deptId) ? deptId : null;
     }
-    if (isHead !== undefined) updateData.isHead = isHead === true || isHead === "true";
+    if (canEditAdminFields && isHead !== undefined) {
+      updateData.isHead = isHead === true || isHead === "true";
+    }
 
-    const [u] = await db.update(usersTable).set(updateData).where(eq(usersTable.id, id)).returning();
+    // [SECURITY] UPDATE scoped to both id AND company_id to prevent cross-tenant writes
+    const whereClause = authUser.role === "sysadmin"
+      ? eq(usersTable.id, id)
+      : and(eq(usersTable.id, id), eq(usersTable.companyId, authUser.companyId!));
+
+    const [u] = await db.update(usersTable).set(updateData).where(whereClause).returning();
     if (!u) { res.status(404).json({ error: "User tidak ditemukan" }); return; }
 
-    if (groupIds !== undefined) {
+    if (canEditAdminFields && groupIds !== undefined) {
       await db.delete(groupMembersTable).where(eq(groupMembersTable.userId, id));
       if (groupIds.length) {
         await db.insert(groupMembersTable).values(groupIds.map((gid: number) => ({ groupId: gid, userId: id })));
       }
     }
 
-    if (password && u.email && authUser.role === "admin" && authUser.id !== id) {
+    if (password && u.email && authUser.role === "admin" && !isSelf) {
       sendEmail(
         u.email,
         "Password HSE Monitor Anda Telah Direset",
@@ -226,10 +285,19 @@ router.post("/:id/toggle-active", async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "ID tidak valid" }); return; }
   const authUser = req.user!;
-  if (authUser.role !== "admin") { res.status(403).json({ error: "Hanya admin yang dapat mengubah status user" }); return; }
+
+  // [SECURITY] Only admin/sysadmin can toggle user status
+  if (authUser.role !== "admin" && authUser.role !== "sysadmin") {
+    res.status(403).json({ error: "Hanya admin yang dapat mengubah status user" }); return;
+  }
 
   const [u] = await db.select().from(usersTable).where(eq(usersTable.id, id));
   if (!u) { res.status(404).json({ error: "User tidak ditemukan" }); return; }
+
+  // [SECURITY] Enforce tenant boundary
+  if (authUser.role !== "sysadmin" && u.companyId !== authUser.companyId) {
+    res.status(403).json({ error: "Akses ditolak" }); return;
+  }
 
   // If activating, check limit first
   if (!u.isActive && u.companyId) {
@@ -245,15 +313,46 @@ router.post("/:id/toggle-active", async (req, res) => {
     }
   }
 
-  const [updated] = await db.update(usersTable).set({ isActive: !u.isActive }).where(eq(usersTable.id, id)).returning();
-  res.json({ id: updated!.id, isActive: updated!.isActive });
+  // [SECURITY] Scoped UPDATE — include company_id in WHERE for non-sysadmin
+  const whereClause = authUser.role === "sysadmin"
+    ? eq(usersTable.id, id)
+    : and(eq(usersTable.id, id), eq(usersTable.companyId, authUser.companyId!));
+
+  const [updated] = await db.update(usersTable).set({ isActive: !u.isActive }).where(whereClause).returning();
+  if (!updated) { res.status(404).json({ error: "User tidak ditemukan" }); return; }
+  res.json({ id: updated.id, isActive: updated.isActive });
 });
 
 router.delete("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "ID tidak valid" }); return; }
+  const authUser = req.user!;
+
+  // [SECURITY] Only admin/sysadmin can delete users
+  if (authUser.role !== "admin" && authUser.role !== "sysadmin") {
+    res.status(403).json({ error: "Hanya admin yang dapat menghapus user" }); return;
+  }
+
+  // [SECURITY] Prevent self-deletion
+  if (authUser.id === id) {
+    res.status(400).json({ error: "Tidak dapat menghapus akun sendiri" }); return;
+  }
+
   try {
-    await db.delete(usersTable).where(eq(usersTable.id, id));
+    // [SECURITY] Fetch target first to enforce tenant boundary
+    const [target] = await db.select().from(usersTable).where(eq(usersTable.id, id));
+    if (!target) { res.status(404).json({ error: "User tidak ditemukan" }); return; }
+
+    if (authUser.role !== "sysadmin" && target.companyId !== authUser.companyId) {
+      res.status(403).json({ error: "Akses ditolak" }); return;
+    }
+
+    // [SECURITY] Scoped DELETE — include company_id in WHERE for non-sysadmin
+    const whereClause = authUser.role === "sysadmin"
+      ? eq(usersTable.id, id)
+      : and(eq(usersTable.id, id), eq(usersTable.companyId, authUser.companyId!));
+
+    await db.delete(usersTable).where(whereClause);
     res.status(204).end();
   } catch (err: any) {
     const pgCode = getPgCode(err);
@@ -276,15 +375,32 @@ router.post("/:id/change-password", async (req, res) => {
   try {
     const [u] = await db.select().from(usersTable).where(eq(usersTable.id, id));
     if (!u) { res.status(404).json({ error: "User tidak ditemukan" }); return; }
-    if (authUser.role !== "admin") {
-      if (authUser.id !== id) { res.status(403).json({ error: "Forbidden" }); return; }
+
+    // [SECURITY] Enforce tenant boundary — admin cannot reset password of user from another company
+    if (authUser.role !== "sysadmin" && u.companyId !== authUser.companyId) {
+      res.status(403).json({ error: "Akses ditolak" }); return;
+    }
+
+    const isAdminOrAbove = authUser.role === "admin" || authUser.role === "sysadmin";
+    const isSelf = authUser.id === id;
+
+    if (!isAdminOrAbove) {
+      // Non-admin: can only change own password and must provide current password
+      if (!isSelf) { res.status(403).json({ error: "Tidak diizinkan mengubah password user lain" }); return; }
       if (!currentPassword) { res.status(400).json({ error: "Password saat ini diperlukan" }); return; }
       const expectedHash = await hashPassword(currentPassword);
       if (u.passwordHash !== expectedHash) { res.status(400).json({ error: "Password saat ini tidak sesuai" }); return; }
     }
+
+    // [SECURITY] Scoped UPDATE — include company_id in WHERE for non-sysadmin
+    const whereClause = authUser.role === "sysadmin"
+      ? eq(usersTable.id, id)
+      : and(eq(usersTable.id, id), eq(usersTable.companyId, authUser.companyId!));
+
     const passwordHash = await hashPassword(newPassword);
-    await db.update(usersTable).set({ passwordHash }).where(eq(usersTable.id, id));
-    if (authUser.role === "admin" && authUser.id !== id && u.email) {
+    await db.update(usersTable).set({ passwordHash }).where(whereClause);
+
+    if (isAdminOrAbove && !isSelf && u.email) {
       sendEmail(
         u.email,
         "Password HSE Monitor Anda Telah Direset",
