@@ -214,7 +214,13 @@ router.put("/:id", async (req, res) => {
   if (isActive !== undefined) updateData.isActive = isActive;
   if (status !== undefined) updateData.status = status;
 
-  const [s] = await db.update(schedulesTable).set(updateData).where(eq(schedulesTable.id, id)).returning();
+  // [SECURITY H21] Scope UPDATE to caller's company — prevents cross-tenant schedule mutation
+  const authUser = req.user!;
+  const whereClause = authUser.role === "sysadmin" || !authUser.companyId
+    ? eq(schedulesTable.id, id)
+    : and(eq(schedulesTable.id, id), eq(schedulesTable.companyId, authUser.companyId));
+
+  const [s] = await db.update(schedulesTable).set(updateData).where(whereClause).returning();
   if (!s) { res.status(404).json({ message: "Not found" }); return; }
 
   await upsertJunctions(s.id, groupIds, userIds);
@@ -224,7 +230,12 @@ router.put("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  await db.delete(schedulesTable).where(eq(schedulesTable.id, id));
+  const authUser = req.user!;
+  // [SECURITY H21] Scope DELETE to caller's company as well
+  const whereClause = authUser.role === "sysadmin" || !authUser.companyId
+    ? eq(schedulesTable.id, id)
+    : and(eq(schedulesTable.id, id), eq(schedulesTable.companyId, authUser.companyId));
+  await db.delete(schedulesTable).where(whereClause);
   res.status(204).end();
 });
 

@@ -112,6 +112,13 @@ router.post("/", async (req, res) => {
   const supervisorId = user.id;
   const companyId = user.companyId ?? null;
 
+  // [SECURITY H15] Verify that the schedule being completed belongs to the caller's company
+  if (scheduleId && user.role !== "sysadmin" && companyId) {
+    const [sched] = await db.select({ id: schedulesTable.id }).from(schedulesTable)
+      .where(and(eq(schedulesTable.id, scheduleId), eq(schedulesTable.companyId, companyId)));
+    if (!sched) { res.status(403).json({ message: "Akses ditolak: jadwal tidak ditemukan di perusahaan Anda" }); return; }
+  }
+
   const [inspection] = await db.insert(inspectionsTable)
     .values({ scheduleId, supervisorId, plantId, templateId, inspectedAt: inspectedAt ?? new Date().toISOString().slice(0, 10) })
     .returning();

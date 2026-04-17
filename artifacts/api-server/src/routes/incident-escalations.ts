@@ -55,6 +55,10 @@ router.post("/", async (req, res) => {
   // Load incident
   const [incident] = await db.select().from(incidentsTable).where(eq(incidentsTable.id, incidentId));
   if (!incident) { res.status(404).json({ error: "Tiket tidak ditemukan" }); return; }
+  // [SECURITY H20] Verify incident belongs to caller's company — prevent cross-tenant escalation creation
+  if (user.role !== "sysadmin" && user.companyId && incident.companyId !== user.companyId) {
+    res.status(403).json({ error: "Akses ditolak" }); return;
+  }
   if (incident.status === "closed") { res.status(400).json({ error: "Tiket yang sudah ditutup tidak dapat dieskalasi" }); return; }
   if (incident.assignedGroupId === toGroupId) { res.status(400).json({ error: "Group tujuan sama dengan group saat ini" }); return; }
 

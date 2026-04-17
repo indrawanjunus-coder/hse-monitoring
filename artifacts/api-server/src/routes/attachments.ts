@@ -1,10 +1,22 @@
 import { Router } from "express";
 import multer from "multer";
-import { db, incidentAttachmentsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, incidentAttachmentsTable, incidentsTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 import { uploadToDrive, deleteFromDrive } from "../lib/gdrive";
 import { authMiddleware } from "../lib/auth";
 import { logger } from "../lib/logger";
+
+// [SECURITY H10-H12] Verify that an incident belongs to the caller's company.
+// Returns the incident row or sends 403/404 and returns null.
+async function requireOwnedIncident(incidentId: number, req: Parameters<typeof authMiddleware>[0], res: any): Promise<typeof incidentsTable.$inferSelect | null> {
+  const [incident] = await db.select().from(incidentsTable).where(eq(incidentsTable.id, incidentId));
+  if (!incident) { res.status(404).json({ error: "Incident tidak ditemukan" }); return null; }
+  const user = req.user!;
+  if (user.role !== "sysadmin" && user.companyId && incident.companyId !== user.companyId) {
+    res.status(403).json({ error: "Akses ditolak" }); return null;
+  }
+  return incident;
+}
 
 const router = Router();
 router.use(authMiddleware);
@@ -25,6 +37,8 @@ const upload = multer({
 router.get("/", async (req, res) => {
   const incidentId = Number(req.query.incidentId);
   if (!incidentId) { res.status(400).json({ error: "incidentId diperlukan" }); return; }
+  // [SECURITY H10] Verify incident belongs to caller's company before listing attachments
+  if (!await requireOwnedIncident(incidentId, req, res)) return;
   const rows = await db
     .select()
     .from(incidentAttachmentsTable)
@@ -37,6 +51,8 @@ router.post("/upload", upload.single("file"), async (req, res) => {
   if (!req.file) { res.status(400).json({ error: "File tidak ditemukan" }); return; }
   const incidentId = Number(req.body.incidentId);
   if (!incidentId) { res.status(400).json({ error: "incidentId diperlukan" }); return; }
+  // [SECURITY H11] Verify incident belongs to caller's company before uploading attachment
+  if (!await requireOwnedIncident(incidentId, req, res)) return;
   const userId = req.user?.id ?? null;
 
   try {
@@ -79,6 +95,8 @@ router.delete("/:id", async (req, res) => {
   const id = Number(req.params.id);
   const [row] = await db.select().from(incidentAttachmentsTable).where(eq(incidentAttachmentsTable.id, id));
   if (!row) { res.status(404).json({ error: "Attachment tidak ditemukan" }); return; }
+  // [SECURITY H12] Verify attachment's parent incident belongs to caller's company before deleting
+  if (!await requireOwnedIncident(row.incidentId, req, res)) return;
 
   await deleteFromDrive(row.driveFileId);
   await db.delete(incidentAttachmentsTable).where(eq(incidentAttachmentsTable.id, id));

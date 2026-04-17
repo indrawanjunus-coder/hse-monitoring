@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { randomBytes } from "node:crypto";
 import { db, companiesTable, paymentsTable, usersTable, systemSettingsTable, testimonialsTable, plansTable, auditLogsTable, gdriveSettingsTable } from "@workspace/db";
 import { eq, desc, and, gte, lte, sql, isNull } from "drizzle-orm";
 import { sysadminMiddleware, hashPassword } from "../lib/auth";
@@ -9,9 +10,17 @@ import { sendEmail, companyActivationEmailHtml } from "../lib/email";
 import multer from "multer";
 
 function generatePassword(length = 10): string {
+  // [SECURITY H9] Use CSPRNG — Math.random() is a predictable PRNG, unsuitable for passwords
   const chars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+  // Rejection sampling ensures uniform distribution over chars alphabet
+  const cutoff = Math.floor(256 / chars.length) * chars.length;
   let pw = "";
-  for (let i = 0; i < length; i++) pw += chars[Math.floor(Math.random() * chars.length)];
+  while (pw.length < length) {
+    const bytes = randomBytes(length * 2);
+    for (const b of bytes) {
+      if (b < cutoff) { pw += chars[b % chars.length]; if (pw.length === length) break; }
+    }
+  }
   return pw;
 }
 
@@ -254,31 +263,49 @@ router.get("/payments", async (req, res) => {
 router.put("/payments/:id/approve", async (req, res) => {
   const id = Number(req.params.id);
   const { note } = req.body;
-  
-  const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
-  if (!payment) { res.status(404).json({ error: "Tidak ditemukan" }); return; }
 
-  await db.update(paymentsTable).set({ status: "approved", reviewedAt: new Date(), reviewedByNote: note ?? null }).where(eq(paymentsTable.id, id));
+  // [SECURITY H22] Guard source state — re-approving an already-approved payment would extend subscription twice
+  const [paymentCheck] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
+  if (!paymentCheck) { res.status(404).json({ error: "Tidak ditemukan" }); return; }
+  if (paymentCheck.status !== "pending") {
+    res.status(409).json({ error: `Payment sudah diproses (status: ${paymentCheck.status}). Tidak bisa diapprove ulang.` }); return;
+  }
 
-  // Extend company subscription
-  const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, payment.companyId));
+  // [SECURITY H22] Wrap in transaction to prevent race conditions (double-click, two tabs, etc.)
+  let adminResult: { alreadyExists: boolean; nik: string | null; password: string | null };
+  let company: typeof companiesTable.$inferSelect | undefined;
+
+  await db.transaction(async (tx) => {
+    // Re-read payment inside transaction with row-level lock to prevent concurrent approvals
+    const [payment] = await tx.select().from(paymentsTable).where(
+      and(eq(paymentsTable.id, id), eq(paymentsTable.status, "pending"))
+    );
+    if (!payment) throw Object.assign(new Error("ALREADY_REVIEWED"), { alreadyReviewed: true });
+
+    await tx.update(paymentsTable).set({ status: "approved", reviewedAt: new Date(), reviewedByNote: note ?? null }).where(eq(paymentsTable.id, id));
+
+    const [c] = await tx.select().from(companiesTable).where(eq(companiesTable.id, payment.companyId));
+    if (c) {
+      company = c;
+      const baseDate = c.subscriptionEndsAt && c.subscriptionEndsAt > new Date() ? c.subscriptionEndsAt : new Date();
+      const newEnd = new Date(baseDate);
+      newEnd.setMonth(newEnd.getMonth() + payment.periodMonths);
+      await tx.update(companiesTable).set({ status: "active", plan: payment.plan as any, subscriptionEndsAt: newEnd, activatedAt: new Date(), updatedAt: new Date() }).where(eq(companiesTable.id, c.id));
+    }
+  });
+
   if (company) {
-    const baseDate = company.subscriptionEndsAt && company.subscriptionEndsAt > new Date() ? company.subscriptionEndsAt : new Date();
-    const newEnd = new Date(baseDate);
-    newEnd.setMonth(newEnd.getMonth() + payment.periodMonths);
-    await db.update(companiesTable).set({ status: "active", plan: payment.plan as any, subscriptionEndsAt: newEnd, activatedAt: new Date(), updatedAt: new Date() }).where(eq(companiesTable.id, company.id));
-    // Enforce plan limits after plan change
+    const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
+    // Enforce plan limits after plan change (outside tx — reads are safe)
     await enforcePlanLimits(company.id);
-    // Auto-create admin user and send email credentials if not yet exists
-    const adminResult = await provisionCompanyAdmin(company);
-
+    adminResult = await provisionCompanyAdmin(company);
     await writeAuditLog({
       action: "APPROVE_PAYMENT",
       performedByNik: req.user?.nik ?? "sysadmin",
       performedByName: req.user?.name ?? "Sysadmin",
       companyId: company.id,
       companyName: company.name,
-      details: `Payment #${id} disetujui. Paket: ${payment.plan}, ${payment.periodMonths} bulan, Rp ${payment.amount.toLocaleString()}${note ? `. Catatan: ${note}` : ""}${!adminResult.alreadyExists ? `. Admin dibuat: NIK=${adminResult.nik}, email dikirim ke ${company.contactEmail}.` : ""}`,
+      details: `Payment #${id} disetujui. Paket: ${payment?.plan}, ${payment?.periodMonths} bulan, Rp ${payment?.amount.toLocaleString()}${note ? `. Catatan: ${note}` : ""}${!adminResult.alreadyExists ? `. Admin dibuat: NIK=${adminResult.nik}, email dikirim ke ${company.contactEmail}.` : ""}`,
       req,
     });
   }

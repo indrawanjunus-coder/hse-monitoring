@@ -103,7 +103,16 @@ router.post("/:id/toggle-active", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  await db.delete(templatesTable).where(eq(templatesTable.id, id));
+  const authUser = req.user!;
+  // [SECURITY H16] Only admin/sysadmin can delete templates; scope DELETE to company
+  if (authUser.role !== "admin" && authUser.role !== "sysadmin") {
+    res.status(403).json({ error: "Hanya admin yang dapat menghapus template" }); return;
+  }
+  const whereClause = authUser.role === "sysadmin"
+    ? eq(templatesTable.id, id)
+    : and(eq(templatesTable.id, id), eq(templatesTable.companyId, authUser.companyId!));
+  const [deleted] = await db.delete(templatesTable).where(whereClause).returning({ id: templatesTable.id });
+  if (!deleted) { res.status(404).json({ error: "Template tidak ditemukan" }); return; }
   res.status(204).end();
 });
 

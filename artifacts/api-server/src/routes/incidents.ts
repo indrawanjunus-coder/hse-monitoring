@@ -122,7 +122,8 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   const user = (req as typeof req & { user: { id: number } }).user;
   const { plantId, categoryId, incidentDate, reportedDate, detail, actionId, preventiveActionId, targetDate, rootCause, needsFurtherAction, incidentType, recipientUserIds, recipientGroupIds } = req.body;
-  const reporterId = req.body.reporterId ?? user.id;
+  // [SECURITY H7] reporterId is ALWAYS the authenticated user — never from request body (prevents identity spoofing / BOPLA)
+  const reporterId = user.id;
 
   const [cat] = await db.select().from(categoriesTable).where(eq(categoriesTable.id, categoryId));
   // assignedGroupId: first from form's recipientGroupIds, then category's PIC group
