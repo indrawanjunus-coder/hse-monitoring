@@ -7,6 +7,24 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import ArenaLanding from "./landing-arena";
+
+// Theme-router wrapper — fetches landing_theme then delegates
+export default function LandingPage() {
+  const { data: publicSettings } = useQuery<{ landingTheme: string }>({
+    queryKey: ["public-settings"],
+    queryFn: async () => {
+      const res = await fetch("/api/plans/public-settings");
+      if (!res.ok) return { landingTheme: "default" };
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  if (!publicSettings) return null;
+  if (publicSettings.landingTheme === "arena") return <ArenaLanding />;
+  return <DefaultLanding />;
+}
 
 const FEATURES = [
   {
@@ -277,7 +295,7 @@ function planPrice(plan: ApiPlan) {
   return fmtRp(plan.priceMonthly);
 }
 
-export default function LandingPage() {
+function DefaultLanding() {
   const [showPortal, setShowPortal] = useState(false);
 
   const { data: apiTestimonials } = useQuery<ApiTestimonial[]>({

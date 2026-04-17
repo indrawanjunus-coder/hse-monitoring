@@ -25,4 +25,12 @@ router.get("/payment-info", async (_req, res) => {
   });
 });
 
+// Public settings — only non-sensitive keys exposed to the landing page
+router.get("/public-settings", async (_req, res) => {
+  const rows = await db.select().from(systemSettingsTable);
+  const s: Record<string, string> = {};
+  rows.forEach(r => { s[r.key] = r.value; });
+  res.json({ landingTheme: s["landing_theme"] ?? "default" });
+});
+
 export default router;

@@ -11,6 +11,7 @@ Key capabilities include:
 - Multi-tenancy with isolated data for each company.
 - Subscription management and payment processing.
 - Dynamic plan and testimonial management by sysadmin.
+- Dual landing page theme system: Default (H&A Monitoring System) and Arena Corporation (premium dark corporate design). Switchable by sysadmin in Settings.
 
 The business vision is to provide a robust, scalable, and secure HSE monitoring solution that can be easily adopted by various companies to improve their safety compliance and operational efficiency.
 

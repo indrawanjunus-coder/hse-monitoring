@@ -375,7 +375,7 @@ router.get("/settings", async (_req, res) => {
 });
 
 router.put("/settings", async (req, res) => {
-  const { qrisImageUrl, priceMonthly, priceYearly, paymentMethod, bankName, bankAccountNumber, bankAccountName, bankNote } = req.body;
+  const { qrisImageUrl, priceMonthly, priceYearly, paymentMethod, bankName, bankAccountNumber, bankAccountName, bankNote, landingTheme } = req.body;
   const updates: { key: string; value: string }[] = [];
   if (qrisImageUrl !== undefined) updates.push({ key: "qris_image_url", value: qrisImageUrl });
   if (priceMonthly !== undefined) updates.push({ key: "price_monthly", value: String(priceMonthly) });
@@ -385,6 +385,7 @@ router.put("/settings", async (req, res) => {
   if (bankAccountNumber !== undefined) updates.push({ key: "bank_account_number", value: bankAccountNumber });
   if (bankAccountName !== undefined) updates.push({ key: "bank_account_name", value: bankAccountName });
   if (bankNote !== undefined) updates.push({ key: "bank_note", value: bankNote });
+  if (landingTheme !== undefined) updates.push({ key: "landing_theme", value: landingTheme });
   for (const u of updates) {
     const [existing] = await db.select().from(systemSettingsTable).where(eq(systemSettingsTable.key, u.key));
     if (existing) await db.update(systemSettingsTable).set({ value: u.value, updatedAt: new Date() }).where(eq(systemSettingsTable.key, u.key));

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Settings, Upload, CheckCircle, CreditCard, Building2, QrCode, AlertCircle, HardDrive, Copy, Key, FolderOpen, Info } from "lucide-react";
+import { Settings, Upload, CheckCircle, CreditCard, Building2, QrCode, AlertCircle, HardDrive, Copy, Key, FolderOpen, Info, Layout, Globe } from "lucide-react";
+import arenaLogo from "../../assets/arena-logo.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,6 +55,10 @@ type PaymentMethod = "qris" | "transfer";
 export default function SysadminSettings({ token }: { token: string }) {
   const api = sysApi(token);
 
+  // Landing theme state
+  const [landingTheme, setLandingTheme] = useState<"default" | "arena">("default");
+  const [landingThemeLoading, setLandingThemeLoading] = useState(false);
+
   // Payment method state
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("qris");
@@ -85,6 +90,7 @@ export default function SysadminSettings({ token }: { token: string }) {
       setBankAccountNumber(s["bank_account_number"] ?? "");
       setBankAccountName(s["bank_account_name"] ?? "");
       setBankNote(s["bank_note"] ?? "");
+      setLandingTheme((s["landing_theme"] as "default" | "arena") ?? "default");
     }).catch(() => {});
 
     api.get<PaymentGdrive>("/sysadmin/settings/payment-gdrive").then(g => {
@@ -98,6 +104,16 @@ export default function SysadminSettings({ token }: { token: string }) {
     if (isError) { setError(msg); setSuccess(""); }
     else { setSuccess(msg); setError(""); }
     setTimeout(() => { setSuccess(""); setError(""); }, 5000);
+  };
+
+  const saveLandingTheme = async (theme: "default" | "arena") => {
+    setLandingTheme(theme);
+    setLandingThemeLoading(true);
+    try {
+      await api.put("/sysadmin/settings", { landingTheme: theme });
+      showMsg(`Landing page diubah ke: ${theme === "arena" ? "ARENA CORPORATION" : "Default"}`);
+    } catch (e: any) { showMsg(e.message, true); }
+    finally { setLandingThemeLoading(false); }
   };
 
   const savePaymentMethod = async () => {
@@ -180,6 +196,62 @@ export default function SysadminSettings({ token }: { token: string }) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+
+      {/* Landing Page Theme */}
+      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+        <h2 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+          <Layout className="w-4 h-4 text-blue-600" /> Tampilan Landing Page
+        </h2>
+        <p className="text-sm text-gray-500 mb-5">Pilih tampilan halaman utama yang ditampilkan ke pengunjung</p>
+        {landingThemeLoading && (
+          <div className="text-xs text-blue-600 mb-3">Menyimpan...</div>
+        )}
+        <div className="grid grid-cols-2 gap-4">
+          {/* Default Theme Card */}
+          <button
+            onClick={() => saveLandingTheme("default")}
+            className={`relative flex flex-col gap-3 p-4 rounded-xl border-2 transition-all text-left ${
+              landingTheme === "default" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-gray-300 bg-white"
+            }`}
+          >
+            {landingTheme === "default" && (
+              <div className="absolute top-2.5 right-2.5 w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center">
+                <CheckCircle className="w-3 h-3 text-white" />
+              </div>
+            )}
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${landingTheme === "default" ? "bg-blue-600" : "bg-gray-100"}`}>
+              <Globe className={`w-5 h-5 ${landingTheme === "default" ? "text-white" : "text-gray-500"}`} />
+            </div>
+            <div>
+              <div className={`font-semibold text-sm mb-0.5 ${landingTheme === "default" ? "text-blue-900" : "text-gray-700"}`}>Default</div>
+              <div className="text-xs text-gray-500 leading-relaxed">H&A Monitoring System — lengkap dengan fitur, paket harga, dan testimoni</div>
+            </div>
+          </button>
+
+          {/* Arena Theme Card */}
+          <button
+            onClick={() => saveLandingTheme("arena")}
+            className={`relative flex flex-col gap-3 p-4 rounded-xl border-2 transition-all text-left ${
+              landingTheme === "arena" ? "border-blue-600 bg-blue-50" : "border-gray-200 hover:border-gray-300 bg-white"
+            }`}
+          >
+            {landingTheme === "arena" && (
+              <div className="absolute top-2.5 right-2.5 w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center">
+                <CheckCircle className="w-3 h-3 text-white" />
+              </div>
+            )}
+            <img src={arenaLogo} alt="Arena" className="h-10 w-auto object-contain" />
+            <div>
+              <div className={`font-semibold text-sm mb-0.5 ${landingTheme === "arena" ? "text-blue-900" : "text-gray-700"}`}>ARENA CORPORATION</div>
+              <div className="text-xs text-gray-500 leading-relaxed">Halaman khusus Arena Corporation — tampilan premium, hanya form pendaftaran perusahaan</div>
+            </div>
+          </button>
+        </div>
+
+        <p className="text-xs text-gray-400 mt-4">
+          Perubahan langsung aktif saat disimpan. Buka <a href="/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">halaman utama</a> untuk melihat hasilnya.
+        </p>
+      </div>
 
       {/* Payment Method */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
