@@ -13,6 +13,14 @@ const RATE_WINDOW_MS = 60 * 60 * 1000;
 const RATE_MAX = 5;
 const ipRateMap = new Map<string, { count: number; resetAt: number }>();
 
+// Prune expired entries every 60 minutes to prevent unbounded Map growth
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of ipRateMap) {
+    if (now > entry.resetAt) ipRateMap.delete(ip);
+  }
+}, 60 * 60 * 1000).unref();
+
 function publicSubmitRateLimit(req: import("express").Request, res: import("express").Response, next: import("express").NextFunction): void {
   const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
   const now = Date.now();
