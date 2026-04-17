@@ -8,6 +8,27 @@ import multer from "multer";
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+// [SECURITY M2] In-memory IP rate limiter: max 5 submissions per IP per hour
+const RATE_WINDOW_MS = 60 * 60 * 1000;
+const RATE_MAX = 5;
+const ipRateMap = new Map<string, { count: number; resetAt: number }>();
+
+function publicSubmitRateLimit(req: import("express").Request, res: import("express").Response, next: import("express").NextFunction): void {
+  const ip = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? "unknown";
+  const now = Date.now();
+  const entry = ipRateMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    ipRateMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    next(); return;
+  }
+  if (entry.count >= RATE_MAX) {
+    res.status(429).json({ error: "Terlalu banyak permintaan. Coba lagi dalam 1 jam." });
+    return;
+  }
+  entry.count++;
+  next();
+}
+
 async function getPaymentInfo() {
   const [settingsRows, plans] = await Promise.all([
     db.select().from(systemSettingsTable),
@@ -47,13 +68,23 @@ router.get("/public-info", async (_req, res) => {
 });
 
 // Public: submit payment proof for new registration (no auth — uses companyId)
-router.post("/public-submit", upload.single("proof"), async (req, res) => {
+// [SECURITY M2] Rate limited: 5 requests/hour/IP. Only pending companies may submit.
+router.post("/public-submit", publicSubmitRateLimit, upload.single("proof"), async (req, res) => {
   const { companyId, plan, periodMonths } = req.body as { companyId: string; plan: string; periodMonths: string };
   if (!companyId || !plan || !req.file) { res.status(400).json({ error: "Data tidak lengkap" }); return; }
 
   const cid = parseInt(companyId);
+  if (isNaN(cid) || cid <= 0) { res.status(400).json({ error: "companyId tidak valid" }); return; }
+
   const [company] = await db.select().from(companiesTable).where(eq(companiesTable.id, cid));
   if (!company) { res.status(404).json({ error: "Perusahaan tidak ditemukan" }); return; }
+
+  // [SECURITY M2] Only companies with status='pending' may submit payment proof via the public endpoint
+  // Active/suspended companies must use the authenticated /submit route instead
+  if (company.status !== "pending") {
+    res.status(403).json({ error: "Endpoint ini hanya untuk perusahaan yang menunggu aktivasi awal. Perusahaan aktif silakan login dan bayar melalui portal." });
+    return;
+  }
 
   const months = parseInt(periodMonths ?? "1");
   const plans = await db.select().from(plansTable);

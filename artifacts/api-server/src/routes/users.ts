@@ -4,6 +4,9 @@ import { eq, and, ne } from "drizzle-orm";
 import { authMiddleware, hashPassword } from "../lib/auth";
 import { sendEmail, newUserEmailHtml, passwordResetEmailHtml } from "../lib/email";
 import { checkUserLimit } from "../lib/plan-limits";
+import { validateBody } from "../lib/validate";
+import { CreateUserBody } from "@workspace/api-zod";
+import { z } from "zod";
 
 const router = Router();
 router.use(authMiddleware);
@@ -78,7 +81,9 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+// [SECURITY M3] Allow sysadmin role too for sysadmin-initiated creation
+const CreateUserBodyExtended = CreateUserBody.extend({ role: z.enum(["admin", "supervisor", "employee", "sysadmin"]).optional() });
+router.post("/", validateBody(CreateUserBodyExtended), async (req, res) => {
   const authUser = req.user!;
   // [SECURITY] Only admin/sysadmin may create users
   if (authUser.role !== "admin" && authUser.role !== "sysadmin") {

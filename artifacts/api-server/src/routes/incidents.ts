@@ -7,6 +7,26 @@ import {
 import { eq, desc, inArray, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 import { sendEmail, incidentEmailHtml } from "../lib/email";
+import { validateBody } from "../lib/validate";
+import { z } from "zod";
+
+// [SECURITY M3] Permissive incident creation schema — validates required fields,
+// passes through optional extended fields (recipientUserIds, recipientGroupIds, etc.)
+const IncidentCreateSchema = z.object({
+  plantId: z.coerce.number().int().positive(),
+  categoryId: z.coerce.number().int().positive(),
+  detail: z.string().min(1, "Detail wajib diisi"),
+  incidentDate: z.string().optional(),
+  reportedDate: z.string().optional(),
+  actionId: z.coerce.number().int().positive().optional().nullable(),
+  preventiveActionId: z.coerce.number().int().positive().optional().nullable(),
+  needsFurtherAction: z.boolean().optional(),
+  incidentType: z.string().optional().nullable(),
+  targetDate: z.string().optional().nullable(),
+  rootCause: z.string().optional().nullable(),
+  recipientUserIds: z.array(z.coerce.number()).optional(),
+  recipientGroupIds: z.array(z.coerce.number()).optional(),
+});
 
 const router = Router();
 router.use(authMiddleware);
@@ -119,7 +139,7 @@ router.get("/:id", async (req, res) => {
   res.json(await formatIncident(inc));
 });
 
-router.post("/", async (req, res) => {
+router.post("/", validateBody(IncidentCreateSchema), async (req, res) => {
   const user = (req as typeof req & { user: { id: number } }).user;
   const { plantId, categoryId, incidentDate, reportedDate, detail, actionId, preventiveActionId, targetDate, rootCause, needsFurtherAction, incidentType, recipientUserIds, recipientGroupIds } = req.body;
   // [SECURITY H7] reporterId is ALWAYS the authenticated user — never from request body (prevents identity spoofing / BOPLA)

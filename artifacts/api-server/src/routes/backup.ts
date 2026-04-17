@@ -84,7 +84,9 @@ async function buildSqlBackup(companyId: number | null, dialect: "postgresql" | 
   if (isMysql) {
     sql += `-- H&A Monitoring System - MySQL Backup\n-- Generated: ${new Date().toISOString()}\nSET FOREIGN_KEY_CHECKS=0;\nSET NAMES utf8mb4;\n\n`;
   } else {
-    sql += `-- H&A Monitoring System - PostgreSQL Backup\n-- Generated: ${new Date().toISOString()}\nSET session_replication_role = 'replica';\n\n`;
+    // [SECURITY M4] Wrap in a transaction so FK checks auto-restore on ROLLBACK.
+    // SET LOCAL is transaction-scoped — resets automatically on COMMIT or ROLLBACK.
+    sql += `-- H&A Monitoring System - PostgreSQL Backup\n-- Generated: ${new Date().toISOString()}\nBEGIN;\nSET LOCAL session_replication_role = 'replica';\n\n`;
   }
   for (const table of BACKUP_TABLES) {
     const rows = await getTableData(table, companyId);
@@ -106,7 +108,7 @@ async function buildSqlBackup(companyId: number | null, dialect: "postgresql" | 
     sql += "\n";
   }
   if (isMysql) sql += "SET FOREIGN_KEY_CHECKS=1;\n";
-  else sql += "SET session_replication_role = 'origin';\n";
+  else sql += "COMMIT; -- FK checks restored automatically by end of transaction\n";
   return sql;
 }
 
@@ -146,7 +148,8 @@ async function buildSqlBackupForGitHub(companyId: number | null, dialect: "postg
   if (isMysql) {
     sql += `-- H&A Monitoring System - MySQL Backup (GitHub safe — credentials excluded)\n-- Generated: ${new Date().toISOString()}\nSET FOREIGN_KEY_CHECKS=0;\nSET NAMES utf8mb4;\n\n`;
   } else {
-    sql += `-- H&A Monitoring System - PostgreSQL Backup (GitHub safe — credentials excluded)\n-- Generated: ${new Date().toISOString()}\nSET session_replication_role = 'replica';\n\n`;
+    // [SECURITY M4] Wrap in transaction so FK checks auto-restore on ROLLBACK
+    sql += `-- H&A Monitoring System - PostgreSQL Backup (GitHub safe — credentials excluded)\n-- Generated: ${new Date().toISOString()}\nBEGIN;\nSET LOCAL session_replication_role = 'replica';\n\n`;
   }
   for (const table of GITHUB_SAFE_TABLES) {
     const rows = await getTableData(table, companyId);
@@ -169,7 +172,7 @@ async function buildSqlBackupForGitHub(companyId: number | null, dialect: "postg
     sql += "\n";
   }
   if (isMysql) sql += "SET FOREIGN_KEY_CHECKS=1;\n";
-  else sql += "SET session_replication_role = 'origin';\n";
+  else sql += "COMMIT; -- FK checks restored automatically by end of transaction\n";
   return sql;
 }
 

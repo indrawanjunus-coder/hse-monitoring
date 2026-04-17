@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
-import { createHash } from "crypto";
+import { createHash, timingSafeEqual } from "crypto";
 
 export interface AuthUser {
   id: number;
@@ -102,7 +102,10 @@ export async function verifyPassword(
   if (isLegacyHash(hash)) {
     // Old SHA-256 hash — verify with legacy method
     const legacy = legacySha256Hash(password);
-    if (legacy !== hash) return false;
+    // [SECURITY M1] Use timingSafeEqual to prevent timing side-channel attacks
+    const legacyBuf = Buffer.from(legacy, "hex");
+    const hashBuf = Buffer.from(hash, "hex");
+    if (legacyBuf.length !== hashBuf.length || !timingSafeEqual(legacyBuf, hashBuf)) return false;
 
     // [SECURITY H2] Automatically migrate to bcrypt on successful login
     if (userId) {

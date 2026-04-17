@@ -2,10 +2,12 @@ import { Router } from "express";
 import { db, usersTable, departmentsTable, companiesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { authMiddleware, createToken, hashPassword, verifyPassword } from "../lib/auth";
+import { validateBody } from "../lib/validate";
+import { LoginBody } from "@workspace/api-zod";
 
 const router = Router();
 
-router.post("/login", async (req, res) => {
+router.post("/login", validateBody(LoginBody.extend({ companySlug: LoginBody.shape.nik.optional() })), async (req, res) => {
   const { nik, password, companySlug } = req.body;
   if (!nik || !password) {
     res.status(400).json({ message: "NIK dan password diperlukan" }); return;
