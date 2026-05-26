@@ -175,8 +175,65 @@ export async function autoMigrate() {
     // Ensure payment_method system setting exists
     await pool.query(`INSERT INTO system_settings (key, value) VALUES ('payment_method', 'qris') ON CONFLICT (key) DO NOTHING`).catch(() => {});
 
+    // Work permit tables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS work_permit_types (
+        id SERIAL PRIMARY KEY,
+        company_id INTEGER REFERENCES companies(id),
+        type TEXT NOT NULL,
+        description TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS work_permits (
+        id SERIAL PRIMARY KEY,
+        permit_code TEXT NOT NULL UNIQUE,
+        company_id INTEGER REFERENCES companies(id),
+        type_id INTEGER REFERENCES work_permit_types(id),
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        email TEXT NOT NULL,
+        emergency_name TEXT NOT NULL,
+        emergency_phone TEXT NOT NULL,
+        work_start TEXT NOT NULL,
+        work_end TEXT NOT NULL,
+        supervisor_name TEXT NOT NULL,
+        supervisor_phone TEXT NOT NULL,
+        ktp_url TEXT,
+        photo_url TEXT,
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS work_permit_scans (
+        id SERIAL PRIMARY KEY,
+        work_permit_id INTEGER NOT NULL REFERENCES work_permits(id),
+        scanned_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        notes TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // Seed default work permit types for company 1 if none exist
+    const { rows: wptRows } = await pool.query(`SELECT COUNT(*) AS c FROM work_permit_types WHERE company_id = 1`);
+    if (Number(wptRows[0]?.c) === 0) {
+      await pool.query(`
+        INSERT INTO work_permit_types (company_id, type, description) VALUES
+          (1, 'height place', 'work from heights'),
+          (1, 'hot place', 'work at hot places')
+        ON CONFLICT DO NOTHING
+      `).catch(() => {});
+      logger.info("autoMigrate: seeded default work permit types");
+    }
+
     // Sync sequences
-    const tables = ['users', 'incidents', 'companies', 'payments', 'system_settings', 'plans', 'testimonials'];
+    const tables = ['users', 'incidents', 'companies', 'payments', 'system_settings', 'plans', 'testimonials',
+      'work_permit_types', 'work_permits', 'work_permit_scans'];
     for (const t of tables) {
       await pool.query(`SELECT setval(pg_get_serial_sequence('"${t}"', 'id'), COALESCE(MAX(id), 1)) FROM "${t}"`).catch(() => {});
     }

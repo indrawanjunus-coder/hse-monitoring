@@ -27,6 +27,8 @@ import companyPaymentsRouter from "./company-payments";
 import testimonialsRouter from "./testimonials";
 import plansRouter from "./plans";
 import backupRouter from "./backup";
+import workPermitTypesRouter from "./work-permit-types";
+import workPermitsRouter from "./work-permits";
 
 const router: IRouter = Router();
 
@@ -58,5 +60,7 @@ router.use("/payments", companyPaymentsRouter);
 router.use("/testimonials", testimonialsRouter);
 router.use("/plans", plansRouter);
 router.use("/backup", backupRouter);
+router.use("/work-permit-types", workPermitTypesRouter);
+router.use("/work-permits", workPermitsRouter);
 
 export default router;

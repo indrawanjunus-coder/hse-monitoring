@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import { db, smtpSettingsTable } from "@workspace/db";
+export { workPermitEmailHtml } from "./work-permit-email";
 
 // [SECURITY H6] Escape all user-supplied values before embedding in HTML email templates
 // Prevents HTML/script injection via incident details, names, categories, etc.

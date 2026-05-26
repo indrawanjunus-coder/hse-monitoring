@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Shield, AlertCircle, Building2 } from "lucide-react";
+import { Shield, AlertCircle, Building2, QrCode } from "lucide-react";
 import { api } from "@/lib/api";
 
 interface CompanyInfo {
@@ -183,6 +183,26 @@ export default function LoginPage() {
               {isLoading ? "Memverifikasi..." : "Masuk"}
             </Button>
           </form>
+
+          {companySlug && (
+            <div className="mt-4">
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="px-3 bg-gray-50 text-xs text-gray-400">atau</span>
+                </div>
+              </div>
+              <a
+                href={`/c/${companySlug}/scan`}
+                className="mt-4 w-full flex items-center justify-center gap-2 h-10 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <QrCode className="w-4 h-4 text-gray-500" />
+                Scan Work Permit
+              </a>
+            </div>
+          )}
 
           {!companySlug && (
             <div className="mt-6 text-center">

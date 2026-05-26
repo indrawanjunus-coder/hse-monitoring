@@ -25,3 +25,6 @@ export * from "./payments";
 export * from "./testimonials";
 export * from "./plans";
 export * from "./audit-logs";
+export * from "./work-permit-types";
+export * from "./work-permits";
+export * from "./work-permit-scans";

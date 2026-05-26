@@ -29,6 +29,8 @@ import {
   Cloud,
   MessageSquare,
   Database,
+  FileCheck,
+  QrCode,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
@@ -70,6 +72,13 @@ const navItems: NavItem[] = [
     ],
   },
   { label: "Testimoni", href: "/testimonial", icon: <MessageSquare className="w-4 h-4" /> },
+  {
+    label: "Work Permit", href: "/work-permits", icon: <FileCheck className="w-4 h-4" />,
+    children: [
+      { label: "Daftar Permit", href: "/work-permits", icon: <FileCheck className="w-4 h-4" /> },
+      { label: "Laporan Scan", href: "/work-permits/report", icon: <QrCode className="w-4 h-4" /> },
+    ],
+  },
   { label: "Profil", href: "/profile", icon: <UserCircle className="w-4 h-4" /> },
   {
     label: "Pengaturan", href: "/settings", icon: <Settings className="w-4 h-4" />, adminOnly: true,
@@ -92,6 +101,7 @@ const navItems: NavItem[] = [
       { label: "Tindakan Preventif", href: "/master/preventive-actions", icon: <Target className="w-4 h-4" /> },
       { label: "Tipe Incident", href: "/master/incident-types", icon: <AlertTriangle className="w-4 h-4" /> },
       { label: "Indikator HSE", href: "/master/indicators", icon: <Target className="w-4 h-4" /> },
+      { label: "Tipe Work Permit", href: "/master/work-permit-types", icon: <FileCheck className="w-4 h-4" />, adminOnly: true },
     ],
   },
 ];

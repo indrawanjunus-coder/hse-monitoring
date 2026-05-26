@@ -33,6 +33,10 @@ import PaymentPage from "@/pages/payment";
 import LandingPage from "@/pages/landing";
 import SysadminApp from "@/pages/sysadmin/index";
 import TestimonialPage from "@/pages/testimonial";
+import WorkPermitsPage from "@/pages/work-permits/index";
+import WorkPermitReportPage from "@/pages/work-permits/report";
+import WorkPermitScanPage from "@/pages/work-permits/scan";
+import WorkPermitTypesPage from "@/pages/master/work-permit-types";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,6 +51,9 @@ const base = _slugMatch ? `/c/${_slugMatch[1]}` : _viteBase;
 
 function isPaymentRoute() {
   return /^\/c\/[^/]+\/payment/.test(window.location.pathname);
+}
+function isWorkPermitScanRoute() {
+  return /^\/c\/[^/]+\/scan/.test(window.location.pathname);
 }
 function isSysadminRoute() {
   return window.location.pathname.startsWith("/sysadmin");
@@ -99,11 +106,14 @@ function MainApp() {
           <Route path="/master/indicators" component={IndicatorsPage} />
           <Route path="/master/preventive-actions" component={PreventiveActionsPage} />
           <Route path="/master/incident-types" component={IncidentTypesPage} />
+          <Route path="/master/work-permit-types" component={WorkPermitTypesPage} />
           <Route path="/reports/indicators" component={IndicatorReportPage} />
           <Route path="/reports/schedule-compliance" component={ScheduleCompliancePage} />
           <Route path="/admin/logs" component={LogsPage} />
           <Route path="/payment" component={PaymentPage} />
           <Route path="/testimonial" component={TestimonialPage} />
+          <Route path="/work-permits/report" component={WorkPermitReportPage} />
+          <Route path="/work-permits" component={WorkPermitsPage} />
           <Route><Redirect to="/" /></Route>
         </Switch>
       </Layout>
@@ -126,6 +136,15 @@ export default function App() {
     return (
       <QueryClientProvider client={queryClient}>
         <RegisterPage />
+        <Toaster />
+      </QueryClientProvider>
+    );
+  }
+
+  if (isWorkPermitScanRoute()) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <WorkPermitScanPage />
         <Toaster />
       </QueryClientProvider>
     );
