@@ -41,9 +41,25 @@ interface NavItem {
   label: string;
   href: string;
   icon: React.ReactNode;
+  badge?: React.ReactNode;
   children?: NavItem[];
   adminOnly?: boolean;
   supervisorOrAdmin?: boolean;
+}
+
+function PendingApprovalBadge() {
+  const { data = [] } = useQuery<{ id: number }[]>({
+    queryKey: ["work-permits-my-approvals"],
+    queryFn: () => api.get("/work-permits/my-approvals"),
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+  if (data.length === 0) return null;
+  return (
+    <span className="ml-auto flex-shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-orange-500 text-white text-xs font-bold flex items-center justify-center">
+      {data.length}
+    </span>
+  );
 }
 
 const navItems: NavItem[] = [
@@ -76,7 +92,13 @@ const navItems: NavItem[] = [
     label: "Work Permit", href: "/work-permits", icon: <FileCheck className="w-4 h-4" />,
     children: [
       { label: "Daftar Permit", href: "/work-permits", icon: <FileCheck className="w-4 h-4" /> },
-      { label: "Laporan Scan", href: "/work-permits/report", icon: <QrCode className="w-4 h-4" /> },
+      {
+        label: "Perlu Approval Saya",
+        href: "/work-permits",
+        icon: <AlertTriangle className="w-4 h-4 text-orange-500" />,
+        badge: <PendingApprovalBadge />,
+      },
+      { label: "Laporan Work Permit", href: "/work-permits/report", icon: <QrCode className="w-4 h-4" /> },
     ],
   },
   { label: "Profil", href: "/profile", icon: <UserCircle className="w-4 h-4" /> },
@@ -159,7 +181,8 @@ function NavLink({ item, depth = 0 }: { item: NavItem; depth?: number }) {
       )}
     >
       {item.icon}
-      {item.label}
+      <span className="flex-1 truncate">{item.label}</span>
+      {item.badge}
     </Link>
   );
 }

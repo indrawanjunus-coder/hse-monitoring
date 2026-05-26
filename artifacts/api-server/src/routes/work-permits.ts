@@ -60,6 +60,82 @@ router.get("/", authMiddleware, async (req, res) => {
   res.json(rows);
 });
 
+// GET /work-permits/full-report — all permits with approval chain + scan count (auth required)
+router.get("/full-report", authMiddleware, async (req, res) => {
+  try {
+    const cid = req.user!.companyId;
+    const permits = await db
+      .select({
+        id: workPermitsTable.id,
+        permitCode: workPermitsTable.permitCode,
+        name: workPermitsTable.name,
+        phone: workPermitsTable.phone,
+        email: workPermitsTable.email,
+        workStart: workPermitsTable.workStart,
+        workEnd: workPermitsTable.workEnd,
+        supervisorName: workPermitsTable.supervisorName,
+        notes: workPermitsTable.notes,
+        status: workPermitsTable.status,
+        createdAt: workPermitsTable.createdAt,
+        typeId: workPermitsTable.typeId,
+        typeName: workPermitTypesTable.type,
+      })
+      .from(workPermitsTable)
+      .leftJoin(workPermitTypesTable, eq(workPermitsTable.typeId, workPermitTypesTable.id))
+      .where(cid ? eq(workPermitsTable.companyId, cid) : undefined)
+      .orderBy(desc(workPermitsTable.createdAt));
+
+    if (permits.length === 0) { res.json([]); return; }
+
+    const permitIds = permits.map(p => p.id);
+
+    // Fetch all approvals for all permits in one query
+    const allApprovals = await db
+      .select({
+        workPermitId: workPermitApprovalsTable.workPermitId,
+        userId: workPermitApprovalsTable.userId,
+        status: workPermitApprovalsTable.status,
+        approvedAt: workPermitApprovalsTable.approvedAt,
+        notes: workPermitApprovalsTable.notes,
+        userName: usersTable.name,
+      })
+      .from(workPermitApprovalsTable)
+      .innerJoin(usersTable, eq(workPermitApprovalsTable.userId, usersTable.id))
+      .where(inArray(workPermitApprovalsTable.workPermitId, permitIds))
+      .orderBy(workPermitApprovalsTable.id);
+
+    // Fetch scan counts per permit in one query
+    const scanCounts = await db
+      .select({
+        workPermitId: workPermitScansTable.workPermitId,
+      })
+      .from(workPermitScansTable)
+      .where(inArray(workPermitScansTable.workPermitId, permitIds));
+
+    const approvalMap = new Map<number, typeof allApprovals>();
+    allApprovals.forEach(a => {
+      if (!approvalMap.has(a.workPermitId)) approvalMap.set(a.workPermitId, []);
+      approvalMap.get(a.workPermitId)!.push(a);
+    });
+
+    const scanCountMap = new Map<number, number>();
+    scanCounts.forEach(s => {
+      scanCountMap.set(s.workPermitId, (scanCountMap.get(s.workPermitId) ?? 0) + 1);
+    });
+
+    const result = permits.map(p => ({
+      ...p,
+      approvals: approvalMap.get(p.id) ?? [],
+      scanCount: scanCountMap.get(p.id) ?? 0,
+    }));
+
+    res.json(result);
+  } catch (err: any) {
+    logger.error({ err }, "full-report error");
+    res.status(500).json({ error: err.message ?? "Gagal mengambil laporan" });
+  }
+});
+
 // GET /work-permits/my-approvals — permits pending current user's approval
 router.get("/my-approvals", authMiddleware, async (req, res) => {
   try {
