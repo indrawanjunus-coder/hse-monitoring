@@ -369,3 +369,76 @@ export function subscriptionExpiryEmailHtml(params: {
     </div>
   `;
 }
+
+export function workPermitApprovalRequestHtml(p: {
+  approverName: string;
+  permitHolderName: string;
+  typeName: string;
+  workStart: string;
+  workEnd: string;
+  supervisorName: string;
+  notes: string | null;
+  appUrl: string;
+}): string {
+  const ee = (v: unknown) => String(v ?? "-").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return `
+<div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:24px">
+  <div style="background:#1e293b;border-radius:12px;padding:24px 28px;margin-bottom:20px">
+    <div style="color:white;font-weight:700;font-size:15px;margin-bottom:8px">H&amp;A Monitoring System</div>
+    <h1 style="color:white;font-size:20px;font-weight:700;margin:0">Permintaan Persetujuan Work Permit</h1>
+    <p style="color:#94a3b8;font-size:13px;margin:6px 0 0">Anda diminta untuk menyetujui permohonan work permit berikut.</p>
+  </div>
+  <div style="background:white;border-radius:12px;padding:24px;margin-bottom:16px;border:1px solid #e2e8f0">
+    <p style="font-size:14px;color:#374151;margin:0 0 16px">Halo <strong>${ee(p.approverName)}</strong>,</p>
+    <p style="font-size:14px;color:#374151;margin:0 0 16px">Terdapat permohonan work permit yang memerlukan persetujuan Anda:</p>
+    <table style="width:100%;border-collapse:collapse">
+      <tr><td style="padding:6px 0;color:#64748b;font-size:13px;width:160px">Pemegang Permit</td><td style="padding:6px 0;font-weight:600;color:#1e293b;font-size:13px">${ee(p.permitHolderName)}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;font-size:13px">Tipe Pekerjaan</td><td style="padding:6px 0;color:#1e293b;font-size:13px">${ee(p.typeName)}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;font-size:13px">Periode Kerja</td><td style="padding:6px 0;color:#1e293b;font-size:13px">${ee(p.workStart)} s/d ${ee(p.workEnd)}</td></tr>
+      <tr><td style="padding:6px 0;color:#64748b;font-size:13px">Atasan</td><td style="padding:6px 0;color:#1e293b;font-size:13px">${ee(p.supervisorName)}</td></tr>
+      ${p.notes ? `<tr><td style="padding:6px 0;color:#64748b;font-size:13px">Catatan</td><td style="padding:6px 0;color:#1e293b;font-size:13px">${ee(p.notes)}</td></tr>` : ""}
+    </table>
+  </div>
+  <div style="text-align:center;margin:20px 0">
+    <a href="${ee(p.appUrl)}" style="background:#2563eb;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;display:inline-block">
+      Buka Halaman Work Permit →
+    </a>
+    <p style="font-size:12px;color:#94a3b8;margin-top:10px">Login ke sistem untuk memberikan persetujuan atau penolakan.</p>
+  </div>
+  <p style="text-align:center;font-size:11px;color:#94a3b8;margin-top:20px">
+    © ${new Date().getFullYear()} H&amp;A Monitoring System · Pesan ini dikirim otomatis.
+  </p>
+</div>`;
+}
+
+export function workPermitRejectedHtml(p: {
+  creatorName: string;
+  permitHolderName: string;
+  typeName: string;
+  rejecterName: string;
+  notes: string | null;
+  appUrl: string;
+}): string {
+  const ee = (v: unknown) => String(v ?? "-").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return `
+<div style="font-family:sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:24px">
+  <div style="background:#7f1d1d;border-radius:12px;padding:24px 28px;margin-bottom:20px">
+    <div style="color:#fca5a5;font-weight:700;font-size:15px;margin-bottom:8px">H&amp;A Monitoring System</div>
+    <h1 style="color:white;font-size:20px;font-weight:700;margin:0">Work Permit Ditolak</h1>
+    <p style="color:#fca5a5;font-size:13px;margin:6px 0 0">Permohonan work permit berikut telah ditolak oleh approver.</p>
+  </div>
+  <div style="background:white;border-radius:12px;padding:24px;margin-bottom:16px;border:1px solid #fecaca">
+    <p style="font-size:14px;color:#374151;margin:0 0 16px">Halo <strong>${ee(p.creatorName)}</strong>,</p>
+    <p style="font-size:14px;color:#374151;margin:0 0 16px">Permohonan work permit atas nama <strong>${ee(p.permitHolderName)}</strong> (tipe: ${ee(p.typeName)}) telah <strong style="color:#dc2626">ditolak</strong> oleh <strong>${ee(p.rejecterName)}</strong>.</p>
+    ${p.notes ? `<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:12px;margin-top:12px"><p style="font-size:13px;color:#7f1d1d;margin:0"><strong>Alasan penolakan:</strong><br>${ee(p.notes)}</p></div>` : ""}
+  </div>
+  <div style="text-align:center;margin:20px 0">
+    <a href="${ee(p.appUrl)}" style="background:#2563eb;color:white;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;display:inline-block">
+      Buka Halaman Work Permit →
+    </a>
+  </div>
+  <p style="text-align:center;font-size:11px;color:#94a3b8;margin-top:20px">
+    © ${new Date().getFullYear()} H&amp;A Monitoring System · Pesan ini dikirim otomatis.
+  </p>
+</div>`;
+}

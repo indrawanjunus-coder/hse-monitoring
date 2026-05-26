@@ -19,7 +19,7 @@ export const workPermitsTable = pgTable("work_permits", {
   ktpUrl: text("ktp_url"),
   photoUrl: text("photo_url"),
   notes: text("notes"),
-  status: text("status", { enum: ["active", "expired", "revoked"] }).notNull().default("active"),
+  status: text("status", { enum: ["pending", "active", "expired", "revoked", "rejected"] }).notNull().default("active"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

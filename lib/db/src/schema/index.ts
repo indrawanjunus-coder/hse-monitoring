@@ -28,4 +28,6 @@ export * from "./audit-logs";
 export * from "./work-permit-types";
 export * from "./work-permits";
 export * from "./work-permit-scans";
+export * from "./work-permit-type-approvers";
+export * from "./work-permit-approvals";
 export * from "./maps";

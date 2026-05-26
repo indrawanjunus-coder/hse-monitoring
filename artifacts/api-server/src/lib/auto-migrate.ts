@@ -254,9 +254,33 @@ export async function autoMigrate() {
       ALTER TABLE maps ALTER COLUMN object_path DROP NOT NULL
     `).catch(() => {});
 
+    // Work permit type approvers
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS work_permit_type_approvers (
+        id SERIAL PRIMARY KEY,
+        company_id INTEGER REFERENCES companies(id),
+        work_permit_type_id INTEGER NOT NULL REFERENCES work_permit_types(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    // Work permit approvals
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS work_permit_approvals (
+        id SERIAL PRIMARY KEY,
+        work_permit_id INTEGER NOT NULL REFERENCES work_permits(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'pending',
+        approved_at TIMESTAMP,
+        notes TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
     // Sync sequences
     const tables = ['users', 'incidents', 'companies', 'payments', 'system_settings', 'plans', 'testimonials',
-      'work_permit_types', 'work_permits', 'work_permit_scans', 'maps'];
+      'work_permit_types', 'work_permits', 'work_permit_scans', 'work_permit_type_approvers', 'work_permit_approvals', 'maps'];
     for (const t of tables) {
       await pool.query(`SELECT setval(pg_get_serial_sequence('"${t}"', 'id'), COALESCE(MAX(id), 1)) FROM "${t}"`).catch(() => {});
     }
