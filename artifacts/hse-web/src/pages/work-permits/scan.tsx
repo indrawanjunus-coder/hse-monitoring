@@ -3,7 +3,7 @@ import { Shield, CheckCircle2, XCircle, AlertCircle, Loader2, QrCode } from "luc
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "api";
+const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api";
 
 interface PermitData {
   id: number;
