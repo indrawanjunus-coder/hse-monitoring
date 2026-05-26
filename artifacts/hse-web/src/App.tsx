@@ -36,6 +36,7 @@ import TestimonialPage from "@/pages/testimonial";
 import WorkPermitsPage from "@/pages/work-permits/index";
 import WorkPermitReportPage from "@/pages/work-permits/report";
 import WorkPermitScanPage from "@/pages/work-permits/scan";
+import MyApprovalsPage from "@/pages/work-permits/my-approvals";
 import WorkPermitTypesPage from "@/pages/master/work-permit-types";
 import MapsPage from "@/pages/master/maps";
 
@@ -114,6 +115,7 @@ function MainApp() {
           <Route path="/admin/logs" component={LogsPage} />
           <Route path="/payment" component={PaymentPage} />
           <Route path="/testimonial" component={TestimonialPage} />
+          <Route path="/work-permits/my-approvals" component={MyApprovalsPage} />
           <Route path="/work-permits/report" component={WorkPermitReportPage} />
           <Route path="/work-permits" component={WorkPermitsPage} />
           <Route><Redirect to="/" /></Route>

@@ -94,7 +94,7 @@ const navItems: NavItem[] = [
       { label: "Daftar Permit", href: "/work-permits", icon: <FileCheck className="w-4 h-4" /> },
       {
         label: "Perlu Approval Saya",
-        href: "/work-permits",
+        href: "/work-permits/my-approvals",
         icon: <AlertTriangle className="w-4 h-4 text-orange-500" />,
         badge: <PendingApprovalBadge />,
       },
