@@ -67,6 +67,8 @@ export async function autoMigrate() {
       { table: "incidents",          column: "map_markers",  definition: "TEXT" },
       { table: "inspections",        column: "map_id",      definition: "INTEGER" },
       { table: "inspections",        column: "map_markers",  definition: "TEXT" },
+      { table: "maps",               column: "drive_file_id", definition: "TEXT" },
+      { table: "maps",               column: "view_url",      definition: "TEXT" },
     ];
 
     for (const { table, column, definition } of columnsToAdd) {
@@ -235,17 +237,22 @@ export async function autoMigrate() {
       logger.info("autoMigrate: seeded default work permit types");
     }
 
-    // Maps table
+    // Maps table (uses Google Drive storage)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS maps (
         id SERIAL PRIMARY KEY,
         company_id INTEGER REFERENCES companies(id),
         name TEXT NOT NULL,
-        object_path TEXT NOT NULL,
+        drive_file_id TEXT,
+        view_url TEXT,
         file_type TEXT NOT NULL DEFAULT 'jpeg',
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `);
+    // Make object_path nullable for tables created before migration to GDrive
+    await pool.query(`
+      ALTER TABLE maps ALTER COLUMN object_path DROP NOT NULL
+    `).catch(() => {});
 
     // Sync sequences
     const tables = ['users', 'incidents', 'companies', 'payments', 'system_settings', 'plans', 'testimonials',

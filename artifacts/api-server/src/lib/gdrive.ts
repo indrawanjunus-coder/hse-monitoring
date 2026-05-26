@@ -227,6 +227,66 @@ export async function deleteFromDrive(driveFileId: string): Promise<void> {
   }
 }
 
+async function getGdriveClientForCompany(companyId: number) {
+  const [settings] = await db
+    .select()
+    .from(gdriveSettingsTable)
+    .where(eq(gdriveSettingsTable.companyId, companyId));
+  if (!settings || !settings.privateKey || !settings.clientEmail) {
+    throw new Error(
+      "Google Drive belum dikonfigurasi untuk perusahaan ini. " +
+      "Silakan atur di Pengaturan → Google Drive.",
+    );
+  }
+  const accessToken = await getAccessToken(settings.clientEmail, settings.privateKey);
+  const auth = new google.auth.OAuth2();
+  auth.setCredentials({ access_token: accessToken });
+  return { drive: google.drive({ version: "v3", auth }), rootFolderId: settings.rootFolderId };
+}
+
+/**
+ * Upload map file (floor plan / site map) to GDrive.
+ * Files are stored under: Root → Maps → {filename}
+ * Folder "Maps" is created automatically if it does not exist.
+ */
+export async function uploadMapToDrive(
+  fileBuffer: Buffer,
+  originalName: string,
+  mimeType: string,
+  companyId: number,
+): Promise<{ driveFileId: string; viewUrl: string }> {
+  const { drive, rootFolderId } = await getGdriveClientForCompany(companyId);
+
+  const mapsFolder = await getOrCreateFolder(drive, rootFolderId, "Maps");
+
+  const ext = originalName.includes(".") ? originalName.split(".").pop()! : "bin";
+  const storedName = `map-${Date.now()}.${ext}`;
+
+  const { Readable } = await import("stream");
+  const stream = new Readable();
+  stream.push(fileBuffer);
+  stream.push(null);
+
+  const uploaded = await drive.files.create({
+    requestBody: { name: storedName, parents: [mapsFolder] },
+    media: { mimeType, body: stream },
+    fields: "id,webViewLink",
+    supportsAllDrives: true,
+  });
+
+  const fileId = uploaded.data.id!;
+  const viewUrl = uploaded.data.webViewLink ?? `https://drive.google.com/file/d/${fileId}/view`;
+
+  await drive.permissions.create({
+    fileId,
+    requestBody: { role: "reader", type: "anyone" },
+    supportsAllDrives: true,
+  });
+
+  logger.info({ fileId, storedName, companyId }, "Map uploaded to Google Drive");
+  return { driveFileId: fileId, viewUrl };
+}
+
 export async function getGdriveConfigured(): Promise<boolean> {
   const [s] = await db.select({ pk: gdriveSettingsTable.privateKey }).from(gdriveSettingsTable);
   return !!(s?.pk);

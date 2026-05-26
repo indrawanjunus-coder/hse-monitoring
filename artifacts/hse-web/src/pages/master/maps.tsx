@@ -15,19 +15,9 @@ interface MapRecord {
   id: number;
   name: string;
   fileType: string;
+  driveFileId?: string | null;
+  viewUrl?: string | null;
   createdAt: string;
-}
-
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-async function fetchMapFile(mapId: number): Promise<string> {
-  const token = localStorage.getItem("hse_token");
-  const res = await fetch(`${BASE}/api/maps/${mapId}/file`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  if (!res.ok) throw new Error("Gagal memuat file");
-  const blob = await res.blob();
-  return URL.createObjectURL(blob);
 }
 
 export default function MapsPage() {
@@ -86,20 +76,15 @@ export default function MapsPage() {
     }
   };
 
-  const handlePreview = async (mapId: number, fileType: string) => {
-    try {
-      const url = await fetchMapFile(mapId);
-      if (fileType === "pdf") {
-        const win = window.open();
-        if (win) {
-          win.document.write(`<iframe src="${url}" style="width:100%;height:100%;border:none;"></iframe>`);
-        }
-      } else {
-        window.open(url, "_blank");
-      }
-    } catch {
-      toast({ title: "Gagal membuka file map", variant: "destructive" });
+  const handlePreview = (map: MapRecord) => {
+    if (!map.driveFileId) {
+      toast({ title: "File map belum tersedia", variant: "destructive" });
+      return;
     }
+    const url = map.fileType === "pdf"
+      ? `https://drive.google.com/file/d/${map.driveFileId}/preview`
+      : `https://drive.google.com/uc?export=view&id=${map.driveFileId}`;
+    window.open(url, "_blank");
   };
 
   const handleDelete = (map: MapRecord) => {
@@ -155,7 +140,7 @@ export default function MapsPage() {
                     variant="outline"
                     size="sm"
                     className="gap-1.5 text-xs"
-                    onClick={() => handlePreview(map.id, map.fileType)}
+                    onClick={() => handlePreview(map)}
                   >
                     <Eye className="w-3.5 h-3.5" /> Lihat
                   </Button>

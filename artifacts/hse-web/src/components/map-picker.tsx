@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,6 +24,8 @@ interface MapRecord {
   id: number;
   name: string;
   fileType: string;
+  driveFileId?: string | null;
+  viewUrl?: string | null;
 }
 
 const COLOR_OPTIONS: { value: Marker["color"]; label: string; bg: string; border: string }[] = [
@@ -36,46 +38,23 @@ function generateId() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 }
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
 function MapCanvas({
-  mapId,
+  driveFileId,
   fileType,
   markers,
   onMarkersChange,
 }: {
-  mapId: number;
+  driveFileId: string;
   fileType: string;
   markers: Marker[];
   onMarkersChange: (m: Marker[]) => void;
 }) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
   const [selectedColor, setSelectedColor] = useState<Marker["color"]>("red");
   const overlayRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    let url: string | null = null;
-    setLoading(true);
-    setBlobUrl(null);
-    const token = localStorage.getItem("hse_token");
-    fetch(`${BASE}/api/maps/${mapId}/file`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then(r => {
-        if (!r.ok) throw new Error("Gagal");
-        return r.blob();
-      })
-      .then(blob => {
-        url = URL.createObjectURL(blob);
-        setBlobUrl(url);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-    return () => {
-      if (url) URL.revokeObjectURL(url);
-    };
-  }, [mapId]);
+  const displayUrl = fileType === "pdf"
+    ? `https://drive.google.com/file/d/${driveFileId}/preview`
+    : `https://drive.google.com/uc?export=view&id=${driveFileId}`;
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -120,26 +99,15 @@ function MapCanvas({
       </div>
 
       <div className="relative bg-gray-100 rounded-lg overflow-hidden border border-gray-300" style={{ height: 460 }}>
-        {loading ? (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-400">
-            <div className="text-center space-y-2">
-              <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto" />
-              <p>Memuat map...</p>
-            </div>
-          </div>
-        ) : !blobUrl ? (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-red-400">
-            Gagal memuat file map
-          </div>
-        ) : fileType === "pdf" ? (
+        {fileType === "pdf" ? (
           <iframe
-            src={blobUrl}
+            src={displayUrl}
             title="Map"
             style={{ width: "100%", height: "100%", border: "none", pointerEvents: "none" }}
           />
         ) : (
           <img
-            src={blobUrl}
+            src={displayUrl}
             alt="Map"
             style={{
               width: "100%",
@@ -331,13 +299,17 @@ export function MapPicker({
 
             {draftMapId && (() => {
               const m = maps.find(x => x.id === draftMapId);
-              return m ? (
+              return m?.driveFileId ? (
                 <MapCanvas
-                  mapId={draftMapId}
+                  driveFileId={m.driveFileId}
                   fileType={m.fileType}
                   markers={draftMarkers}
                   onMarkersChange={setDraftMarkers}
                 />
+              ) : m ? (
+                <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                  File map belum tersedia di Google Drive.
+                </p>
               ) : null;
             })()}
           </div>
