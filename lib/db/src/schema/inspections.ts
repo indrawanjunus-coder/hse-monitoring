@@ -14,6 +14,8 @@ export const inspectionsTable = pgTable("inspections", {
   plantId: integer("plant_id").references(() => plantsTable.id),
   templateId: integer("template_id").notNull().references(() => templatesTable.id),
   inspectedAt: text("inspected_at").notNull(),
+  mapId: integer("map_id"),
+  mapMarkers: text("map_markers"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

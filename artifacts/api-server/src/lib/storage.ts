@@ -36,6 +36,27 @@ export async function downloadFromStorage(objectPath: string): Promise<{ stream:
   return { stream, contentType };
 }
 
+export async function uploadMapToStorage(
+  fileBuffer: Buffer,
+  originalName: string,
+  mimeType: string,
+  companyId: number,
+): Promise<string> {
+  if (!BUCKET_ID) throw new Error("Object storage belum dikonfigurasi (DEFAULT_OBJECT_STORAGE_BUCKET_ID kosong).");
+
+  const ext = originalName.split(".").pop()?.toLowerCase() || "bin";
+  const rand = Math.random().toString(36).slice(2, 8);
+  const objectPath = `maps/${companyId}/${Date.now()}-${rand}.${ext}`;
+
+  const bucket = storage.bucket(BUCKET_ID);
+  const file = bucket.file(objectPath);
+
+  await file.save(fileBuffer, { metadata: { contentType: mimeType } });
+  logger.info({ objectPath, companyId, mimeType }, "Map uploaded to Object Storage");
+
+  return objectPath;
+}
+
 export async function deleteFromStorage(objectPath: string): Promise<void> {
   if (!BUCKET_ID) return;
   try {

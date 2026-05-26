@@ -102,6 +102,7 @@ const navItems: NavItem[] = [
       { label: "Tipe Incident", href: "/master/incident-types", icon: <AlertTriangle className="w-4 h-4" /> },
       { label: "Indikator HSE", href: "/master/indicators", icon: <Target className="w-4 h-4" /> },
       { label: "Tipe Work Permit", href: "/master/work-permit-types", icon: <FileCheck className="w-4 h-4" />, adminOnly: true },
+      { label: "Map Lokasi", href: "/master/maps", icon: <MapPin className="w-4 h-4" />, adminOnly: true },
     ],
   },
 ];

@@ -37,6 +37,7 @@ import WorkPermitsPage from "@/pages/work-permits/index";
 import WorkPermitReportPage from "@/pages/work-permits/report";
 import WorkPermitScanPage from "@/pages/work-permits/scan";
 import WorkPermitTypesPage from "@/pages/master/work-permit-types";
+import MapsPage from "@/pages/master/maps";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -107,6 +108,7 @@ function MainApp() {
           <Route path="/master/preventive-actions" component={PreventiveActionsPage} />
           <Route path="/master/incident-types" component={IncidentTypesPage} />
           <Route path="/master/work-permit-types" component={WorkPermitTypesPage} />
+          <Route path="/master/maps" component={MapsPage} />
           <Route path="/reports/indicators" component={IndicatorReportPage} />
           <Route path="/reports/schedule-compliance" component={ScheduleCompliancePage} />
           <Route path="/admin/logs" component={LogsPage} />

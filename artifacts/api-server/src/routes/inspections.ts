@@ -108,7 +108,7 @@ router.get("/:id", async (req, res) => {
 // Submit inspection with answers and auto-create incidents for wrong answers
 router.post("/", async (req, res) => {
   const user = (req as typeof req & { user: { id: number; role: string; companyId?: number | null } }).user;
-  const { scheduleId, plantId, templateId, inspectedAt, answers } = req.body;
+  const { scheduleId, plantId, templateId, inspectedAt, answers, mapId, mapMarkers } = req.body;
   const supervisorId = user.id;
   const companyId = user.companyId ?? null;
 
@@ -120,7 +120,12 @@ router.post("/", async (req, res) => {
   }
 
   const [inspection] = await db.insert(inspectionsTable)
-    .values({ scheduleId, supervisorId, plantId, templateId, inspectedAt: inspectedAt ?? new Date().toISOString().slice(0, 10) })
+    .values({
+      scheduleId, supervisorId, plantId, templateId,
+      inspectedAt: inspectedAt ?? new Date().toISOString().slice(0, 10),
+      mapId: mapId ?? null,
+      mapMarkers: mapMarkers ?? null,
+    })
     .returning();
   if (!inspection) { res.status(500).json({ message: "Failed" }); return; }
 

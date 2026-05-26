@@ -63,6 +63,10 @@ export async function autoMigrate() {
       { table: "preventive_actions", column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
       { table: "smtp_settings",      column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
       { table: "gdrive_settings",    column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
+      { table: "incidents",          column: "map_id",      definition: "INTEGER" },
+      { table: "incidents",          column: "map_markers",  definition: "TEXT" },
+      { table: "inspections",        column: "map_id",      definition: "INTEGER" },
+      { table: "inspections",        column: "map_markers",  definition: "TEXT" },
     ];
 
     for (const { table, column, definition } of columnsToAdd) {
@@ -231,9 +235,21 @@ export async function autoMigrate() {
       logger.info("autoMigrate: seeded default work permit types");
     }
 
+    // Maps table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS maps (
+        id SERIAL PRIMARY KEY,
+        company_id INTEGER REFERENCES companies(id),
+        name TEXT NOT NULL,
+        object_path TEXT NOT NULL,
+        file_type TEXT NOT NULL DEFAULT 'jpeg',
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
     // Sync sequences
     const tables = ['users', 'incidents', 'companies', 'payments', 'system_settings', 'plans', 'testimonials',
-      'work_permit_types', 'work_permits', 'work_permit_scans'];
+      'work_permit_types', 'work_permits', 'work_permit_scans', 'maps'];
     for (const t of tables) {
       await pool.query(`SELECT setval(pg_get_serial_sequence('"${t}"', 'id'), COALESCE(MAX(id), 1)) FROM "${t}"`).catch(() => {});
     }

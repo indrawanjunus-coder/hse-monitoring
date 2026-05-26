@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { MapPicker, type MapSelection } from "@/components/map-picker";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearch } from "wouter";
 import { api } from "@/lib/api";
@@ -316,6 +317,7 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
 
   const [recipientGroupIds, setRecipientGroupIds] = useState<number[]>([]);
   const [recipientUserIds, setRecipientUserIds] = useState<number[]>([]);
+  const [mapSelection, setMapSelection] = useState<MapSelection>({ mapId: null, markers: [] });
 
   const availableTypes = incidentTypes.filter(t => t.isActive && (categoryId ? t.categoryId === parseInt(categoryId) : !t.categoryId));
   const selectedCategory = categories.find(c => c.id === parseInt(categoryId));
@@ -363,6 +365,8 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
         needsFurtherAction,
         recipientUserIds,
         recipientGroupIds,
+        mapId: mapSelection.mapId ?? undefined,
+        mapMarkers: mapSelection.markers.length > 0 ? JSON.stringify(mapSelection.markers) : undefined,
       });
 
       if (pendingFiles.length > 0) {
@@ -586,6 +590,10 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
             <button className="text-xs underline text-red-600 mt-1" onClick={onDone}>Tutup tanpa menunggu</button>
           </div>
         )}
+      </div>
+
+      <div className="border-t pt-4">
+        <MapPicker value={mapSelection} onChange={setMapSelection} />
       </div>
 
       <DialogFooter>

@@ -26,6 +26,8 @@ const IncidentCreateSchema = z.object({
   rootCause: z.string().optional().nullable(),
   recipientUserIds: z.array(z.coerce.number()).optional(),
   recipientGroupIds: z.array(z.coerce.number()).optional(),
+  mapId: z.coerce.number().int().positive().optional().nullable(),
+  mapMarkers: z.string().optional().nullable(),
 });
 
 const router = Router();
@@ -141,7 +143,7 @@ router.get("/:id", async (req, res) => {
 
 router.post("/", validateBody(IncidentCreateSchema), async (req, res) => {
   const user = (req as typeof req & { user: { id: number } }).user;
-  const { plantId, categoryId, incidentDate, reportedDate, detail, actionId, preventiveActionId, targetDate, rootCause, needsFurtherAction, incidentType, recipientUserIds, recipientGroupIds } = req.body;
+  const { plantId, categoryId, incidentDate, reportedDate, detail, actionId, preventiveActionId, targetDate, rootCause, needsFurtherAction, incidentType, recipientUserIds, recipientGroupIds, mapId, mapMarkers } = req.body;
   // [SECURITY H7] reporterId is ALWAYS the authenticated user — never from request body (prevents identity spoofing / BOPLA)
   const reporterId = user.id;
 
@@ -174,6 +176,8 @@ router.post("/", validateBody(IncidentCreateSchema), async (req, res) => {
     status: "open",
     assignedGroupId,
     assignedUserId,
+    mapId: mapId ?? null,
+    mapMarkers: mapMarkers ?? null,
   } as any).returning();
 
   if (!inc) { res.status(500).json({ message: "Failed" }); return; }

@@ -30,6 +30,8 @@ export const incidentsTable = pgTable("incidents", {
   followupNote: text("followup_note"),
   closedAt: text("closed_at"),
   escalationLevel: integer("escalation_level").notNull().default(0),
+  mapId: integer("map_id"),
+  mapMarkers: text("map_markers"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

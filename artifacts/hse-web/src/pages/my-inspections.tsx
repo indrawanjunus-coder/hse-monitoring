@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { MapPicker, type MapSelection } from "@/components/map-picker";
 import { useState } from "react";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
@@ -114,6 +115,7 @@ function InspectionForm({ schedule, onClose }: { schedule: Schedule; onClose: ()
   const queryClient = useQueryClient();
   const [answers, setAnswers] = useState<AnswerMap>({});
   const [submitting, setSubmitting] = useState(false);
+  const [mapSelection, setMapSelection] = useState<MapSelection>({ mapId: null, markers: [] });
 
   const { data: questions = [], isLoading } = useQuery<Question[]>({
     queryKey: ["questions", schedule.templateId],
@@ -157,6 +159,8 @@ function InspectionForm({ schedule, onClose }: { schedule: Schedule; onClose: ()
           answerText: answers[q.id]?.answerText,
           answerRefId: answers[q.id]?.answerRefId,
         })),
+        mapId: mapSelection.mapId ?? undefined,
+        mapMarkers: mapSelection.markers.length > 0 ? JSON.stringify(mapSelection.markers) : undefined,
       };
       const result = await api.post<{ id: number; autoIncidentsCreated?: number }>("/inspections", payload);
       queryClient.invalidateQueries({ queryKey: ["schedules"] });
@@ -258,6 +262,10 @@ function InspectionForm({ schedule, onClose }: { schedule: Schedule; onClose: ()
           </div>
         );
       })}
+
+      <div className="border-t pt-4">
+        <MapPicker value={mapSelection} onChange={setMapSelection} />
+      </div>
 
       <DialogFooter className="pt-2">
         <Button variant="outline" onClick={onClose}>Batal</Button>
