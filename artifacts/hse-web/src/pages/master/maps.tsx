@@ -11,6 +11,8 @@ import { MapPin, Plus, Trash2, Eye, FileText, FileImage, Upload } from "lucide-r
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 interface MapRecord {
   id: number;
   name: string;
