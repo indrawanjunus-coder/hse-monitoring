@@ -23,7 +23,12 @@ const upload = multer({
 
 router.get("/", async (req, res) => {
   try {
-    const cid = req.user!.companyId;
+    const user = req.user!;
+    const cid = user.companyId;
+    if (!cid && user.role !== "sysadmin") {
+      res.status(403).json({ error: "Akses ditolak" });
+      return;
+    }
     const maps = cid
       ? await db.select().from(mapsTable).where(eq(mapsTable.companyId, cid))
       : await db.select().from(mapsTable);
