@@ -6,12 +6,12 @@ import { authMiddleware } from "../lib/auth";
 const router = Router();
 router.use(authMiddleware);
 
-function calcNonLtiDays(resetDate: number, baseValue: number): number {
+function calcNonLtiDays(resetDate: string, baseValue: number): number {
   const now = new Date();
   const reset = new Date(resetDate);
   const diffMs = now.getTime() - reset.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  return baseValue + diffDays;
+  return baseValue + Math.max(0, diffDays);
 }
 
 router.get("/", async (req, res) => {
@@ -86,9 +86,10 @@ router.put("/non-lti-reset", async (req, res) => {
   const cid = req.user!.companyId;
   if (!cid) { res.status(403).json({ error: "Akses ditolak" }); return; }
 
-  const now = Date.now();
   const baseValue = req.body.baseValue !== undefined ? parseInt(req.body.baseValue) : 0;
-  const resetDate = req.body.resetDate ? new Date(req.body.resetDate).getTime() : now;
+  const resetDate: string = req.body.resetDate
+    ? String(req.body.resetDate).split("T")[0]
+    : new Date().toISOString().split("T")[0];
 
   const [existing] = await db
     .select()

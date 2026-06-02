@@ -1,4 +1,4 @@
-import { integer, pgTable, serial, timestamp } from "drizzle-orm/pg-core";
+import { integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { companiesTable } from "./companies";
 
 export const laggingIndicatorsTable = pgTable("lagging_indicators", {
@@ -17,7 +17,7 @@ export const laggingIndicatorsTable = pgTable("lagging_indicators", {
 export const nonLtiSettingsTable = pgTable("non_lti_settings", {
   id: serial("id").primaryKey(),
   companyId: integer("company_id").notNull().references(() => companiesTable.id),
-  resetDate: integer("reset_date").notNull(),
+  resetDate: text("reset_date").notNull(),
   baseValue: integer("base_value").notNull().default(0),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

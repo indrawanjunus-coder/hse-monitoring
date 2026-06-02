@@ -20,7 +20,7 @@ interface LaggingData {
   hazardId: number;
   nonLtiDays: number;
   safeHours: number;
-  resetDate: number | null;
+  resetDate: string | null;
   baseValue: number;
 }
 
@@ -56,9 +56,7 @@ export default function LaggingIndicatorsPage() {
       });
       setResetForm({
         baseValue: data.baseValue,
-        resetDate: data.resetDate
-          ? new Date(data.resetDate).toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0],
+        resetDate: data.resetDate ?? new Date().toISOString().split("T")[0],
       });
     }
   }, [data]);

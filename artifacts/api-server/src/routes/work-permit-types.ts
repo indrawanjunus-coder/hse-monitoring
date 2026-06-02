@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, workPermitTypesTable, workPermitTypeApproversTable, usersTable } from "@workspace/db";
-import { eq, and, inArray } from "drizzle-orm";
+import { db, workPermitTypesTable, workPermitTypeApproversTable, workPermitApprovalsTable, workPermitsTable, usersTable } from "@workspace/db";
+import { eq, and, inArray, notInArray } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 
 const router = Router();
@@ -83,19 +83,71 @@ router.put("/:id/approvers", async (req, res) => {
       .where(and(eq(workPermitTypesTable.id, typeId), cid ? eq(workPermitTypesTable.companyId, cid) : undefined));
     if (!typeRow) { res.status(404).json({ error: "Tipe tidak ditemukan" }); return; }
 
+    // Validate new approver user IDs
+    let validIds: number[] = [];
+    if (userIds.length > 0) {
+      const validUsers = await db.select({ id: usersTable.id }).from(usersTable)
+        .where(and(inArray(usersTable.id, userIds), cid ? eq(usersTable.companyId, cid) : undefined));
+      validIds = validUsers.map(u => u.id);
+    }
+
+    // Replace approver list for the type
     await db.delete(workPermitTypeApproversTable).where(and(
       eq(workPermitTypeApproversTable.workPermitTypeId, typeId),
       cid ? eq(workPermitTypeApproversTable.companyId, cid) : undefined,
     ));
+    if (validIds.length > 0) {
+      await db.insert(workPermitTypeApproversTable).values(
+        validIds.map(uid => ({ companyId: cid, workPermitTypeId: typeId, userId: uid }))
+      );
+    }
 
-    if (userIds.length > 0) {
-      const validUsers = await db.select({ id: usersTable.id }).from(usersTable)
-        .where(and(inArray(usersTable.id, userIds), cid ? eq(usersTable.companyId, cid) : undefined));
-      const validIds = validUsers.map(u => u.id);
-      if (validIds.length > 0) {
-        await db.insert(workPermitTypeApproversTable).values(
-          validIds.map(uid => ({ companyId: cid, workPermitTypeId: typeId, userId: uid }))
-        );
+    // Sync pending permits of this type — only those where NO approval has been acted on yet
+    const pendingPermits = await db
+      .select({ id: workPermitsTable.id })
+      .from(workPermitsTable)
+      .where(and(
+        eq(workPermitsTable.typeId, typeId),
+        eq(workPermitsTable.status, "pending"),
+        cid ? eq(workPermitsTable.companyId, cid) : undefined,
+      ));
+
+    if (pendingPermits.length > 0) {
+      const pendingPermitIds = pendingPermits.map(p => p.id);
+
+      // Find permits where any approval is already approved/rejected — don't touch those
+      const actedApprovals = await db
+        .select({ workPermitId: workPermitApprovalsTable.workPermitId })
+        .from(workPermitApprovalsTable)
+        .where(and(
+          inArray(workPermitApprovalsTable.workPermitId, pendingPermitIds),
+          notInArray(workPermitApprovalsTable.status, ["pending"]),
+        ));
+      const actedPermitIds = new Set(actedApprovals.map(a => a.workPermitId));
+
+      // Only update permits where all approvals are still pending
+      const syncableIds = pendingPermitIds.filter(id => !actedPermitIds.has(id));
+
+      if (syncableIds.length > 0) {
+        // Delete old pending approvals for these permits
+        await db.delete(workPermitApprovalsTable).where(and(
+          inArray(workPermitApprovalsTable.workPermitId, syncableIds),
+          eq(workPermitApprovalsTable.status, "pending"),
+        ));
+
+        // Insert new approvals for the new approvers
+        if (validIds.length > 0) {
+          await db.insert(workPermitApprovalsTable).values(
+            syncableIds.flatMap(permitId =>
+              validIds.map(uid => ({ workPermitId: permitId, userId: uid, status: "pending" as const }))
+            )
+          );
+        } else {
+          // No approvers — auto-activate these permits
+          await db.update(workPermitsTable)
+            .set({ status: "active" })
+            .where(inArray(workPermitsTable.id, syncableIds));
+        }
       }
     }
 
