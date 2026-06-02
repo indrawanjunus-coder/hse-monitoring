@@ -379,6 +379,100 @@ router.get("/template-compliance", async (req, res) => {
   res.json({ month, year, templateId, departments });
 });
 
+// Template summary — aggregate total actual vs target for one template
+router.get("/template-summary", async (req, res) => {
+  const now = new Date();
+  const templateId = req.query.templateId ? parseInt(req.query.templateId as string) : null;
+  const month = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
+  const year  = req.query.year  ? parseInt(req.query.year  as string) : now.getFullYear();
+
+  if (!templateId) { res.json({ totalReports: 0, targetReports: 0, templateName: null }); return; }
+
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const prefix = `${year}-${String(month).padStart(2, "0")}`;
+
+  function freqMultiplier(freq: string): number {
+    switch (freq) {
+      case "daily":    return daysInMonth;
+      case "weekly":   return 4;
+      case "biweekly": return 2;
+      case "monthly":  return 1;
+      default:         return 1;
+    }
+  }
+
+  const [templateRows, schedules] = await Promise.all([
+    db.select({ id: templatesTable.id, name: templatesTable.name })
+      .from(templatesTable).where(eq(templatesTable.id, templateId)),
+    db.select().from(schedulesTable).where(eq(schedulesTable.templateId, templateId)),
+  ]);
+
+  const templateName = templateRows[0]?.name ?? null;
+  if (schedules.length === 0) { res.json({ totalReports: 0, targetReports: 0, templateName }); return; }
+
+  const scheduleIds = schedules.map(s => s.id);
+
+  const [allInspections, schedGroups, schedUsers] = await Promise.all([
+    db.select().from(inspectionsTable).where(inArray(inspectionsTable.scheduleId, scheduleIds)),
+    db.select().from(scheduleGroupsTable).where(inArray(scheduleGroupsTable.scheduleId, scheduleIds)),
+    db.select().from(scheduleUsersTable).where(inArray(scheduleUsersTable.scheduleId, scheduleIds)),
+  ]);
+
+  const totalReports = allInspections.filter(i => i.inspectedAt.startsWith(prefix)).length;
+
+  // Compute target: for each schedule, count distinct assigned users × freqMultiplier
+  const groupIds = [...new Set([
+    ...schedGroups.map(sg => sg.groupId),
+    ...schedules.filter(s => s.groupId).map(s => s.groupId!),
+  ])];
+
+  const allMembers = groupIds.length > 0
+    ? await db.select().from(groupMembersTable).where(inArray(groupMembersTable.groupId, groupIds))
+    : [];
+
+  let targetReports = 0;
+  for (const sched of schedules) {
+    const freq = sched.frequency;
+    const mult = freqMultiplier(freq);
+    const linkedGroupIds = schedGroups.filter(sg => sg.scheduleId === sched.id).map(sg => sg.groupId);
+    if (sched.groupId && !linkedGroupIds.includes(sched.groupId)) linkedGroupIds.push(sched.groupId);
+    const groupUserIds = new Set<number>();
+    for (const gId of linkedGroupIds) {
+      allMembers.filter(m => m.groupId === gId).forEach(m => groupUserIds.add(m.userId));
+    }
+    targetReports += groupUserIds.size * mult;
+    const directUserIds = schedUsers.filter(su => su.scheduleId === sched.id).map(su => su.userId);
+    targetReports += directUserIds.length * mult;
+  }
+
+  // Yearly target
+  const daysInYear = [...Array(12)].reduce((s, _, mi) => s + new Date(year, mi + 1, 0).getDate(), 0);
+  function freqMultiplierYear(freq: string): number {
+    switch (freq) {
+      case "daily":    return daysInYear;
+      case "weekly":   return 52;
+      case "biweekly": return 24;
+      case "monthly":  return 12;
+      default:         return 12;
+    }
+  }
+  let targetYearly = 0;
+  for (const sched of schedules) {
+    const mult = freqMultiplierYear(sched.frequency);
+    const linkedGroupIds = schedGroups.filter(sg => sg.scheduleId === sched.id).map(sg => sg.groupId);
+    if (sched.groupId && !linkedGroupIds.includes(sched.groupId)) linkedGroupIds.push(sched.groupId);
+    const groupUserIds = new Set<number>();
+    for (const gId of linkedGroupIds) {
+      allMembers.filter(m => m.groupId === gId).forEach(m => groupUserIds.add(m.userId));
+    }
+    targetYearly += groupUserIds.size * mult;
+    const directUserIds = schedUsers.filter(su => su.scheduleId === sched.id).map(su => su.userId);
+    targetYearly += directUserIds.length * mult;
+  }
+
+  res.json({ totalReports, targetReports, targetYearly, templateName, month, year });
+});
+
 // List templates (for dropdown in compliance dashboard)
 router.get("/templates", async (req, res) => {
   const cid = req.user!.companyId;
