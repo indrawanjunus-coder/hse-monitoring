@@ -56,10 +56,9 @@ export default function MapsPage() {
       const fd = new FormData();
       fd.append("name", name.trim());
       fd.append("file", file);
-      const token = localStorage.getItem("hse_token");
       const res = await fetch(`${BASE}/api/maps`, {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
         body: fd,
       });
       if (!res.ok) {
