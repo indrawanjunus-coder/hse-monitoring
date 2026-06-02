@@ -297,6 +297,10 @@ export default function DashboardPage() {
   const ytdClosed = ytd?.totalClosed ?? 0;
   const totalAllTime = ytd?.totalAllTime ?? 0;
 
+  // Resolve template names for dynamic card labels
+  const walkTalkName = templateList.find(t => String(t.id) === walkTalkId)?.name ?? "Walk & Talk Report";
+  const hazardTplName = templateList.find(t => String(t.id) === hazardTplId)?.name ?? "Hazard Identification Report";
+
   return (
     <div className="p-6 space-y-6">
       <PageHeader
@@ -433,7 +437,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {/* Card A: Total Walk & Talk Report */}
         <TemplateTotalCard
-          label="Total Walk & Talk Report"
+          label={`Total ${walkTalkName}`}
           templateId={walkTalkId}
           templateList={templateList}
           onChangeTemplate={setWalkTalkId}
@@ -445,7 +449,7 @@ export default function DashboardPage() {
 
         {/* Card B: Walk & Talk vs Target Bulanan */}
         <TemplateVsTargetCard
-          label="Walk & Talk Report vs Target Bulanan"
+          label={`${walkTalkName} vs Target Bulanan`}
           templateId={walkTalkId}
           templateList={templateList}
           onChangeTemplate={setWalkTalkId}
@@ -459,7 +463,7 @@ export default function DashboardPage() {
 
         {/* Card C: Hazard Report (IT Harian) vs Target */}
         <TemplateVsTargetCard
-          label="Hazard Identification Report vs Target Bulanan"
+          label={`${hazardTplName} vs Target Bulanan`}
           templateId={hazardTplId}
           templateList={templateList}
           onChangeTemplate={setHazardTplId}
