@@ -6,11 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 
 const API_BASE = "/api";
-function sysApi(token: string) {
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+function sysApi() {
   return {
     get: async <T,>(path: string): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { headers });
+      const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -44,13 +43,13 @@ function fmtDate(d: string) {
   });
 }
 
-export default function SysadminAudit({ token }: { token: string }) {
+export default function SysadminAudit() {
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
 
   const { data: logs = [], isLoading } = useQuery<AuditLog[]>({
     queryKey: ["sys-audit-logs"],
-    queryFn: () => sysApi(token).get<AuditLog[]>("/sysadmin/audit-logs?limit=500"),
+    queryFn: () => sysApi().get<AuditLog[]>("/sysadmin/audit-logs?limit=500"),
     refetchInterval: 30_000,
   });
 
@@ -73,7 +72,6 @@ export default function SysadminAudit({ token }: { token: string }) {
         <span className="text-xs text-gray-400">{filtered.length} entri</span>
       </div>
 
-      {/* Filters */}
       <div className="flex gap-3 mb-4">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-gray-400" />

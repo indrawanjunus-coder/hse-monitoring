@@ -9,16 +9,16 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const API_BASE = "/api";
-function sysApi(token: string) {
-  const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+function sysApi() {
+  const h = { "Content-Type": "application/json" };
   return {
     get: async <T,>(path: string): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { headers: h });
+      const res = await fetch(`${API_BASE}${path}`, { credentials: "include", headers: h });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     put: async <T,>(path: string, body: unknown): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { method: "PUT", headers: h, body: JSON.stringify(body) });
+      const res = await fetch(`${API_BASE}${path}`, { method: "PUT", credentials: "include", headers: h, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -46,7 +46,7 @@ function fmtRp(n: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(n);
 }
 
-export default function SysadminPayments({ token }: { token: string }) {
+export default function SysadminPayments() {
   const [statusFilter, setStatusFilter] = useState("pending");
   const [reviewTarget, setReviewTarget] = useState<Payment | null>(null);
   const [note, setNote] = useState("");
@@ -56,14 +56,14 @@ export default function SysadminPayments({ token }: { token: string }) {
 
   const { data: payments = [], isLoading } = useQuery<Payment[]>({
     queryKey: ["sys-payments", statusFilter],
-    queryFn: () => sysApi(token).get<Payment[]>(`/sysadmin/payments${statusFilter !== "all" ? `?status=${statusFilter}` : ""}`),
+    queryFn: () => sysApi().get<Payment[]>(`/sysadmin/payments${statusFilter !== "all" ? `?status=${statusFilter}` : ""}`),
   });
 
   const review = async (action: "approve" | "reject") => {
     if (!reviewTarget) return;
     setError(""); setLoading(true);
     try {
-      await sysApi(token).put(`/sysadmin/payments/${reviewTarget.id}/${action}`, { note });
+      await sysApi().put(`/sysadmin/payments/${reviewTarget.id}/${action}`, { note });
       qc.invalidateQueries({ queryKey: ["sys-payments"] });
       setReviewTarget(null);
       setNote("");

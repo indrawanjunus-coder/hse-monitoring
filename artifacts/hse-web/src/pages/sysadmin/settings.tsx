@@ -9,22 +9,23 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const API_BASE = "/api";
 
-function sysApi(token: string) {
-  const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+function sysApi() {
+  const h = { "Content-Type": "application/json" };
   return {
     get: async <T,>(path: string): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { headers: h });
+      const res = await fetch(`${API_BASE}${path}`, { credentials: "include", headers: h });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     put: async <T,>(path: string, body: unknown): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { method: "PUT", headers: h, body: JSON.stringify(body) });
+      const res = await fetch(`${API_BASE}${path}`, { method: "PUT", credentials: "include", headers: h, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     post: async <T,>(path: string, body?: unknown): Promise<T> => {
       const res = await fetch(`${API_BASE}${path}`, {
         method: "POST",
+        credentials: "include",
         headers: h,
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
@@ -34,7 +35,7 @@ function sysApi(token: string) {
     upload: async <T,>(path: string, formData: FormData): Promise<T> => {
       const res = await fetch(`${API_BASE}${path}`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
         body: formData,
       });
       if (!res.ok) throw new Error(await res.text());
@@ -52,8 +53,8 @@ interface PaymentGdrive {
 
 type PaymentMethod = "qris" | "transfer";
 
-export default function SysadminSettings({ token }: { token: string }) {
-  const api = sysApi(token);
+export default function SysadminSettings() {
+  const api = sysApi();
 
   // Landing theme state
   const [landingTheme, setLandingTheme] = useState<"default" | "arena">("default");
@@ -98,7 +99,7 @@ export default function SysadminSettings({ token }: { token: string }) {
       setGClientEmail(g.clientEmail);
       setGRootFolderId(g.rootFolderId);
     }).catch(() => {});
-  }, [token]);
+  }, []);
 
   const showMsg = (msg: string, isError = false) => {
     if (isError) { setError(msg); setSuccess(""); }

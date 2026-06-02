@@ -9,21 +9,21 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const API_BASE = "/api";
-function sysApi(token: string) {
-  const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+function sysApi() {
+  const h = { "Content-Type": "application/json" };
   return {
     get: async <T,>(path: string): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { headers: h });
+      const res = await fetch(`${API_BASE}${path}`, { credentials: "include", headers: h });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     put: async <T,>(path: string, body: unknown): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { method: "PUT", headers: h, body: JSON.stringify(body) });
+      const res = await fetch(`${API_BASE}${path}`, { method: "PUT", credentials: "include", headers: h, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     del: async (path: string) => {
-      const res = await fetch(`${API_BASE}${path}`, { method: "DELETE", headers: h });
+      const res = await fetch(`${API_BASE}${path}`, { method: "DELETE", credentials: "include", headers: h });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -46,8 +46,8 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-export default function SysadminTestimonials({ token }: { token: string }) {
-  const api = sysApi(token);
+export default function SysadminTestimonials() {
+  const api = sysApi();
   const qc = useQueryClient();
   const [editItem, setEditItem] = useState<Testimonial | null>(null);
   const [editForm, setEditForm] = useState({ content: "", authorName: "", authorRole: "", authorCompany: "", rating: 5 });
@@ -146,7 +146,6 @@ export default function SysadminTestimonials({ token }: { token: string }) {
         </div>
       )}
 
-      {/* Edit Dialog */}
       <Dialog open={!!editItem} onOpenChange={o => !o && setEditItem(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>

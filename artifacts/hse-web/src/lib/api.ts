@@ -1,14 +1,5 @@
 const API_BASE = "/api";
 
-function getToken(): string | null {
-  return localStorage.getItem("hse_token");
-}
-
-function authHeaders(): HeadersInit {
-  const token = getToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
 class ApiError extends Error {
   status: number;
   code?: string;
@@ -27,9 +18,9 @@ class ApiError extends Error {
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...authHeaders(),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
@@ -43,11 +34,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 async function upload<T>(path: string, formData: FormData): Promise<T> {
-  const token = getToken();
-  const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
-    headers,
+    credentials: "include",
     body: formData,
   });
   if (!res.ok) {

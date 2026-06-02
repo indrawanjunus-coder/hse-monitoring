@@ -9,26 +9,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const API_BASE = "/api";
-function sysApi(token: string) {
-  const h = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+function sysApi() {
+  const h = { "Content-Type": "application/json" };
   return {
     get: async <T,>(path: string): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { headers: h });
+      const res = await fetch(`${API_BASE}${path}`, { credentials: "include", headers: h });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     post: async <T,>(path: string, body: unknown): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { method: "POST", headers: h, body: JSON.stringify(body) });
+      const res = await fetch(`${API_BASE}${path}`, { method: "POST", credentials: "include", headers: h, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     put: async <T,>(path: string, body: unknown): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { method: "PUT", headers: h, body: JSON.stringify(body) });
+      const res = await fetch(`${API_BASE}${path}`, { method: "PUT", credentials: "include", headers: h, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     del: async (path: string) => {
-      const res = await fetch(`${API_BASE}${path}`, { method: "DELETE", headers: h });
+      const res = await fetch(`${API_BASE}${path}`, { method: "DELETE", credentials: "include", headers: h });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -94,8 +94,8 @@ const BILLING_TYPE_COLORS: Record<BillingType, string> = {
   yearly: "bg-purple-100 text-purple-700",
 };
 
-export default function SysadminPlans({ token }: { token: string }) {
-  const api = sysApi(token);
+export default function SysadminPlans() {
+  const api = sysApi();
   const qc = useQueryClient();
   const [dialog, setDialog] = useState<"create" | "edit" | null>(null);
   const [editTarget, setEditTarget] = useState<Plan | null>(null);
@@ -264,7 +264,6 @@ export default function SysadminPlans({ token }: { token: string }) {
         </div>
       )}
 
-      {/* Create / Edit Dialog */}
       <Dialog open={!!dialog} onOpenChange={o => !o && setDialog(null)}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -273,7 +272,6 @@ export default function SysadminPlans({ token }: { token: string }) {
           {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
           <div className="space-y-4">
 
-            {/* Billing type selector */}
             <div>
               <Label className="mb-2 block">Jenis Periode Langganan <span className="text-red-500">*</span></Label>
               <div className="grid grid-cols-3 gap-2">
@@ -331,7 +329,6 @@ export default function SysadminPlans({ token }: { token: string }) {
               />
             </div>
 
-            {/* Price input — only show if not free */}
             {form.billingType === "free" ? (
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 flex items-center gap-2">
                 <Infinity className="w-4 h-4" /> Paket gratis — tidak memerlukan pembayaran
@@ -360,7 +357,6 @@ export default function SysadminPlans({ token }: { token: string }) {
               </div>
             )}
 
-            {/* Trial duration — only for free plans */}
             {form.billingType === "free" && (
               <div>
                 <Label>Durasi Trial (bulan)</Label>

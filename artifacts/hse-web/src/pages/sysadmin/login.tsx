@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { api } from "@/lib/api";
 
-interface Props { onLogin: (token: string, user: { name: string; role: string }) => void; }
+interface Props { onLogin: (user: { name: string; role: string }) => void; }
 
 export default function SysadminLoginPage({ onLogin }: Props) {
   const [nik, setNik] = useState("");
@@ -19,9 +19,9 @@ export default function SysadminLoginPage({ onLogin }: Props) {
     setError("");
     setLoading(true);
     try {
-      const res = await api.post<{ token: string; user: { name: string; role: string } }>("/auth/login", { nik, password });
+      const res = await api.post<{ user: { name: string; role: string } }>("/auth/login", { nik, password });
       if (res.user.role !== "sysadmin") { setError("Akses hanya untuk sysadmin"); return; }
-      onLogin(res.token, res.user);
+      onLogin(res.user);
     } catch (err: any) {
       setError(err.message ?? "Login gagal");
     } finally {

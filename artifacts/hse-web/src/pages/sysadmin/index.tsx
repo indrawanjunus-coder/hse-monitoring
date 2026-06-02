@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { api } from "@/lib/api";
 import SysadminLoginPage from "./login";
 import SysadminLayout from "./layout";
 import SysadminCompanies from "./companies";
@@ -11,44 +12,49 @@ import SysadminAudit from "./audit";
 
 export type SysadminTab = "companies" | "payments" | "plans" | "testimonials" | "reports" | "settings" | "audit";
 
-function getSysToken() { return localStorage.getItem("sys_token"); }
-function getSysUser() {
-  const u = localStorage.getItem("sys_user");
-  return u ? JSON.parse(u) as { name: string; role: string } : null;
-}
-
 export default function SysadminApp() {
-  const [token, setToken] = useState<string | null>(getSysToken);
-  const [sysUser, setSysUser] = useState<{ name: string; role: string } | null>(getSysUser);
+  const [sysUser, setSysUser] = useState<{ name: string; role: string } | null>(null);
   const [tab, setTab] = useState<SysadminTab>("companies");
+  const [checking, setChecking] = useState(true);
 
-  const handleLogin = (tok: string, user: { name: string; role: string }) => {
-    localStorage.setItem("sys_token", tok);
-    localStorage.setItem("sys_user", JSON.stringify(user));
-    setToken(tok);
+  useEffect(() => {
+    api.get<{ name: string; role: string }>("/auth/me")
+      .then((u) => {
+        if (u.role === "sysadmin") setSysUser(u);
+        else setSysUser(null);
+      })
+      .catch(() => setSysUser(null))
+      .finally(() => setChecking(false));
+  }, []);
+
+  const handleLogin = (user: { name: string; role: string }) => {
     setSysUser(user);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("sys_token");
-    localStorage.removeItem("sys_user");
-    setToken(null);
+    api.post("/auth/logout", {}).catch(() => {});
     setSysUser(null);
   };
 
-  if (!token || !sysUser) {
+  if (checking) {
+    return <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <div className="text-slate-400 text-sm">Memuat...</div>
+    </div>;
+  }
+
+  if (!sysUser) {
     return <SysadminLoginPage onLogin={handleLogin} />;
   }
 
   return (
     <SysadminLayout user={sysUser} tab={tab} setTab={setTab} onLogout={handleLogout}>
-      {tab === "companies" && <SysadminCompanies token={token} />}
-      {tab === "payments" && <SysadminPayments token={token} />}
-      {tab === "plans" && <SysadminPlans token={token} />}
-      {tab === "testimonials" && <SysadminTestimonials token={token} />}
-      {tab === "reports" && <SysadminReports token={token} />}
-      {tab === "settings" && <SysadminSettings token={token} />}
-      {tab === "audit" && <SysadminAudit token={token} />}
+      {tab === "companies" && <SysadminCompanies />}
+      {tab === "payments" && <SysadminPayments />}
+      {tab === "plans" && <SysadminPlans />}
+      {tab === "testimonials" && <SysadminTestimonials />}
+      {tab === "reports" && <SysadminReports />}
+      {tab === "settings" && <SysadminSettings />}
+      {tab === "audit" && <SysadminAudit />}
     </SysadminLayout>
   );
 }

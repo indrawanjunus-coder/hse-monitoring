@@ -70,10 +70,9 @@ async function uploadAttachment(incidentId: number, file: File): Promise<void> {
   const fd = new FormData();
   fd.append("file", file);
   fd.append("incidentId", String(incidentId));
-  const token = localStorage.getItem("hse_token");
   const res = await fetch("/api/attachments/upload", {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    credentials: "include",
     body: fd,
   });
   if (!res.ok) {

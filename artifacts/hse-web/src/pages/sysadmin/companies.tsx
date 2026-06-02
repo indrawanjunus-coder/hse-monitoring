@@ -10,21 +10,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 
 const API_BASE = "/api";
-function sysApi(token: string) {
-  const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+function sysApi() {
+  const headers = { "Content-Type": "application/json" };
   return {
     get: async <T,>(path: string): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { headers });
+      const res = await fetch(`${API_BASE}${path}`, { credentials: "include", headers });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     put: async <T,>(path: string, body: unknown): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { method: "PUT", headers, body: JSON.stringify(body) });
+      const res = await fetch(`${API_BASE}${path}`, { method: "PUT", credentials: "include", headers, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
     post: async <T,>(path: string, body: unknown): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+      const res = await fetch(`${API_BASE}${path}`, { method: "POST", credentials: "include", headers, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -64,10 +64,9 @@ function fmt(d: string | null) {
 
 interface ActivateDialogProps {
   company: Company;
-  token: string;
   onClose: () => void;
 }
-function ActivateDialog({ company, token, onClose }: ActivateDialogProps) {
+function ActivateDialog({ company, onClose }: ActivateDialogProps) {
   const [plan, setPlan] = useState(company.plan || "monthly");
   const [months, setMonths] = useState("1");
   const [note, setNote] = useState("");
@@ -80,7 +79,7 @@ function ActivateDialog({ company, token, onClose }: ActivateDialogProps) {
     setError("");
     setLoading(true);
     try {
-      const res = await sysApi(token).post<ActivateResult>(`/sysadmin/companies/${company.id}/activate`, { plan, months: parseInt(months), note });
+      const res = await sysApi().post<ActivateResult>(`/sysadmin/companies/${company.id}/activate`, { plan, months: parseInt(months), note });
       setResult(res);
       qc.invalidateQueries({ queryKey: ["sys-companies"] });
     } catch (e: any) {
@@ -185,10 +184,9 @@ function ActivateDialog({ company, token, onClose }: ActivateDialogProps) {
 
 interface EditExpiryDialogProps {
   company: Company;
-  token: string;
   onClose: () => void;
 }
-function EditExpiryDialog({ company, token, onClose }: EditExpiryDialogProps) {
+function EditExpiryDialog({ company, onClose }: EditExpiryDialogProps) {
   const currentExpiry = company.subscriptionEndsAt
     ? new Date(company.subscriptionEndsAt).toISOString().slice(0, 10)
     : "";
@@ -203,7 +201,7 @@ function EditExpiryDialog({ company, token, onClose }: EditExpiryDialogProps) {
     setError("");
     setLoading(true);
     try {
-      await sysApi(token).post(`/sysadmin/companies/${company.id}/edit-expiry`, {
+      await sysApi().post(`/sysadmin/companies/${company.id}/edit-expiry`, {
         subscriptionEndsAt: new Date(expiryDate).toISOString(),
         note: note.trim() || undefined,
       });
@@ -261,10 +259,9 @@ function EditExpiryDialog({ company, token, onClose }: EditExpiryDialogProps) {
 
 interface ResendCredentialsDialogProps {
   company: Company;
-  token: string;
   onClose: () => void;
 }
-function ResendCredentialsDialog({ company, token, onClose }: ResendCredentialsDialogProps) {
+function ResendCredentialsDialog({ company, onClose }: ResendCredentialsDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<ResendResult | null>(null);
@@ -273,7 +270,7 @@ function ResendCredentialsDialog({ company, token, onClose }: ResendCredentialsD
     setError("");
     setLoading(true);
     try {
-      const res = await sysApi(token).post<ResendResult>(`/sysadmin/companies/${company.id}/resend-credentials`, {});
+      const res = await sysApi().post<ResendResult>(`/sysadmin/companies/${company.id}/resend-credentials`, {});
       setResult(res);
     } catch (e: any) {
       setError(e.message);
@@ -341,7 +338,7 @@ function ResendCredentialsDialog({ company, token, onClose }: ResendCredentialsD
   );
 }
 
-export default function SysadminCompanies({ token }: { token: string }) {
+export default function SysadminCompanies() {
   const [activateTarget, setActivateTarget] = useState<Company | null>(null);
   const [editExpiryTarget, setEditExpiryTarget] = useState<Company | null>(null);
   const [resendTarget, setResendTarget] = useState<Company | null>(null);
@@ -351,11 +348,11 @@ export default function SysadminCompanies({ token }: { token: string }) {
 
   const { data: companies = [], isLoading } = useQuery<Company[]>({
     queryKey: ["sys-companies"],
-    queryFn: () => sysApi(token).get<Company[]>("/sysadmin/companies"),
+    queryFn: () => sysApi().get<Company[]>("/sysadmin/companies"),
   });
 
   const suspend = useMutation({
-    mutationFn: (id: number) => sysApi(token).post(`/sysadmin/companies/${id}/suspend`, {}),
+    mutationFn: (id: number) => sysApi().post(`/sysadmin/companies/${id}/suspend`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["sys-companies"] }),
   });
 
@@ -381,7 +378,6 @@ export default function SysadminCompanies({ token }: { token: string }) {
         </h1>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[
           { label: "Total", value: stats.total, color: "text-gray-900" },
@@ -396,7 +392,6 @@ export default function SysadminCompanies({ token }: { token: string }) {
         ))}
       </div>
 
-      {/* Filters */}
       <div className="flex gap-3 mb-4">
         <Input placeholder="Cari perusahaan..." value={search} onChange={e => setSearch(e.target.value)} className="max-w-xs bg-white" />
         <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -410,7 +405,6 @@ export default function SysadminCompanies({ token }: { token: string }) {
         </Select>
       </div>
 
-      {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center text-gray-400">Memuat...</div>
@@ -510,21 +504,18 @@ export default function SysadminCompanies({ token }: { token: string }) {
       {activateTarget && (
         <ActivateDialog
           company={activateTarget}
-          token={token}
           onClose={() => setActivateTarget(null)}
         />
       )}
       {editExpiryTarget && (
         <EditExpiryDialog
           company={editExpiryTarget}
-          token={token}
           onClose={() => setEditExpiryTarget(null)}
         />
       )}
       {resendTarget && (
         <ResendCredentialsDialog
           company={resendTarget}
-          token={token}
           onClose={() => setResendTarget(null)}
         />
       )}

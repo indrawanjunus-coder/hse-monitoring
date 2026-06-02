@@ -4,11 +4,10 @@ import { BarChart2, TrendingUp, Building2, CreditCard } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const API_BASE = "/api";
-function sysApi(token: string) {
-  const h = { Authorization: `Bearer ${token}` };
+function sysApi() {
   return {
     get: async <T,>(path: string): Promise<T> => {
-      const res = await fetch(`${API_BASE}${path}`, { headers: h });
+      const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
       if (!res.ok) throw new Error(await res.text());
       return res.json();
     },
@@ -24,19 +23,19 @@ function fmt(d: string | null) {
   return new Date(d).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export default function SysadminReports({ token }: { token: string }) {
+export default function SysadminReports() {
   const now = new Date();
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(now.getFullYear()));
 
   const { data: companyReport } = useQuery({
     queryKey: ["sys-report-companies", month, year],
-    queryFn: () => sysApi(token).get<any>(`/sysadmin/reports/companies?month=${month}&year=${year}`),
+    queryFn: () => sysApi().get<any>(`/sysadmin/reports/companies?month=${month}&year=${year}`),
   });
 
   const { data: paymentReport } = useQuery({
     queryKey: ["sys-report-payments", month, year],
-    queryFn: () => sysApi(token).get<any>(`/sysadmin/reports/payments?month=${month}&year=${year}`),
+    queryFn: () => sysApi().get<any>(`/sysadmin/reports/payments?month=${month}&year=${year}`),
   });
 
   const months = [
@@ -70,7 +69,6 @@ export default function SysadminReports({ token }: { token: string }) {
         </div>
       </div>
 
-      {/* Company summary */}
       {companyReport?.summary && (
         <div className="mb-6">
           <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-4">
@@ -96,7 +94,6 @@ export default function SysadminReports({ token }: { token: string }) {
         </div>
       )}
 
-      {/* Payment summary */}
       {paymentReport?.summary && (
         <div className="mb-6">
           <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-4">
@@ -122,7 +119,6 @@ export default function SysadminReports({ token }: { token: string }) {
         </div>
       )}
 
-      {/* Company list for month */}
       {companyReport?.companies && companyReport.companies.length > 0 && (
         <div>
           <h2 className="font-semibold text-gray-900 mb-3">Perusahaan Terdaftar — {months[parseInt(month) - 1]} {year}</h2>

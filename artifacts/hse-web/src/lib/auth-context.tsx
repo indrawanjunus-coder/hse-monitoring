@@ -28,7 +28,6 @@ export interface PaywallInfo {
 
 interface AuthContextType {
   user: AuthUser | null;
-  token: string | null;
   isLoading: boolean;
   companySlug: string | null;
   paywallInfo: PaywallInfo | null;
@@ -38,29 +37,23 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function decodeToken(token: string): AuthUser | null {
-  try {
-    const payload = token.startsWith("hse_") ? token.slice(4) : token;
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
-}
-
 function getCompanySlugFromPath(): string | null {
   const m = window.location.pathname.match(/^\/c\/([^/]+)/);
   return m ? m[1]! : null;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem("hse_token"));
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    const t = localStorage.getItem("hse_token");
-    return t ? decodeToken(t) : null;
-  });
-  const [isLoading, setIsLoading] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [companySlug] = useState<string | null>(() => getCompanySlugFromPath());
   const [paywallInfo, setPaywallInfo] = useState<PaywallInfo | null>(null);
+
+  useEffect(() => {
+    api.get<AuthUser>("/auth/me")
+      .then((u) => setUser(u))
+      .catch(() => setUser(null))
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const login = useCallback(async (nik: string, password: string, slug?: string) => {
     setIsLoading(true);
@@ -68,12 +61,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const body: Record<string, string> = { nik, password };
       if (slug) body.companySlug = slug;
-      const res = await api.post<{ token: string; user: AuthUser }>("/auth/login", body);
-      localStorage.setItem("hse_token", res.token);
-      setToken(res.token);
+      const res = await api.post<{ user: AuthUser }>("/auth/login", body);
       setUser(res.user);
     } catch (err: any) {
-      // Handle 402 paywall errors
       if (err?.status === 402 || err?.code) {
         const info: PaywallInfo = {
           code: err.code ?? "SUBSCRIPTION_EXPIRED",
@@ -90,14 +80,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem("hse_token");
-    setToken(null);
+    api.post("/auth/logout", {}).catch(() => {});
     setUser(null);
     setPaywallInfo(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, companySlug, paywallInfo, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, companySlug, paywallInfo, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -72,8 +72,8 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-async function doDownload(endpoint: string, filename: string, token: string): Promise<void> {
-  const res = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } });
+async function doDownload(endpoint: string, filename: string): Promise<void> {
+  const res = await fetch(endpoint, { credentials: "include" });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: "Unduhan gagal" }));
     throw new Error((err as { error?: string }).error ?? "Unduhan gagal");
@@ -91,7 +91,6 @@ export default function BackupPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const token = localStorage.getItem("hse_token") ?? "";
   const now = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
 
   const { data: ghConfig, isLoading: ghLoading } = useQuery<GithubConfig>({
@@ -147,8 +146,7 @@ export default function BackupPage() {
     try {
       await doDownload(
         `/api/backup?format=${fmt.key}`,
-        `hse-backup-${fmt.key}-${now}.${fmt.ext}`,
-        token
+        `hse-backup-${fmt.key}-${now}.${fmt.ext}`
       );
       toast({ title: "Berhasil diunduh", description: `hse-backup-${fmt.key}-${now}.${fmt.ext}` });
     } catch (e: unknown) {
@@ -163,8 +161,7 @@ export default function BackupPage() {
     try {
       await doDownload(
         `/api/backup/zip`,
-        `hse-backup-${now}.zip`,
-        token
+        `hse-backup-${now}.zip`
       );
       toast({ title: "ZIP berhasil diunduh", description: `hse-backup-${now}.zip` });
     } catch (e: unknown) {

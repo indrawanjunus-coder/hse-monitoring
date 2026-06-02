@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, usersTable, departmentsTable, companiesTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
-import { authMiddleware, createToken, hashPassword, verifyPassword } from "../lib/auth";
+import { authMiddleware, createToken, setAuthCookie, clearAuthCookie, hashPassword, verifyPassword } from "../lib/auth";
 import { validateBody } from "../lib/validate";
 import { LoginBody } from "@workspace/api-zod";
 
@@ -75,6 +75,7 @@ router.post("/login", validateBody(LoginBody.extend({ companySlug: LoginBody.sha
 
   const tokenUser = { id: user.id, nik: user.nik, name: user.name, email: user.email ?? null, role: user.role, companyId: user.companyId ?? null };
   const token = createToken(tokenUser);
+  setAuthCookie(res, token);
 
   let companyInfo = null;
   if (user.companyId) {
@@ -82,7 +83,7 @@ router.post("/login", validateBody(LoginBody.extend({ companySlug: LoginBody.sha
     if (co) companyInfo = { id: co.id, slug: co.slug, name: co.name, plan: co.plan, status: co.status, subscriptionEndsAt: co.subscriptionEndsAt?.toISOString() ?? null };
   }
 
-  res.json({ token, user: { ...tokenUser, departmentId: user.departmentId, isHead: user.isHead, groupIds: [], createdAt: user.createdAt.toISOString(), company: companyInfo } });
+  res.json({ user: { ...tokenUser, departmentId: user.departmentId, isHead: user.isHead, groupIds: [], createdAt: user.createdAt.toISOString(), company: companyInfo } });
 });
 
 router.get("/me", authMiddleware, async (req, res) => {
@@ -107,6 +108,11 @@ router.get("/me", authMiddleware, async (req, res) => {
   }
 
   res.json({ id: u.id, nik: u.nik, name: u.name, email: u.email, role: u.role, departmentId: u.departmentId, departmentName, isHead: u.isHead, groupIds, createdAt: u.createdAt.toISOString(), companyId: u.companyId, company: companyInfo });
+});
+
+router.post("/logout", (req, res) => {
+  clearAuthCookie(res);
+  res.json({ success: true });
 });
 
 // Public: resolve company by slug

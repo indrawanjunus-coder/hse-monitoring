@@ -22,6 +22,8 @@ declare global {
   }
 }
 
+const COOKIE_NAME = "hse_token";
+
 function generateToken(user: AuthUser): string {
   const payload = JSON.stringify(user);
   const encoded = Buffer.from(payload).toString("base64");
@@ -43,13 +45,31 @@ export function createToken(user: AuthUser): string {
   return generateToken(user);
 }
 
+export const TOKEN_COOKIE_NAME = COOKIE_NAME;
+
+export function setAuthCookie(res: Response, token: string): void {
+  res.cookie(COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env["NODE_ENV"] === "production",
+    sameSite: "strict",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+}
+
+export function clearAuthCookie(res: Response): void {
+  res.clearCookie(COOKIE_NAME, {
+    httpOnly: true,
+    secure: process.env["NODE_ENV"] === "production",
+    sameSite: "strict",
+  });
+}
+
 export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const token = req.cookies?.[COOKIE_NAME];
+  if (!token) {
     res.status(401).json({ message: "Unauthorized" });
     return;
   }
-  const token = authHeader.slice(7);
   const user = verifyToken(token);
   if (!user) {
     res.status(401).json({ message: "Invalid token" });
@@ -60,11 +80,10 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 }
 
 export function sysadminMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  const token = req.cookies?.[COOKIE_NAME];
+  if (!token) {
     res.status(401).json({ message: "Unauthorized" }); return;
   }
-  const token = authHeader.slice(7);
   const user = verifyToken(token);
   if (!user || user.role !== "sysadmin") {
     res.status(403).json({ message: "Sysadmin access required" }); return;
