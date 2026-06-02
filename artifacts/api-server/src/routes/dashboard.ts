@@ -117,6 +117,41 @@ router.get("/summary", async (req, res) => {
   });
 });
 
+// YTD summary — per-month open/closed for the selected year
+router.get("/ytd", async (req, res) => {
+  const now = new Date();
+  const year = req.query.year ? parseInt(req.query.year as string) : now.getFullYear();
+  const cid = req.user!.companyId;
+
+  if (!cid && req.user!.role !== "sysadmin") {
+    res.status(403).json({ error: "Akses ditolak" }); return;
+  }
+
+  const allIncidents = cid
+    ? await db.select().from(incidentsTable).where(eq(incidentsTable.companyId, cid))
+    : await db.select().from(incidentsTable);
+
+  const yearPrefix = `${year}-`;
+  const yearIncidents = allIncidents.filter(i => i.incidentDate.startsWith(yearPrefix));
+
+  // Build per-month buckets
+  const months: { month: number; open: number; closed: number; total: number }[] = [];
+  for (let m = 1; m <= 12; m++) {
+    const prefix = `${year}-${String(m).padStart(2, "0")}`;
+    const mi = yearIncidents.filter(i => i.incidentDate.startsWith(prefix));
+    const closed = mi.filter(i => i.status === "closed").length;
+    const open = mi.filter(i => i.status === "open" || i.status === "in_progress").length;
+    months.push({ month: m, open, closed, total: mi.length });
+  }
+
+  const totalOpen = months.reduce((s, m) => s + m.open, 0);
+  const totalClosed = months.reduce((s, m) => s + m.closed, 0);
+  const totalIncidents = months.reduce((s, m) => s + m.total, 0);
+  const totalAllTime = allIncidents.length;
+
+  res.json({ year, months, totalOpen, totalClosed, totalIncidents, totalAllTime });
+});
+
 // Identifikasi Bahaya per Area
 router.get("/hazard-by-area", async (req, res) => {
   const now = new Date();
