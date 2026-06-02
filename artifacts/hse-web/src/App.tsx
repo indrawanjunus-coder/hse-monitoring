@@ -39,6 +39,7 @@ import WorkPermitScanPage from "@/pages/work-permits/scan";
 import MyApprovalsPage from "@/pages/work-permits/my-approvals";
 import WorkPermitTypesPage from "@/pages/master/work-permit-types";
 import MapsPage from "@/pages/master/maps";
+import LaggingIndicatorsPage from "@/pages/lagging-indicators";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -118,6 +119,7 @@ function MainApp() {
           <Route path="/work-permits/my-approvals" component={MyApprovalsPage} />
           <Route path="/work-permits/report" component={WorkPermitReportPage} />
           <Route path="/work-permits" component={WorkPermitsPage} />
+          <Route path="/lagging-indicators" component={LaggingIndicatorsPage} />
           <Route><Redirect to="/" /></Route>
         </Switch>
       </Layout>

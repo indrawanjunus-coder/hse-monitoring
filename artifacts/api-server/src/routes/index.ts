@@ -30,6 +30,7 @@ import backupRouter from "./backup";
 import workPermitTypesRouter from "./work-permit-types";
 import workPermitsRouter from "./work-permits";
 import mapsRouter from "./maps";
+import laggingIndicatorsRouter from "./lagging-indicators";
 
 const router: IRouter = Router();
 
@@ -64,5 +65,6 @@ router.use("/backup", backupRouter);
 router.use("/work-permit-types", workPermitTypesRouter);
 router.use("/work-permits", workPermitsRouter);
 router.use("/maps", mapsRouter);
+router.use("/lagging-indicators", laggingIndicatorsRouter);
 
 export default router;

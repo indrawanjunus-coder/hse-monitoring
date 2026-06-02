@@ -31,6 +31,7 @@ import {
   Database,
   FileCheck,
   QrCode,
+  TrendingDown,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
@@ -87,6 +88,7 @@ const navItems: NavItem[] = [
       { label: "Laporan Indikator HSE", href: "/reports/indicators", icon: <Target className="w-4 h-4" />, supervisorOrAdmin: true },
     ],
   },
+  { label: "Lagging Indicator", href: "/lagging-indicators", icon: <TrendingDown className="w-4 h-4" />, supervisorOrAdmin: true },
   { label: "Testimoni", href: "/testimonial", icon: <MessageSquare className="w-4 h-4" /> },
   {
     label: "Work Permit", href: "/work-permits", icon: <FileCheck className="w-4 h-4" />,

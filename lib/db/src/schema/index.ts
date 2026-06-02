@@ -31,3 +31,4 @@ export * from "./work-permit-scans";
 export * from "./work-permit-type-approvers";
 export * from "./work-permit-approvals";
 export * from "./maps";
+export * from "./lagging-indicators";

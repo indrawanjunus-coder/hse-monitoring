@@ -11,8 +11,9 @@ import {
 } from "recharts";
 import {
   AlertTriangle, TrendingUp, ChevronLeft, ChevronRight,
-  ClipboardList, ClipboardCheck, FileBarChart,
+  ClipboardList, ClipboardCheck, FileBarChart, Link as LinkIcon,
 } from "lucide-react";
+import { Link } from "wouter";
 
 // ---- Types ----
 interface DashboardSummary {
@@ -39,6 +40,12 @@ interface TemplateSummary {
 }
 
 interface TemplateItem { id: number; name: string; }
+
+interface LaggingData {
+  fatality: number; lti: number; mti: number;
+  firstAid: number; nearMisses: number; hazardId: number;
+  nonLtiDays: number; safeHours: number;
+}
 
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
 const MONTHS_FULL  = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -267,6 +274,13 @@ export default function DashboardPage() {
     }
   }, [templateList]);
 
+  // Lagging indicator query
+  const { data: lagging } = useQuery<LaggingData>({
+    queryKey: ["lagging-indicators", year],
+    queryFn: () => api.get(`/lagging-indicators?year=${year}`),
+    staleTime: 30_000,
+  });
+
   // Template summary queries
   const { data: walkTalkData, isLoading: walkTalkLoading } = useQuery<TemplateSummary>({
     queryKey: ["dashboard-tpl-summary", walkTalkId, month, year],
@@ -474,6 +488,58 @@ export default function DashboardPage() {
           icon={FileBarChart}
           color="orange"
         />
+      </div>
+
+      {/* ── Row 4: Lagging Indicator Pyramid ── */}
+      <div className="rounded-2xl border bg-white shadow-sm p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-base font-semibold text-slate-800">Lagging Indicator Pyramid</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Insiden keselamatan {year} · isi data di menu Lagging Indicator</p>
+          </div>
+          <Link href="/lagging-indicators">
+            <button className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline font-medium">
+              <LinkIcon className="w-3.5 h-3.5" /> Input Data
+            </button>
+          </Link>
+        </div>
+
+        <div className="flex flex-col lg:flex-row gap-8 items-center">
+          {/* Pyramid */}
+          <div className="flex-1 w-full max-w-lg mx-auto">
+            {[
+              { label: "Fatality", value: lagging?.fatality ?? 0, bg: "bg-red-800", text: "text-white", width: "w-[22%]" },
+              { label: "Lost Time Incident", value: lagging?.lti ?? 0, bg: "bg-red-500", text: "text-white", width: "w-[36%]" },
+              { label: "Medical Treatment Incident", value: lagging?.mti ?? 0, bg: "bg-orange-400", text: "text-white", width: "w-[50%]" },
+              { label: "First Aid", value: lagging?.firstAid ?? 0, bg: "bg-yellow-400", text: "text-slate-800", width: "w-[64%]" },
+              { label: "Near Misses", value: lagging?.nearMisses ?? 0, bg: "bg-blue-400", text: "text-white", width: "w-[78%]" },
+              { label: "Unsafe Conditions & Acts (Hazard ID)", value: lagging?.hazardId ?? 0, bg: "bg-blue-700", text: "text-white", width: "w-full" },
+            ].map((row, i) => (
+              <div key={i} className="flex items-center gap-3 mb-1.5">
+                <div className={`${row.width} flex items-center justify-center rounded-sm py-2 px-3 ${row.bg} transition-all ml-auto`}>
+                  <span className={`text-sm font-bold mr-2 ${row.text}`}>{row.value.toLocaleString()}</span>
+                </div>
+                <span className="text-xs text-slate-600 w-52 leading-tight flex-shrink-0">{row.label}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Non LTI Days + Safe Hours */}
+          <div className="flex flex-col gap-4 min-w-[200px] items-center lg:items-start">
+            <div className="text-center p-5 bg-slate-50 rounded-2xl border w-full">
+              <div className="text-6xl font-black text-slate-800 tracking-tight tabular-nums">
+                {(lagging?.nonLtiDays ?? 0).toLocaleString()}
+              </div>
+              <div className="text-sm font-semibold text-slate-600 mt-1">Non LTI Days</div>
+            </div>
+            <div className="text-center p-5 bg-slate-50 rounded-2xl border w-full">
+              <div className="text-6xl font-black text-slate-800 tracking-tight tabular-nums">
+                {(lagging?.safeHours ?? 0).toLocaleString()}
+              </div>
+              <div className="text-sm font-semibold text-slate-600 mt-1">Safe Hours</div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
