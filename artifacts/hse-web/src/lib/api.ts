@@ -27,6 +27,10 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (!res.ok) {
     const data = await res.json().catch(() => ({})) as Record<string, unknown>;
     const msg = (data.error || data.message || `HTTP ${res.status}`) as string;
+    // Dispatch paywall event for mid-session subscription expiry (auth-context listens)
+    if (res.status === 402 && data.code) {
+      window.dispatchEvent(new CustomEvent("hse:paywall", { detail: data }));
+    }
     throw new ApiError(msg, res.status, data);
   }
   if (res.status === 204) return undefined as T;

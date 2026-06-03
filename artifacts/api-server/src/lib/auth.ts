@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
-import { usersTable } from "@workspace/db/schema";
+import { usersTable, companiesTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { createHash, timingSafeEqual } from "crypto";
@@ -90,6 +90,65 @@ export function sysadminMiddleware(req: Request, res: Response, next: NextFuncti
   }
   req.user = user;
   next();
+}
+
+// ── Paywall (subscription) middleware ──────────────────────────────────────
+// Applied to all tenant-specific routes. Blocks expired/suspended companies.
+// Results are cached 60 seconds per companyId to avoid a DB hit per request.
+interface SubCacheEntry { ok: boolean; code?: string; exp: number }
+const subCache = new Map<number, SubCacheEntry>();
+
+/** Call this whenever sysadmin activates / approves payment for a company */
+export function invalidateSubCache(companyId: number): void {
+  subCache.delete(companyId);
+}
+
+export async function companySubscriptionMiddleware(
+  req: Request, res: Response, next: NextFunction,
+): Promise<void> {
+  const user = req.user;
+  // Sysadmin users and users without a companyId always pass through
+  if (!user || !user.companyId || user.role === "sysadmin") { next(); return; }
+
+  const cid = user.companyId;
+  const now = Date.now();
+  const cached = subCache.get(cid);
+  if (cached && cached.exp > now) {
+    if (!cached.ok) {
+      res.status(402).json({ message: "Akses ditolak: langganan tidak aktif", code: cached.code });
+      return;
+    }
+    next(); return;
+  }
+
+  try {
+    const [co] = await db
+      .select({ status: companiesTable.status, subscriptionEndsAt: companiesTable.subscriptionEndsAt, trialEndsAt: companiesTable.trialEndsAt })
+      .from(companiesTable).where(eq(companiesTable.id, cid));
+
+    if (!co) {
+      subCache.set(cid, { ok: false, code: "COMPANY_NOT_FOUND", exp: now + 60_000 });
+      res.status(402).json({ message: "Company tidak ditemukan", code: "COMPANY_NOT_FOUND" }); return;
+    }
+    if (co.status === "suspended") {
+      subCache.set(cid, { ok: false, code: "SUSPENDED", exp: now + 60_000 });
+      res.status(402).json({ message: "Akun ditangguhkan. Hubungi admin sistem.", code: "SUSPENDED" }); return;
+    }
+    if (co.status === "pending") {
+      subCache.set(cid, { ok: false, code: "PENDING_ACTIVATION", exp: now + 60_000 });
+      res.status(402).json({ message: "Akun menunggu aktivasi.", code: "PENDING_ACTIVATION" }); return;
+    }
+    const endsAt = co.subscriptionEndsAt ?? co.trialEndsAt;
+    if (endsAt && endsAt < new Date()) {
+      subCache.set(cid, { ok: false, code: "SUBSCRIPTION_EXPIRED", exp: now + 60_000 });
+      res.status(402).json({ message: "Langganan Anda telah berakhir.", code: "SUBSCRIPTION_EXPIRED" }); return;
+    }
+    subCache.set(cid, { ok: true, exp: now + 60_000 });
+    next();
+  } catch (err) {
+    // On DB error, fail open (don't block user) to avoid outage
+    next();
+  }
 }
 
 const BCRYPT_ROUNDS = 12;

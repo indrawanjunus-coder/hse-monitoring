@@ -97,9 +97,11 @@ function TemplateTotalCard({
   onChangeTemplate: (v: string) => void;
   data: TemplateSummary | undefined;
   isLoading: boolean;
-  month: number;
+  month: number; // 0 = yearly aggregate
   year: number;
 }) {
+  const isYearly = month === 0;
+  const periodLabel = isYearly ? `${year}` : `${MONTHS_FULL[month - 1]} ${year}`;
   return (
     <Card className="border-violet-100 bg-violet-50/30">
       <CardContent className="pt-4 pb-5">
@@ -126,14 +128,19 @@ function TemplateTotalCard({
         ) : (
           <>
             <div className="text-4xl font-bold text-violet-700">{data?.totalReports ?? 0}</div>
-            <p className="text-xs text-gray-500 mt-1">
-              laporan diisi pada {MONTHS_FULL[month - 1]} {year}
-            </p>
-            {(data?.targetYearly ?? 0) > 0 && (
-              <p className="text-xs text-gray-400 mt-0.5">
-                Target tahunan: <strong className="text-gray-600">{data!.targetYearly}</strong> laporan
-              </p>
-            )}
+            <p className="text-xs text-gray-500 mt-1">laporan diisi pada {periodLabel}</p>
+            {isYearly
+              ? (data?.targetYearly ?? 0) > 0 && (
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Target tahunan: <strong className="text-gray-600">{data!.targetYearly}</strong> laporan
+                  </p>
+                )
+              : (data?.targetYearly ?? 0) > 0 && (
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    Target tahunan: <strong className="text-gray-600">{data!.targetYearly}</strong> laporan
+                  </p>
+                )
+            }
           </>
         )}
       </CardContent>
@@ -209,7 +216,7 @@ function TemplateVsTargetCard({
             </div>
 
             <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>{MONTHS_FULL[month - 1]} {year}</span>
+              <span>{month === 0 ? year : `${MONTHS_FULL[month - 1]} ${year}`}</span>
               <span className={`font-semibold ${aboveStd ? "text-green-700" : "text-red-600"}`}>
                 Std {CLOSING_STANDARD}% {aboveStd ? "✓" : `(${pct - CLOSING_STANDARD}%)`}
               </span>
@@ -217,8 +224,8 @@ function TemplateVsTargetCard({
 
             {/* Target breakdown */}
             <p className="text-xs text-gray-400 mt-1.5">
-              Target bulanan: <strong className="text-gray-600">{target}</strong>
-              {(data?.targetYearly ?? 0) > 0 && (
+              {month === 0 ? "Target tahunan" : "Target bulanan"}: <strong className="text-gray-600">{target}</strong>
+              {month !== 0 && (data?.targetYearly ?? 0) > 0 && (
                 <span> · Target tahunan: <strong className="text-gray-600">{data!.targetYearly}</strong></span>
               )}
             </p>
@@ -232,6 +239,7 @@ function TemplateVsTargetCard({
 // ---- Main Page ----
 export default function DashboardPage() {
   const now = new Date();
+  const [mode, setMode]   = useState<"monthly" | "yearly">("monthly");
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear]   = useState(now.getFullYear());
 
@@ -241,6 +249,11 @@ export default function DashboardPage() {
 
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
   const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
+  const prevYear  = () => setYear(y => y - 1);
+  const nextYear  = () => setYear(y => y + 1);
+
+  // Effective month passed to template-summary: 0 = yearly aggregate
+  const tplMonth = mode === "yearly" ? 0 : month;
 
   // Core data
   const { data, isLoading } = useQuery<DashboardSummary>({
@@ -281,17 +294,17 @@ export default function DashboardPage() {
     staleTime: 30_000,
   });
 
-  // Template summary queries
+  // Template summary queries — tplMonth=0 triggers yearly aggregate in the API
   const { data: walkTalkData, isLoading: walkTalkLoading } = useQuery<TemplateSummary>({
-    queryKey: ["dashboard-tpl-summary", walkTalkId, month, year],
-    queryFn: () => api.get(`/dashboard/template-summary?templateId=${walkTalkId}&month=${month}&year=${year}`),
+    queryKey: ["dashboard-tpl-summary", walkTalkId, tplMonth, year],
+    queryFn: () => api.get(`/dashboard/template-summary?templateId=${walkTalkId}&month=${tplMonth}&year=${year}`),
     enabled: !!walkTalkId,
     staleTime: 30_000,
   });
 
   const { data: hazardTplData, isLoading: hazardTplLoading } = useQuery<TemplateSummary>({
-    queryKey: ["dashboard-tpl-summary", hazardTplId, month, year],
-    queryFn: () => api.get(`/dashboard/template-summary?templateId=${hazardTplId}&month=${month}&year=${year}`),
+    queryKey: ["dashboard-tpl-summary", hazardTplId, tplMonth, year],
+    queryFn: () => api.get(`/dashboard/template-summary?templateId=${hazardTplId}&month=${tplMonth}&year=${year}`),
     enabled: !!hazardTplId,
     staleTime: 30_000,
   });
@@ -321,97 +334,171 @@ export default function DashboardPage() {
         title="Dashboard HSE"
         subtitle="Monitor kesehatan, keselamatan, dan lingkungan"
         action={
-          <div className="flex items-center gap-2 bg-white border rounded-lg px-2 py-1">
-            <Button variant="ghost" size="sm" onClick={prevMonth}><ChevronLeft className="w-4 h-4" /></Button>
-            <span className="font-medium text-sm min-w-36 text-center">{MONTHS_FULL[month - 1]} {year}</span>
-            <Button variant="ghost" size="sm" onClick={nextMonth}><ChevronRight className="w-4 h-4" /></Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Mode toggle */}
+            <div className="flex rounded-lg border bg-white overflow-hidden">
+              <button
+                onClick={() => setMode("monthly")}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                  mode === "monthly" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                Per Bulan
+              </button>
+              <button
+                onClick={() => setMode("yearly")}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors border-l ${
+                  mode === "yearly" ? "bg-blue-600 text-white" : "text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                Tahunan
+              </button>
+            </div>
+
+            {/* Period navigator */}
+            {mode === "monthly" ? (
+              <div className="flex items-center gap-1 bg-white border rounded-lg px-2 py-1">
+                <Button variant="ghost" size="sm" onClick={prevMonth}><ChevronLeft className="w-4 h-4" /></Button>
+                <span className="font-medium text-sm min-w-36 text-center">{MONTHS_FULL[month - 1]} {year}</span>
+                <Button variant="ghost" size="sm" onClick={nextMonth}><ChevronRight className="w-4 h-4" /></Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 bg-white border rounded-lg px-2 py-1">
+                <Button variant="ghost" size="sm" onClick={prevYear}><ChevronLeft className="w-4 h-4" /></Button>
+                <span className="font-medium text-sm min-w-16 text-center">{year}</span>
+                <Button variant="ghost" size="sm" onClick={nextYear}><ChevronRight className="w-4 h-4" /></Button>
+              </div>
+            )}
           </div>
         }
       />
 
       {/* ── Row 1: Charts ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
-              Jumlah Temuan Open vs Close
-            </CardTitle>
-            <p className="text-xs text-gray-400">MTD — {MONTHS_FULL[month - 1]} {year} (per hari)</p>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <div className="h-56 flex items-center justify-center text-gray-400 text-sm">Memuat...</div>
-            ) : mtdChartData.length === 0 ? (
-              <div className="h-56 flex flex-col items-center justify-center text-gray-400">
-                <AlertTriangle className="w-8 h-8 mb-2 text-gray-300" />
-                <p className="text-sm">Tidak ada temuan pada bulan ini</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={mtdChartData} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis dataKey="day"   tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <YAxis                 tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #e5e7eb" }} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="Open"  fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={32} />
-                  <Bar dataKey="Close" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={32} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-            {!isLoading && mtdTotal > 0 && (
-              <div className="flex gap-4 mt-2 pt-2 border-t text-sm">
-                <span className="text-gray-500">Total: <strong className="text-gray-800">{mtdTotal}</strong></span>
-                <span className="text-red-600">Open: <strong>{data?.openIncidents ?? 0}</strong></span>
-                <span className="text-green-600">Close: <strong>{mtdClosed}</strong></span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      {mode === "monthly" ? (
+        /* Monthly: tampilkan MTD (harian) & YTD (bulanan) berdampingan */
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
+                Jumlah Temuan Open vs Close
+              </CardTitle>
+              <p className="text-xs text-gray-400">MTD — {MONTHS_FULL[month - 1]} {year} (per hari)</p>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="h-56 flex items-center justify-center text-gray-400 text-sm">Memuat...</div>
+              ) : mtdChartData.length === 0 ? (
+                <div className="h-56 flex flex-col items-center justify-center text-gray-400">
+                  <AlertTriangle className="w-8 h-8 mb-2 text-gray-300" />
+                  <p className="text-sm">Tidak ada temuan pada bulan ini</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={mtdChartData} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="day"   tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                    <YAxis                 tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #e5e7eb" }} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="Open"  fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                    <Bar dataKey="Close" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              {!isLoading && mtdTotal > 0 && (
+                <div className="flex gap-4 mt-2 pt-2 border-t text-sm">
+                  <span className="text-gray-500">Total: <strong className="text-gray-800">{mtdTotal}</strong></span>
+                  <span className="text-red-600">Open: <strong>{data?.openIncidents ?? 0}</strong></span>
+                  <span className="text-green-600">Close: <strong>{mtdClosed}</strong></span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" />
+                Jumlah Temuan Open vs Close
+              </CardTitle>
+              <p className="text-xs text-gray-400">YTD — {year} (per bulan)</p>
+            </CardHeader>
+            <CardContent>
+              {ytdLoading ? (
+                <div className="h-56 flex items-center justify-center text-gray-400 text-sm">Memuat...</div>
+              ) : ytdChartData.length === 0 ? (
+                <div className="h-56 flex flex-col items-center justify-center text-gray-400">
+                  <AlertTriangle className="w-8 h-8 mb-2 text-gray-300" />
+                  <p className="text-sm">Tidak ada temuan pada tahun ini</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={ytdChartData} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="bulan" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                    <YAxis                 tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                    <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #e5e7eb" }} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="Open"  fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                    <Bar dataKey="Close" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+              {!ytdLoading && ytdTotal > 0 && (
+                <div className="flex gap-4 mt-2 pt-2 border-t text-sm">
+                  <span className="text-gray-500">Total: <strong className="text-gray-800">{ytdTotal}</strong></span>
+                  <span className="text-red-600">Open: <strong>{ytd?.totalOpen ?? 0}</strong></span>
+                  <span className="text-green-600">Close: <strong>{ytdClosed}</strong></span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        /* Yearly: tampilkan hanya YTD (per bulan) full-width */
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 inline-block" />
-              Jumlah Temuan Open vs Close
+              Jumlah Temuan Open vs Close — Semua Bulan
             </CardTitle>
             <p className="text-xs text-gray-400">YTD — {year} (per bulan)</p>
           </CardHeader>
           <CardContent>
             {ytdLoading ? (
-              <div className="h-56 flex items-center justify-center text-gray-400 text-sm">Memuat...</div>
+              <div className="h-64 flex items-center justify-center text-gray-400 text-sm">Memuat...</div>
             ) : ytdChartData.length === 0 ? (
-              <div className="h-56 flex flex-col items-center justify-center text-gray-400">
+              <div className="h-64 flex flex-col items-center justify-center text-gray-400">
                 <AlertTriangle className="w-8 h-8 mb-2 text-gray-300" />
-                <p className="text-sm">Tidak ada temuan pada tahun ini</p>
+                <p className="text-sm">Tidak ada temuan pada tahun {year}</p>
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={220}>
+              <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={ytdChartData} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                  <XAxis dataKey="bulan" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                  <YAxis                 tick={{ fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                  <XAxis dataKey="bulan" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                  <YAxis                 tick={{ fontSize: 12 }} tickLine={false} axisLine={false} allowDecimals={false} />
                   <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #e5e7eb" }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="Open"  fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={32} />
-                  <Bar dataKey="Close" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={32} />
+                  <Bar dataKey="Open"  fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={48} />
+                  <Bar dataKey="Close" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={48} />
                 </BarChart>
               </ResponsiveContainer>
             )}
             {!ytdLoading && ytdTotal > 0 && (
               <div className="flex gap-4 mt-2 pt-2 border-t text-sm">
-                <span className="text-gray-500">Total: <strong className="text-gray-800">{ytdTotal}</strong></span>
+                <span className="text-gray-500">Total YTD: <strong className="text-gray-800">{ytdTotal}</strong></span>
                 <span className="text-red-600">Open: <strong>{ytd?.totalOpen ?? 0}</strong></span>
                 <span className="text-green-600">Close: <strong>{ytdClosed}</strong></span>
               </div>
             )}
           </CardContent>
         </Card>
-      </div>
+      )}
 
       {/* ── Row 2: Hazard KPI Cards ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div className={`grid grid-cols-1 gap-5 ${mode === "monthly" ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
         {/* Total Hazard Identification (from incidents table) */}
         <Card className="border-blue-100 bg-blue-50/40">
           <CardContent className="pt-5 pb-5">
@@ -425,23 +512,30 @@ export default function DashboardPage() {
             <div className="text-4xl font-bold text-blue-700">{totalAllTime}</div>
             <div className="mt-2 text-xs text-gray-500 flex gap-3">
               <span>YTD {year}: <strong className="text-gray-700">{ytdTotal}</strong></span>
-              <span>{MONTHS_SHORT[month - 1]}: <strong className="text-gray-700">{mtdTotal}</strong></span>
+              {mode === "monthly" && (
+                <span>{MONTHS_SHORT[month - 1]}: <strong className="text-gray-700">{mtdTotal}</strong></span>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Closing Rate MTD */}
-        <ClosingRateCard
-          title="% Closing Rate MTD"
-          subtitle={`${MONTHS_FULL[month - 1]} ${year} · Standar ≥ ${CLOSING_STANDARD}%`}
-          closed={mtdClosed}
-          total={mtdTotal}
-        />
+        {/* Closing Rate MTD — hanya tampil di mode monthly */}
+        {mode === "monthly" && (
+          <ClosingRateCard
+            title="% Closing Rate MTD"
+            subtitle={`${MONTHS_FULL[month - 1]} ${year} · Standar ≥ ${CLOSING_STANDARD}%`}
+            closed={mtdClosed}
+            total={mtdTotal}
+          />
+        )}
 
         {/* Closing Rate YTD */}
         <ClosingRateCard
           title="% Closing Rate YTD"
-          subtitle={`${year} s/d ${MONTHS_SHORT[month - 1]} · Standar ≥ ${CLOSING_STANDARD}%`}
+          subtitle={mode === "monthly"
+            ? `${year} s/d ${MONTHS_SHORT[month - 1]} · Standar ≥ ${CLOSING_STANDARD}%`
+            : `${year} (semua bulan) · Standar ≥ ${CLOSING_STANDARD}%`
+          }
           closed={ytdClosed}
           total={ytdTotal}
         />
@@ -457,19 +551,19 @@ export default function DashboardPage() {
           onChangeTemplate={setWalkTalkId}
           data={walkTalkData}
           isLoading={walkTalkLoading}
-          month={month}
+          month={tplMonth}
           year={year}
         />
 
-        {/* Card B: Walk & Talk vs Target Bulanan */}
+        {/* Card B: Walk & Talk vs Target */}
         <TemplateVsTargetCard
-          label={`${walkTalkName} vs Target Bulanan`}
+          label={`${walkTalkName} vs ${mode === "yearly" ? "Target Tahunan" : "Target Bulanan"}`}
           templateId={walkTalkId}
           templateList={templateList}
           onChangeTemplate={setWalkTalkId}
           data={walkTalkData}
           isLoading={walkTalkLoading}
-          month={month}
+          month={tplMonth}
           year={year}
           icon={ClipboardCheck}
           color="violet"
@@ -477,13 +571,13 @@ export default function DashboardPage() {
 
         {/* Card C: Hazard Report (IT Harian) vs Target */}
         <TemplateVsTargetCard
-          label={`${hazardTplName} vs Target Bulanan`}
+          label={`${hazardTplName} vs ${mode === "yearly" ? "Target Tahunan" : "Target Bulanan"}`}
           templateId={hazardTplId}
           templateList={templateList}
           onChangeTemplate={setHazardTplId}
           data={hazardTplData}
           isLoading={hazardTplLoading}
-          month={month}
+          month={tplMonth}
           year={year}
           icon={FileBarChart}
           color="orange"

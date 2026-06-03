@@ -55,6 +55,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setIsLoading(false));
   }, []);
 
+  // Handle mid-session subscription expiry: API returns 402, show paywall
+  useEffect(() => {
+    const handlePaywall = (e: Event) => {
+      const detail = (e as CustomEvent<Record<string, unknown>>).detail;
+      if (detail?.code && typeof detail.code === "string") {
+        const allowedCodes = ["SUBSCRIPTION_EXPIRED", "PENDING_ACTIVATION", "SUSPENDED"];
+        if (allowedCodes.includes(detail.code)) {
+          setPaywallInfo({
+            code: detail.code as PaywallInfo["code"],
+            message: (detail.message as string) ?? "Langganan tidak aktif",
+            company: detail.company as PaywallInfo["company"],
+          });
+          setUser(null);
+        }
+      }
+    };
+    window.addEventListener("hse:paywall", handlePaywall);
+    return () => window.removeEventListener("hse:paywall", handlePaywall);
+  }, []);
+
   const login = useCallback(async (nik: string, password: string, slug?: string) => {
     setIsLoading(true);
     setPaywallInfo(null);

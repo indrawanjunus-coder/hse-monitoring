@@ -380,18 +380,32 @@ router.get("/template-compliance", async (req, res) => {
 });
 
 // Template summary — aggregate total actual vs target for one template
+// Pass month=0 (or omit) for yearly totals instead of a specific month
 router.get("/template-summary", async (req, res) => {
   const now = new Date();
   const templateId = req.query.templateId ? parseInt(req.query.templateId as string) : null;
-  const month = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
+  const monthParam = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
   const year  = req.query.year  ? parseInt(req.query.year  as string) : now.getFullYear();
+  const isYearly = monthParam === 0; // month=0 means return yearly aggregated data
+  const month = isYearly ? 1 : monthParam; // fallback for calculations that need a valid month
 
   if (!templateId) { res.json({ totalReports: 0, targetReports: 0, templateName: null }); return; }
 
   const daysInMonth = new Date(year, month, 0).getDate();
-  const prefix = `${year}-${String(month).padStart(2, "0")}`;
+  // For monthly: filter by year-month prefix; for yearly: filter by year prefix
+  const prefix = isYearly ? `${year}-` : `${year}-${String(month).padStart(2, "0")}`;
 
   function freqMultiplier(freq: string): number {
+    if (isYearly) {
+      const daysInYear = [...Array(12)].reduce((s, _, mi) => s + new Date(year, mi + 1, 0).getDate(), 0);
+      switch (freq) {
+        case "daily":    return daysInYear;
+        case "weekly":   return 52;
+        case "biweekly": return 24;
+        case "monthly":  return 12;
+        default:         return 12;
+      }
+    }
     switch (freq) {
       case "daily":    return daysInMonth;
       case "weekly":   return 4;

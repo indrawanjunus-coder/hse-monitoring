@@ -2,7 +2,7 @@ import { Router } from "express";
 import { randomBytes } from "node:crypto";
 import { db, companiesTable, paymentsTable, usersTable, systemSettingsTable, testimonialsTable, plansTable, auditLogsTable, gdriveSettingsTable } from "@workspace/db";
 import { eq, desc, and, gte, lte, sql, isNull } from "drizzle-orm";
-import { sysadminMiddleware, hashPassword } from "../lib/auth";
+import { sysadminMiddleware, hashPassword, invalidateSubCache } from "../lib/auth";
 import { uploadToGdrive } from "../lib/gdrive";
 import { enforcePlanLimits } from "../lib/plan-limits";
 import { writeAuditLog } from "../lib/audit-log";
@@ -140,6 +140,9 @@ router.post("/companies/:id/activate", async (req, res) => {
     req,
   });
 
+  // Invalidate paywall cache so the company can access API immediately after activation
+  invalidateSubCache(id);
+
   res.json({ success: true, company: updated, enforced, adminProvisioned: adminResult });
 });
 
@@ -194,6 +197,7 @@ router.post("/companies/:id/resend-credentials", async (req, res) => {
 
 router.post("/companies/:id/suspend", async (req, res) => {
   const id = Number(req.params.id);
+  invalidateSubCache(id); // Ensure suspended state is seen immediately
   
   const [co] = await db.select().from(companiesTable).where(eq(companiesTable.id, id));
   const [updated] = await db.update(companiesTable).set({ status: "suspended", updatedAt: new Date() }).where(eq(companiesTable.id, id)).returning();
@@ -298,6 +302,8 @@ router.put("/payments/:id/approve", async (req, res) => {
     const [payment] = await db.select().from(paymentsTable).where(eq(paymentsTable.id, id));
     // Enforce plan limits after plan change (outside tx — reads are safe)
     await enforcePlanLimits(company.id);
+    // Invalidate paywall cache so company can access API immediately after approval
+    invalidateSubCache(company.id);
     adminResult = await provisionCompanyAdmin(company);
     await writeAuditLog({
       action: "APPROVE_PAYMENT",

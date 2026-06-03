@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { companySubscriptionMiddleware } from "../lib/auth";
 import healthRouter from "./health";
 import authRouter from "./auth";
 import usersRouter from "./users";
@@ -34,8 +35,18 @@ import laggingIndicatorsRouter from "./lagging-indicators";
 
 const router: IRouter = Router();
 
+// ── Public / auth routes — NO subscription check ───────────────────────────
 router.use(healthRouter);
-router.use("/auth", authRouter);
+router.use("/auth", authRouter);           // login, logout, register, /me
+router.use("/sysadmin", sysadminRouter);   // sysadminMiddleware handles auth
+router.use("/payments", companyPaymentsRouter); // allow expired companies to submit proof
+router.use("/plans", plansRouter);         // public pricing info
+router.use("/testimonials", testimonialsRouter); // public testimonials
+
+// ── Paywall gate — all routes below require active subscription ─────────────
+router.use(companySubscriptionMiddleware);
+
+// ── Tenant-isolated authenticated routes ───────────────────────────────────
 router.use("/users", usersRouter);
 router.use("/categories", categoriesRouter);
 router.use("/groups", groupsRouter);
@@ -57,10 +68,6 @@ router.use("/settings/gdrive", gdriveSettingsRouter);
 router.use("/attachments", attachmentsRouter);
 router.use("/incidents/:incidentId/comments", incidentCommentsRouter);
 router.use("/incidents/:incidentId/escalations", incidentEscalationsRouter);
-router.use("/sysadmin", sysadminRouter);
-router.use("/payments", companyPaymentsRouter);
-router.use("/testimonials", testimonialsRouter);
-router.use("/plans", plansRouter);
 router.use("/backup", backupRouter);
 router.use("/work-permit-types", workPermitTypesRouter);
 router.use("/work-permits", workPermitsRouter);

@@ -63,6 +63,7 @@ export async function autoMigrate() {
       { table: "preventive_actions", column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
       { table: "smtp_settings",      column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
       { table: "gdrive_settings",    column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
+      { table: "departments",        column: "company_id", definition: "INTEGER REFERENCES companies(id)" },
       { table: "incidents",          column: "map_id",      definition: "INTEGER" },
       { table: "incidents",          column: "map_markers",  definition: "TEXT" },
       { table: "inspections",        column: "map_id",      definition: "INTEGER" },
@@ -99,7 +100,8 @@ export async function autoMigrate() {
       const tenantTables = [
         "users", "incidents", "categories", "plants", "groups",
         "actions", "incident_types", "schedules", "templates",
-        "indicators", "preventive_actions", "smtp_settings", "gdrive_settings"
+        "indicators", "preventive_actions", "smtp_settings", "gdrive_settings",
+        "departments"
       ];
 
       for (const t of tenantTables) {
