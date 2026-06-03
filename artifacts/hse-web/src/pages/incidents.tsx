@@ -1016,14 +1016,14 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
               {incident.mapName && <span className="font-normal text-gray-500 ml-1">· {incident.mapName}</span>}
               <span className="ml-auto font-normal text-gray-400">{markers.length} titik lokasi</span>
             </p>
-            <div className="relative bg-gray-200 rounded-md overflow-hidden border border-gray-300" style={{ height: 340 }}>
+            <div className="relative bg-gray-100 rounded-md overflow-hidden border border-gray-300" style={{ height: 460 }}>
               <img
                 src={`${BASE}/api/maps/${incident.mapId}/image`}
                 alt={incident.mapName ?? "Map"}
                 style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", userSelect: "none" }}
                 draggable={false}
               />
-              <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+              <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 10 }}>
                 {markers.map((m) => (
                   <div
                     key={m.id}
@@ -1032,12 +1032,12 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
                       left: `${m.x}%`,
                       top: `${m.y}%`,
                       transform: "translate(-50%, -50%)",
-                      width: 22,
-                      height: 22,
+                      width: 14,
+                      height: 14,
                       backgroundColor: MARKER_COLORS[m.color] ?? "#ef4444",
-                      border: "2.5px solid white",
-                      boxShadow: "0 0 0 1.5px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.4)",
-                      borderRadius: 4,
+                      border: "2px solid white",
+                      boxShadow: "0 0 0 1.5px rgba(0,0,0,0.4), 0 2px 5px rgba(0,0,0,0.35)",
+                      borderRadius: 3,
                       zIndex: 20,
                     }}
                   />
