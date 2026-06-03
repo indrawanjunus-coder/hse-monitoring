@@ -3,7 +3,7 @@ import multer from "multer";
 import { db, mapsTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
-import { uploadMapToDrive, deleteFromDrive } from "../lib/gdrive";
+import { uploadMapToDrive, deleteFromDrive, downloadFromDrive } from "../lib/gdrive";
 
 const router = Router();
 router.use(authMiddleware);
@@ -91,6 +91,33 @@ router.get("/:id/file", async (req, res) => {
     res.redirect(redirectUrl);
   } catch (err: any) {
     res.status(500).json({ error: "Gagal mengambil file map" });
+  }
+});
+
+// GET /maps/:id/image — server-side proxy: downloads from Drive and streams to browser
+// Bypasses browser CORS/redirect issues with Google Drive direct URLs
+router.get("/:id/image", async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const user = req.user!;
+    const cid = user.companyId;
+
+    const where = cid
+      ? and(eq(mapsTable.id, id), eq(mapsTable.companyId, cid))
+      : eq(mapsTable.id, id);
+
+    const [map] = await db.select().from(mapsTable).where(where);
+    if (!map) { res.status(404).json({ error: "Map tidak ditemukan" }); return; }
+    if (!map.driveFileId) { res.status(404).json({ error: "File map belum tersedia" }); return; }
+    if (!cid) { res.status(403).json({ error: "Akses ditolak" }); return; }
+
+    const { stream, mimeType } = await downloadFromDrive(map.driveFileId, cid);
+
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    (stream as any).pipe(res);
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message ?? "Gagal mengambil file map" });
   }
 });
 

@@ -245,6 +245,30 @@ async function getGdriveClientForCompany(companyId: number) {
 }
 
 /**
+ * Download a file from Google Drive using the Drive API (server-side, authenticated).
+ * Returns the readable stream and MIME type so the caller can pipe it to the HTTP response.
+ */
+export async function downloadFromDrive(
+  driveFileId: string,
+  companyId: number,
+): Promise<{ stream: NodeJS.ReadableStream; mimeType: string }> {
+  const { drive } = await getGdriveClientForCompany(companyId);
+
+  // First get file metadata to know the MIME type
+  const meta = await drive.files.get(
+    { fileId: driveFileId, fields: "mimeType", supportsAllDrives: true },
+  );
+  const mimeType = (meta.data as any).mimeType ?? "application/octet-stream";
+
+  // Download the actual file content as a stream
+  const response = await drive.files.get(
+    { fileId: driveFileId, alt: "media", supportsAllDrives: true } as any,
+    { responseType: "stream" },
+  );
+  return { stream: (response as any).data as NodeJS.ReadableStream, mimeType };
+}
+
+/**
  * Upload map file (floor plan / site map) to GDrive.
  * Files are stored under: Root → Maps → {filename}
  * Folder "Maps" is created automatically if it does not exist.

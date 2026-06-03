@@ -8,6 +8,8 @@ import { MapPin, Trash2 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 export interface Marker {
   id: string;
   x: number;
@@ -39,11 +41,13 @@ function generateId() {
 }
 
 function MapCanvas({
+  mapId,
   driveFileId,
   fileType,
   markers,
   onMarkersChange,
 }: {
+  mapId: number;
   driveFileId: string;
   fileType: string;
   markers: Marker[];
@@ -52,9 +56,11 @@ function MapCanvas({
   const [selectedColor, setSelectedColor] = useState<Marker["color"]>("red");
   const overlayRef = useRef<HTMLDivElement>(null);
 
+  // For images: use server-side proxy to avoid Google Drive CORS/redirect issues
+  // For PDFs: use Google Drive's embeddable preview iframe (works natively)
   const displayUrl = fileType === "pdf"
     ? `https://drive.google.com/file/d/${driveFileId}/preview`
-    : `https://drive.google.com/uc?export=view&id=${driveFileId}`;
+    : `${BASE}/api/maps/${mapId}/image`;
 
   const handleOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -301,6 +307,7 @@ export function MapPicker({
               const m = maps.find(x => x.id === draftMapId);
               return m?.driveFileId ? (
                 <MapCanvas
+                  mapId={m.id}
                   driveFileId={m.driveFileId}
                   fileType={m.fileType}
                   markers={draftMarkers}
