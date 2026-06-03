@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { MapPicker, type MapSelection } from "@/components/map-picker";
+import { MapPicker, type MapSelection, type Marker } from "@/components/map-picker";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useSearch } from "wouter";
 import { api } from "@/lib/api";
@@ -21,6 +21,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { Pagination } from "@/components/pagination";
 import { Badge } from "@/components/ui/badge";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const MARKER_COLORS: Record<string, string> = {
+  red: "#ef4444",
+  yellow: "#eab308",
+  green: "#22c55e",
+};
 
 async function compressImage(file: File, maxSizeBytes: number, onStatus?: (s: string) => void): Promise<File> {
   return new Promise((resolve, reject) => {
@@ -122,6 +130,9 @@ interface Incident {
   escalationLevel?: number;
   createdAt?: string;
   attachments?: Attachment[];
+  mapId?: number | null;
+  mapMarkers?: string | null;
+  mapName?: string | null;
 }
 
 interface EscalationRecord {
@@ -991,6 +1002,51 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
       {(!canUpdate || incident.status === "closed") && (
         <DialogFooter><Button variant="outline" onClick={onClose}>Tutup</Button></DialogFooter>
       )}
+
+      {/* Lokasi di Peta */}
+      {incident.mapId && incident.mapMarkers && (() => {
+        let markers: Marker[] = [];
+        try { markers = JSON.parse(incident.mapMarkers!); } catch {}
+        if (markers.length === 0) return null;
+        return (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+            <p className="text-xs font-semibold text-gray-700 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-red-500" />
+              Lokasi Kejadian di Peta
+              {incident.mapName && <span className="font-normal text-gray-500 ml-1">· {incident.mapName}</span>}
+              <span className="ml-auto font-normal text-gray-400">{markers.length} titik lokasi</span>
+            </p>
+            <div className="relative bg-gray-200 rounded-md overflow-hidden border border-gray-300" style={{ height: 340 }}>
+              <img
+                src={`${BASE}/api/maps/${incident.mapId}/image`}
+                alt={incident.mapName ?? "Map"}
+                style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", userSelect: "none" }}
+                draggable={false}
+              />
+              <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+                {markers.map((m) => (
+                  <div
+                    key={m.id}
+                    style={{
+                      position: "absolute",
+                      left: `${m.x}%`,
+                      top: `${m.y}%`,
+                      transform: "translate(-50%, -50%)",
+                      width: 22,
+                      height: 22,
+                      backgroundColor: MARKER_COLORS[m.color] ?? "#ef4444",
+                      border: "2.5px solid white",
+                      boxShadow: "0 0 0 1.5px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.4)",
+                      borderRadius: 4,
+                      zIndex: 20,
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Lampiran */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">

@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
   db, incidentsTable, usersTable, plantsTable, categoriesTable, actionsTable, groupsTable,
   groupMembersTable, preventiveActionsTable, categoryGroupsTable, categoryUsersTable,
-  incidentAttachmentsTable,
+  incidentAttachmentsTable, mapsTable,
 } from "@workspace/db";
 import { eq, desc, inArray, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
@@ -41,6 +41,7 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
   const [preventiveAction] = inc.preventiveActionId ? await db.select().from(preventiveActionsTable).where(eq(preventiveActionsTable.id, inc.preventiveActionId)) : [undefined];
   const [assignedGroup] = inc.assignedGroupId ? await db.select().from(groupsTable).where(eq(groupsTable.id, inc.assignedGroupId)) : [undefined];
   const [assignedUser] = (inc as any).assignedUserId ? await db.select().from(usersTable).where(eq(usersTable.id, (inc as any).assignedUserId)) : [undefined];
+  const [map] = inc.mapId ? await db.select({ name: mapsTable.name }).from(mapsTable).where(eq(mapsTable.id, inc.mapId)) : [undefined];
 
   let picMembers: { id: number; name: string; email: string }[] = [];
   if (inc.assignedGroupId) {
@@ -67,6 +68,7 @@ async function formatIncident(inc: typeof incidentsTable.$inferSelect) {
     preventiveActionName: preventiveAction?.name ?? null,
     assignedGroupName: assignedGroup?.name ?? null,
     assignedUserName: assignedUser?.name ?? null,
+    mapName: map?.name ?? null,
     picMembers,
     attachments,
     createdAt: inc.createdAt.toISOString(),
