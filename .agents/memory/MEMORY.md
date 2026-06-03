@@ -1,0 +1,1 @@
+- [Dashboard yearly target bug fix](yearly-target-fix.md) — template-summary yearly target must use schedule creation date, not fixed 52/24/12 multipliers

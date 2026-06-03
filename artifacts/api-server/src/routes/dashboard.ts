@@ -386,32 +386,74 @@ router.get("/template-summary", async (req, res) => {
   const templateId = req.query.templateId ? parseInt(req.query.templateId as string) : null;
   const monthParam = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
   const year  = req.query.year  ? parseInt(req.query.year  as string) : now.getFullYear();
-  const isYearly = monthParam === 0; // month=0 means return yearly aggregated data
-  const month = isYearly ? 1 : monthParam; // fallback for calculations that need a valid month
+  const isYearly = monthParam === 0;
+  const month = isYearly ? 1 : monthParam;
 
   if (!templateId) { res.json({ totalReports: 0, targetReports: 0, templateName: null }); return; }
 
   const daysInMonth = new Date(year, month, 0).getDate();
-  // For monthly: filter by year-month prefix; for yearly: filter by year prefix
   const prefix = isYearly ? `${year}-` : `${year}-${String(month).padStart(2, "0")}`;
 
-  function freqMultiplier(freq: string): number {
-    if (isYearly) {
-      const daysInYear = [...Array(12)].reduce((s, _, mi) => s + new Date(year, mi + 1, 0).getDate(), 0);
-      switch (freq) {
-        case "daily":    return daysInYear;
-        case "weekly":   return 52;
-        case "biweekly": return 24;
-        case "monthly":  return 12;
-        default:         return 12;
-      }
-    }
+  function freqMultiplierMonthly(freq: string): number {
     switch (freq) {
       case "daily":    return daysInMonth;
       case "weekly":   return 4;
       case "biweekly": return 2;
       case "monthly":  return 1;
       default:         return 1;
+    }
+  }
+
+  // Count weekday occurrences between two dates (inclusive)
+  function countWeekdayOcc(from: Date, to: Date, dow: number): number {
+    const diffDays = Math.max(0, Math.round((to.getTime() - from.getTime()) / 86400000));
+    const firstOcc = (dow - from.getDay() + 7) % 7;
+    if (firstOcc > diffDays) return 0;
+    return Math.floor((diffDays - firstOcc) / 7) + 1;
+  }
+
+  // Count how many times a specific day-of-month occurred
+  function countMonthDayOcc(from: Date, to: Date, dom: number): number {
+    let cnt = 0;
+    const d = new Date(from.getFullYear(), from.getMonth(), dom);
+    if (d < from) d.setMonth(d.getMonth() + 1);
+    while (d <= to) { cnt++; d.setMonth(d.getMonth() + 1); }
+    return cnt;
+  }
+
+  // Calculate expected occurrences for a schedule within the requested year.
+  // Uses max(Jan 1 of year, schedule.createdAt) as start, Dec 31 as end.
+  // Mirrors the calcExpected logic in /reports/schedule-compliance for consistency.
+  function calcYearlyOccurrences(sched: {
+    frequency: string; createdAt: Date;
+    dayOfWeek: number | null; dayOfMonth: number | null; customDays: string | null;
+  }): number {
+    const yearStart = new Date(year, 0, 1);
+    yearStart.setHours(0, 0, 0, 0);
+    const yearEnd = new Date(year, 11, 31, 23, 59, 59);
+    const schedStart = new Date(sched.createdAt);
+    schedStart.setHours(0, 0, 0, 0);
+    const from = schedStart > yearStart ? schedStart : yearStart;
+    const to = yearEnd;
+    if (to < from) return 0;
+    const diffDays = Math.round((to.getTime() - from.getTime()) / 86400000);
+    switch (sched.frequency) {
+      case "daily": return diffDays + 1;
+      case "weekly":
+        return sched.dayOfWeek != null
+          ? countWeekdayOcc(from, to, sched.dayOfWeek)
+          : Math.floor(diffDays / 7) + 1;
+      case "biweekly": return Math.floor(diffDays / 14) + 1;
+      case "monthly":
+        return sched.dayOfMonth != null
+          ? countMonthDayOcc(from, to, sched.dayOfMonth)
+          : Math.floor(diffDays / 30) + 1;
+      case "custom": {
+        if (!sched.customDays) return 0;
+        const days = sched.customDays.split(",").map(d => parseInt(d.trim())).filter(d => !isNaN(d) && d >= 0 && d <= 6);
+        return days.reduce((sum, wd) => sum + countWeekdayOcc(from, to, wd), 0);
+      }
+      default: return Math.floor(diffDays / 30) + 1;
     }
   }
 
@@ -434,7 +476,6 @@ router.get("/template-summary", async (req, res) => {
 
   const totalReports = allInspections.filter(i => i.inspectedAt.startsWith(prefix)).length;
 
-  // Compute target: for each schedule, count distinct assigned users × freqMultiplier
   const groupIds = [...new Set([
     ...schedGroups.map(sg => sg.groupId),
     ...schedules.filter(s => s.groupId).map(s => s.groupId!),
@@ -444,44 +485,32 @@ router.get("/template-summary", async (req, res) => {
     ? await db.select().from(groupMembersTable).where(inArray(groupMembersTable.groupId, groupIds))
     : [];
 
-  let targetReports = 0;
-  for (const sched of schedules) {
-    const freq = sched.frequency;
-    const mult = freqMultiplier(freq);
+  // Helper: count assigned users for a schedule (group members + direct users)
+  function countAssignedUsers(sched: typeof schedules[0]): { groupSize: number; directCount: number } {
     const linkedGroupIds = schedGroups.filter(sg => sg.scheduleId === sched.id).map(sg => sg.groupId);
     if (sched.groupId && !linkedGroupIds.includes(sched.groupId)) linkedGroupIds.push(sched.groupId);
     const groupUserIds = new Set<number>();
     for (const gId of linkedGroupIds) {
       allMembers.filter(m => m.groupId === gId).forEach(m => groupUserIds.add(m.userId));
     }
-    targetReports += groupUserIds.size * mult;
     const directUserIds = schedUsers.filter(su => su.scheduleId === sched.id).map(su => su.userId);
-    targetReports += directUserIds.length * mult;
+    return { groupSize: groupUserIds.size, directCount: directUserIds.length };
   }
 
-  // Yearly target
-  const daysInYear = [...Array(12)].reduce((s, _, mi) => s + new Date(year, mi + 1, 0).getDate(), 0);
-  function freqMultiplierYear(freq: string): number {
-    switch (freq) {
-      case "daily":    return daysInYear;
-      case "weekly":   return 52;
-      case "biweekly": return 24;
-      case "monthly":  return 12;
-      default:         return 12;
-    }
+  // targetReports: monthly if !isYearly, yearly (schedule-creation-aware) if isYearly
+  let targetReports = 0;
+  for (const sched of schedules) {
+    const { groupSize, directCount } = countAssignedUsers(sched);
+    const totalUsers = groupSize + directCount;
+    const mult = isYearly ? calcYearlyOccurrences(sched) : freqMultiplierMonthly(sched.frequency);
+    targetReports += totalUsers * mult;
   }
+
+  // targetYearly: always uses schedule-creation-aware yearly count (shown in monthly mode cards)
   let targetYearly = 0;
   for (const sched of schedules) {
-    const mult = freqMultiplierYear(sched.frequency);
-    const linkedGroupIds = schedGroups.filter(sg => sg.scheduleId === sched.id).map(sg => sg.groupId);
-    if (sched.groupId && !linkedGroupIds.includes(sched.groupId)) linkedGroupIds.push(sched.groupId);
-    const groupUserIds = new Set<number>();
-    for (const gId of linkedGroupIds) {
-      allMembers.filter(m => m.groupId === gId).forEach(m => groupUserIds.add(m.userId));
-    }
-    targetYearly += groupUserIds.size * mult;
-    const directUserIds = schedUsers.filter(su => su.scheduleId === sched.id).map(su => su.userId);
-    targetYearly += directUserIds.length * mult;
+    const { groupSize, directCount } = countAssignedUsers(sched);
+    targetYearly += (groupSize + directCount) * calcYearlyOccurrences(sched);
   }
 
   res.json({ totalReports, targetReports, targetYearly, templateName, month, year });
