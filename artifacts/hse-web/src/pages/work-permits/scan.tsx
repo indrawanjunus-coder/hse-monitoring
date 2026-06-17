@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
-import { Shield, CheckCircle2, XCircle, AlertCircle, Loader2, QrCode } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Shield, CheckCircle2, XCircle, AlertCircle, Loader2, QrCode, Camera, CameraOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Html5Qrcode } from "html5-qrcode";
 
 const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, "") + "/api";
 
@@ -37,6 +38,10 @@ export default function WorkPermitScanPage() {
   const [permit, setPermit] = useState<PermitData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [scanning, setScanning] = useState(false);
+  const [cameraError, setCameraError] = useState("");
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const qrDivId = "hse-qr-camera-reader";
 
   // Extract slug and code from URL
   const slug = window.location.pathname.match(/^\/c\/([^/]+)/)?.[1] ?? "";
@@ -49,6 +54,11 @@ export default function WorkPermitScanPage() {
       setInputCode(c);
       lookupCode(c);
     }
+  }, []);
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => { stopCamera(); };
   }, []);
 
   async function lookupCode(c: string) {
@@ -69,6 +79,53 @@ export default function WorkPermitScanPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function startCamera() {
+    setCameraError("");
+    setError("");
+    setScanning(true);
+    // Small delay so the div is mounted
+    await new Promise(r => setTimeout(r, 100));
+    try {
+      const scanner = new Html5Qrcode(qrDivId);
+      scannerRef.current = scanner;
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        (decoded) => {
+          // Extract permit code from QR — might be a full URL with ?code=...
+          let permitCode = decoded;
+          try {
+            const url = new URL(decoded);
+            const c = url.searchParams.get("code");
+            if (c) permitCode = c;
+          } catch { /* not a URL, use as-is */ }
+          stopCamera();
+          setInputCode(permitCode);
+          lookupCode(permitCode);
+        },
+        () => { /* per-frame errors are normal, ignore */ },
+      );
+    } catch (e: any) {
+      setScanning(false);
+      scannerRef.current = null;
+      setCameraError(
+        e?.message?.includes("Permission")
+          ? "Izin kamera ditolak. Harap izinkan akses kamera di pengaturan browser."
+          : "Gagal membuka kamera: " + (e?.message ?? "Error tidak diketahui"),
+      );
+    }
+  }
+
+  async function stopCamera() {
+    try {
+      if (scannerRef.current) {
+        await scannerRef.current.stop();
+        scannerRef.current = null;
+      }
+    } catch { /* ignore */ }
+    setScanning(false);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -106,15 +163,54 @@ export default function WorkPermitScanPage() {
               <h1 className="text-lg font-bold text-gray-900">Verifikasi Work Permit</h1>
             </div>
             <p className="text-sm text-gray-500 mb-4">
-              Scan QR code dari work permit, atau masukkan kode permit secara manual.
+              Scan QR code via kamera, atau masukkan kode permit secara manual.
             </p>
+
+            {/* Camera QR scanner */}
+            {scanning ? (
+              <div className="mb-4">
+                <div
+                  id={qrDivId}
+                  className="w-full rounded-lg overflow-hidden border border-blue-200"
+                  style={{ minHeight: 280 }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3 w-full text-sm text-gray-600 gap-2"
+                  onClick={stopCamera}
+                >
+                  <CameraOff className="w-4 h-4" /> Tutup Kamera
+                </Button>
+              </div>
+            ) : (
+              <Button
+                type="button"
+                className="w-full mb-4 bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                onClick={startCamera}
+              >
+                <Camera className="w-4 h-4" /> Scan via Kamera
+              </Button>
+            )}
+
+            {cameraError && (
+              <div className="mb-3 p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-700">
+                {cameraError}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-xs text-gray-400">atau masukkan kode manual</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+
             <form onSubmit={handleSubmit} className="flex gap-2">
               <Input
                 value={inputCode}
                 onChange={e => setInputCode(e.target.value)}
                 placeholder="Masukkan kode permit..."
                 className="flex-1 font-mono text-sm"
-                autoFocus
               />
               <Button type="submit" disabled={loading || !inputCode.trim()} className="bg-blue-600 hover:bg-blue-700 text-white px-4">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Cek"}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
@@ -15,7 +15,7 @@ import {
   Plus, X, FileText, QrCode, User, Phone, Mail, Calendar,
   ChevronDown, ChevronUp, Upload, Image as ImageIcon,
   CheckCircle, XCircle, Clock, AlertCircle, Shield,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Printer,
 } from "lucide-react";
 
 interface WorkPermitType { id: number; type: string; description: string; }
@@ -94,6 +94,45 @@ function ApprovalChain({ permitId }: { permitId: number }) {
   );
 }
 
+// ── Colour helpers ────────────────────────────────────────────────────
+function getTomorrow() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().split("T")[0];
+}
+
+function permitCardClass(p: WorkPermit): string {
+  if (p.status === "expired" || p.status === "revoked")
+    return "border-red-300 bg-red-50/30";
+  if (p.status === "active") {
+    if (p.workEnd <= getTomorrow()) return "border-yellow-300 bg-yellow-50/30";
+    return "border-green-300 bg-green-50/20";
+  }
+  if (p.status === "pending") return "border-yellow-200";
+  return "";
+}
+
+function permitIconBg(p: WorkPermit): string {
+  if (p.status === "expired" || p.status === "revoked") return "bg-red-100";
+  if (p.status === "active") {
+    if (p.workEnd <= getTomorrow()) return "bg-yellow-100";
+    return "bg-green-100";
+  }
+  if (p.status === "pending") return "bg-yellow-50";
+  return "bg-gray-100";
+}
+
+function permitIconColor(p: WorkPermit): string {
+  if (p.status === "expired" || p.status === "revoked") return "text-red-500";
+  if (p.status === "active") {
+    if (p.workEnd <= getTomorrow()) return "text-yellow-600";
+    return "text-green-600";
+  }
+  if (p.status === "pending") return "text-yellow-600";
+  return "text-gray-400";
+}
+// ──────────────────────────────────────────────────────────────────────
+
 export default function WorkPermitsPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -115,6 +154,70 @@ export default function WorkPermitsPage() {
   // Reject dialog
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectNotes, setRejectNotes] = useState("");
+
+  // Print / PDF
+  const [printPermit, setPrintPermit] = useState<WorkPermit | null>(null);
+  const printAreaRef = useRef<HTMLDivElement>(null);
+
+  const triggerPrint = useCallback((p: WorkPermit) => {
+    setPrintPermit(p);
+    setTimeout(() => {
+      const area = printAreaRef.current;
+      if (!area) return;
+      const svgEl = area.querySelector("svg");
+      const qrSvg = svgEl ? svgEl.outerHTML : "";
+      const qrUrl = scanUrl(p.permitCode);
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Work Permit — ${p.name}</title>
+<style>
+  body{font-family:sans-serif;padding:32px;max-width:680px;margin:0 auto;color:#1e293b;}
+  h1{font-size:22px;margin:0 0 4px;}
+  .sub{font-size:13px;color:#64748b;margin-bottom:20px;}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;}
+  td{padding:7px 4px;vertical-align:top;}
+  td:first-child{color:#64748b;width:180px;font-size:13px;}
+  td:last-child{font-weight:600;}
+  tr:nth-child(even){background:#f8fafc;}
+  .badge{display:inline-block;background:#dcfce7;color:#15803d;padding:3px 10px;border-radius:9999px;font-size:12px;font-weight:700;margin-bottom:16px;}
+  .qr-box{text-align:center;margin-top:24px;padding:24px;border:1px solid #e2e8f0;border-radius:10px;}
+  .qr-box svg{max-width:180px;height:auto;}
+  .code{font-family:monospace;font-size:12px;color:#94a3b8;word-break:break-all;margin-top:10px;}
+  .link{font-size:12px;color:#2563eb;word-break:break-all;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;}
+  .brand{font-size:11px;color:#94a3b8;font-weight:600;letter-spacing:.06em;text-transform:uppercase;}
+  hr{border:none;border-top:1px solid #e2e8f0;margin:20px 0;}
+  @media print{button{display:none;}}
+</style></head><body>
+<div class="brand">H&amp;A Monitoring System · Work Permit</div>
+<div class="header">
+  <div>
+    <h1>${p.name}</h1>
+    <div class="sub">${p.typeName ?? "—"}</div>
+  </div>
+  <span class="badge">✓ Permit Aktif</span>
+</div>
+<table>
+  <tr><td>No. HP</td><td>${p.phone}</td></tr>
+  <tr><td>Email</td><td>${p.email}</td></tr>
+  <tr><td>Periode Kerja</td><td>${p.workStart} s/d ${p.workEnd}</td></tr>
+  <tr><td>Atasan</td><td>${p.supervisorName} · ${p.supervisorPhone}</td></tr>
+  <tr><td>Kontak Darurat</td><td>${p.emergencyName} · ${p.emergencyPhone}</td></tr>
+  ${p.notes ? `<tr><td>Catatan</td><td>${p.notes}</td></tr>` : ""}
+</table>
+<div class="qr-box">
+  <div style="font-size:13px;color:#64748b;font-weight:600;margin-bottom:12px;">QR Code — Scan untuk Verifikasi</div>
+  ${qrSvg}
+  <div class="link" style="margin-top:10px;">${qrUrl}</div>
+  <div class="code">Kode Permit: ${p.permitCode}</div>
+</div>
+<hr/>
+<div style="font-size:11px;color:#94a3b8;text-align:center;">Dicetak otomatis dari H&amp;A Monitoring System · ${new Date().toLocaleString("id-ID")}</div>
+<script>window.onload=()=>window.print();</script>
+</body></html>`;
+      const win = window.open("", "_blank", "width=800,height=900");
+      if (win) { win.document.write(html); win.document.close(); }
+      setTimeout(() => setPrintPermit(null), 500);
+    }, 80);
+  }, []);
 
   const { data: permits = [], isLoading } = useQuery<WorkPermit[]>({
     queryKey: ["work-permits"],
@@ -473,14 +576,15 @@ export default function WorkPermitsPage() {
             const qr = scanUrl(p.permitCode);
             const isPending = p.status === "pending";
             const isMyPending = myApprovals.some(a => a.id === p.id);
+            const isH1 = p.status === "active" && p.workEnd <= getTomorrow();
             return (
-              <div key={p.id} className={`bg-white border rounded-xl shadow-sm overflow-hidden ${isPending ? "border-yellow-200" : ""}`}>
+              <div key={p.id} className={`bg-white border rounded-xl shadow-sm overflow-hidden ${permitCardClass(p)}`}>
                 <div
-                  className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-gray-50"
+                  className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-gray-50/80"
                   onClick={() => setExpandedId(expanded ? null : p.id)}
                 >
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isPending ? "bg-yellow-50" : "bg-blue-50"}`}>
-                    <User className={`w-4 h-4 ${isPending ? "text-yellow-600" : "text-blue-600"}`} />
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${permitIconBg(p)}`}>
+                    <User className={`w-4 h-4 ${permitIconColor(p)}`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900">{p.name}</p>
@@ -489,6 +593,9 @@ export default function WorkPermitsPage() {
                   <div className="flex items-center gap-2">
                     {isMyPending && (
                       <Badge className="bg-orange-100 text-orange-700 border-orange-200 border text-xs">Perlu Approval Anda</Badge>
+                    )}
+                    {isH1 && (
+                      <Badge className="bg-yellow-100 text-yellow-700 border-yellow-300 border text-xs">⚠ H-1</Badge>
                     )}
                     {statusBadge(p.status)}
                   </div>
@@ -583,6 +690,14 @@ export default function WorkPermitsPage() {
                           <a href={qr} target="_blank" rel="noreferrer" className="text-xs text-blue-500 hover:underline flex items-center gap-1">
                             <QrCode className="w-3 h-3" />Buka halaman scan
                           </a>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs h-7 gap-1 text-gray-600 border-gray-200 hover:bg-gray-50 w-full"
+                            onClick={(e) => { e.stopPropagation(); triggerPrint(p); }}
+                          >
+                            <Printer className="w-3 h-3" />Download PDF
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -691,6 +806,17 @@ export default function WorkPermitsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Hidden print area — rendered off-screen so SVG is available for extraction */}
+      <div
+        ref={printAreaRef}
+        style={{ position: "absolute", top: "-9999px", left: "-9999px", pointerEvents: "none", opacity: 0 }}
+        aria-hidden="true"
+      >
+        {printPermit && (
+          <QRCodeSVG value={scanUrl(printPermit.permitCode)} size={180} level="M" />
+        )}
+      </div>
     </div>
   );
 }
