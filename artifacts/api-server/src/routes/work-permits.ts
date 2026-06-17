@@ -5,7 +5,7 @@ import {
   workPermitTypeApproversTable, workPermitApprovalsTable,
   companiesTable, usersTable,
 } from "@workspace/db";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { eq, and, desc, inArray, lt } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 import { uploadToDrive } from "../lib/gdrive";
 import {
@@ -28,9 +28,21 @@ const upload = multer({
   },
 });
 
-// GET /work-permits — list (auth required)
+// GET /work-permits — list (auth required), auto-expires active permits past workEnd
 router.get("/", authMiddleware, async (req, res) => {
   const cid = req.user!.companyId;
+  const today = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+
+  // Auto-expire: set status=expired for active permits where workEnd < today
+  await db
+    .update(workPermitsTable)
+    .set({ status: "expired" })
+    .where(and(
+      cid ? eq(workPermitsTable.companyId, cid) : undefined,
+      eq(workPermitsTable.status, "active"),
+      lt(workPermitsTable.workEnd, today),
+    ));
+
   const rows = await db
     .select({
       id: workPermitsTable.id,

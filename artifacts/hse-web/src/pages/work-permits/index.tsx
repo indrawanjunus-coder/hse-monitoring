@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { QRCodeSVG } from "qrcode.react";
@@ -14,6 +15,7 @@ import {
   Plus, X, FileText, QrCode, User, Phone, Mail, Calendar,
   ChevronDown, ChevronUp, Upload, Image as ImageIcon,
   CheckCircle, XCircle, Clock, AlertCircle, Shield,
+  ChevronLeft, ChevronRight,
 } from "lucide-react";
 
 interface WorkPermitType { id: number; type: string; description: string; }
@@ -102,6 +104,13 @@ export default function WorkPermitsPage() {
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Pagination
+  const [pageSize, setPageSize] = useState(20);
+  const [page, setPage] = useState(0);
+
+  // Status filter
+  const [statusFilter, setStatusFilter] = useState("all");
 
   // Reject dialog
   const [rejectId, setRejectId] = useState<number | null>(null);
@@ -200,6 +209,32 @@ export default function WorkPermitsPage() {
   const ktpRef = { current: null as HTMLInputElement | null };
   const photoRef = { current: null as HTMLInputElement | null };
 
+  // Counts per status
+  const countActive   = permits.filter(p => p.status === "active").length;
+  const countPending  = permits.filter(p => p.status === "pending").length;
+  const countExpired  = permits.filter(p => p.status === "expired").length;
+  const countRejected = permits.filter(p => p.status === "rejected" || p.status === "revoked").length;
+
+  // Filtered list
+  const filtered = statusFilter === "all"
+    ? permits
+    : statusFilter === "rejected"
+      ? permits.filter(p => p.status === "rejected" || p.status === "revoked")
+      : permits.filter(p => p.status === statusFilter);
+
+  // Pagination
+  const totalPages = Math.ceil(filtered.length / pageSize);
+  const paginated  = filtered.slice(page * pageSize, (page + 1) * pageSize);
+
+  function handlePageSizeChange(val: string) {
+    setPageSize(Number(val));
+    setPage(0);
+  }
+  function handleFilterChange(val: string) {
+    setStatusFilter(val);
+    setPage(0);
+  }
+
   return (
     <div className="p-6">
       <PageHeader
@@ -211,6 +246,50 @@ export default function WorkPermitsPage() {
           </Button>
         }
       />
+
+      {/* Status summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <button
+          onClick={() => handleFilterChange(statusFilter === "active" ? "all" : "active")}
+          className={`rounded-xl border p-4 text-left transition-all hover:shadow-sm ${statusFilter === "active" ? "ring-2 ring-green-400 bg-green-50 border-green-200" : "bg-white"}`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <CheckCircle className="w-4 h-4 text-green-600" />
+            <span className="text-xs font-medium text-green-700">Aktif</span>
+          </div>
+          <div className="text-3xl font-black text-green-800 tabular-nums">{isLoading ? "—" : countActive}</div>
+        </button>
+        <button
+          onClick={() => handleFilterChange(statusFilter === "pending" ? "all" : "pending")}
+          className={`rounded-xl border p-4 text-left transition-all hover:shadow-sm ${statusFilter === "pending" ? "ring-2 ring-yellow-400 bg-yellow-50 border-yellow-200" : "bg-white"}`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="w-4 h-4 text-yellow-600" />
+            <span className="text-xs font-medium text-yellow-700">Pengajuan</span>
+          </div>
+          <div className="text-3xl font-black text-yellow-800 tabular-nums">{isLoading ? "—" : countPending}</div>
+        </button>
+        <button
+          onClick={() => handleFilterChange(statusFilter === "expired" ? "all" : "expired")}
+          className={`rounded-xl border p-4 text-left transition-all hover:shadow-sm ${statusFilter === "expired" ? "ring-2 ring-gray-400 bg-gray-50 border-gray-300" : "bg-white"}`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <Calendar className="w-4 h-4 text-gray-500" />
+            <span className="text-xs font-medium text-gray-600">Expired</span>
+          </div>
+          <div className="text-3xl font-black text-gray-700 tabular-nums">{isLoading ? "—" : countExpired}</div>
+        </button>
+        <button
+          onClick={() => handleFilterChange(statusFilter === "rejected" ? "all" : "rejected")}
+          className={`rounded-xl border p-4 text-left transition-all hover:shadow-sm ${statusFilter === "rejected" ? "ring-2 ring-red-400 bg-red-50 border-red-200" : "bg-white"}`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <XCircle className="w-4 h-4 text-red-500" />
+            <span className="text-xs font-medium text-red-600">Ditolak / Dicabut</span>
+          </div>
+          <div className="text-3xl font-black text-red-700 tabular-nums">{isLoading ? "—" : countRejected}</div>
+        </button>
+      </div>
 
       {/* My pending approvals banner */}
       {myApprovals.length > 0 && (
@@ -341,18 +420,55 @@ export default function WorkPermitsPage() {
         </div>
       )}
 
+      {/* Toolbar: filter label + page size selector */}
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2 text-sm text-gray-500">
+          {statusFilter !== "all" && (
+            <button
+              onClick={() => handleFilterChange("all")}
+              className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded-md text-xs font-medium text-gray-600"
+            >
+              <X className="w-3 h-3" />
+              Hapus filter
+            </button>
+          )}
+          <span>
+            {filtered.length} permit
+            {statusFilter !== "all" ? ` (${statusFilter === "rejected" ? "ditolak/dicabut" : statusFilter})` : ""}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Tampilkan</span>
+          <Select value={String(pageSize)} onValueChange={handlePageSizeChange}>
+            <SelectTrigger className="w-20 h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-gray-500">per halaman</span>
+        </div>
+      </div>
+
       {/* List */}
       <div className="space-y-3">
         {isLoading ? (
           <div className="bg-white border rounded-xl p-10 text-center text-gray-400 text-sm">Memuat...</div>
-        ) : permits.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="bg-white border rounded-xl p-10 text-center">
             <FileText className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500 font-medium">Belum ada work permit</p>
-            <p className="text-gray-400 text-sm mt-1">Buat permit baru untuk mengizinkan seseorang bekerja di area tertentu.</p>
+            <p className="text-gray-500 font-medium">
+              {statusFilter !== "all" ? "Tidak ada permit dengan status ini" : "Belum ada work permit"}
+            </p>
+            <p className="text-gray-400 text-sm mt-1">
+              {statusFilter !== "all" ? "Coba hapus filter untuk melihat semua permit." : "Buat permit baru untuk mengizinkan seseorang bekerja di area tertentu."}
+            </p>
           </div>
         ) : (
-          permits.map(p => {
+          paginated.map(p => {
             const expanded = expandedId === p.id;
             const qr = scanUrl(p.permitCode);
             const isPending = p.status === "pending";
@@ -477,6 +593,70 @@ export default function WorkPermitsPage() {
           })
         )}
       </div>
+
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-4 px-1">
+          <p className="text-xs text-gray-500">
+            Halaman {page + 1} dari {totalPages} · {filtered.length} permit
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setPage(0)}
+              disabled={page === 0}
+            >
+              <ChevronLeft className="w-3 h-3" /><ChevronLeft className="w-3 h-3 -ml-2" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+            >
+              <ChevronLeft className="w-3 h-3" />
+            </Button>
+
+            {/* Page number buttons — show up to 5 around current page */}
+            {Array.from({ length: totalPages }, (_, i) => i)
+              .filter(i => Math.abs(i - page) <= 2)
+              .map(i => (
+                <Button
+                  key={i}
+                  variant={i === page ? "default" : "outline"}
+                  size="sm"
+                  className="h-8 w-8 p-0 text-xs"
+                  onClick={() => setPage(i)}
+                >
+                  {i + 1}
+                </Button>
+              ))
+            }
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+            >
+              <ChevronRight className="w-3 h-3" />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setPage(totalPages - 1)}
+              disabled={page >= totalPages - 1}
+            >
+              <ChevronRight className="w-3 h-3" /><ChevronRight className="w-3 h-3 -ml-2" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Reject dialog */}
       <Dialog open={rejectId !== null} onOpenChange={open => { if (!open) { setRejectId(null); setRejectNotes(""); } }}>
