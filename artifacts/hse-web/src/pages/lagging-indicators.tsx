@@ -36,7 +36,7 @@ export default function LaggingIndicatorsPage() {
   const [form, setForm] = useState({
     fatality: 0, lti: 0, mti: 0, firstAid: 0, nearMisses: 0, hazardId: 0,
   });
-  const [resetForm, setResetForm] = useState({ baseValue: 0, resetDate: "" });
+  const [resetForm, setResetForm] = useState({ baseValue: 0, resetDate: "" }); // resetDate = ISO datetime string "YYYY-MM-DDTHH:MM"
   const [showResetModal, setShowResetModal] = useState(false);
 
   const { data, isLoading } = useQuery<LaggingData>({
@@ -54,10 +54,12 @@ export default function LaggingIndicatorsPage() {
         nearMisses: data.nearMisses,
         hazardId: data.hazardId,
       });
-      setResetForm({
-        baseValue: data.baseValue,
-        resetDate: data.resetDate ?? new Date().toISOString().split("T")[0],
-      });
+      // Normalize stored value to "YYYY-MM-DDTHH:MM" for datetime-local input
+      const rawDate = data.resetDate ?? new Date().toISOString().slice(0, 16);
+      const normalized = rawDate.length === 10
+        ? `${rawDate}T00:00`       // date-only → treat as midnight
+        : rawDate.slice(0, 16);    // datetime → trim seconds/tz if any
+      setResetForm({ baseValue: data.baseValue, resetDate: normalized });
     }
   }, [data]);
 
@@ -79,7 +81,7 @@ export default function LaggingIndicatorsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["lagging-indicators"] });
       setShowResetModal(false);
-      toast({ title: "Counter direset", description: "Non LTI Days berhasil diperbarui." });
+      toast({ title: "Counter direset", description: "Jam Aman berhasil direset." });
     },
     onError: () => toast({ title: "Gagal reset", variant: "destructive" }),
   });
@@ -187,11 +189,12 @@ export default function LaggingIndicatorsPage() {
               <p className="text-xs text-muted-foreground text-center">
                 Dihitung dari:{" "}
                 <span className="font-medium">
-                  {new Date(data.resetDate).toLocaleDateString("id-ID", {
+                  {new Date(data.resetDate).toLocaleString("id-ID", {
                     day: "numeric", month: "long", year: "numeric",
+                    hour: "2-digit", minute: "2-digit",
                   })}
                 </span>
-                {" "}+ {data.baseValue} hari basis
+                {data.baseValue > 0 && <> + {data.baseValue.toLocaleString()} jam basis</>}
               </p>
             )}
 
@@ -202,7 +205,7 @@ export default function LaggingIndicatorsPage() {
                 onClick={() => setShowResetModal(true)}
               >
                 <RotateCcw className="w-4 h-4 mr-2" />
-                Reset / Ubah Non LTI Days
+                Reset Jam Aman
               </Button>
             )}
           </CardContent>
@@ -213,23 +216,23 @@ export default function LaggingIndicatorsPage() {
       {showResetModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-background rounded-xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="text-lg font-bold">Reset Non LTI Days</h3>
+            <h3 className="text-lg font-bold">Reset Jam Aman</h3>
             <p className="text-sm text-muted-foreground">
-              Counter akan dihitung ulang dari tanggal reset + nilai basis yang ditentukan.
-              Safe Hours = Non LTI Days × 24.
+              Counter jam aman dihitung otomatis dari waktu reset sampai sekarang.
+              Non LTI Days = total jam ÷ 24.
             </p>
             <div className="space-y-3">
               <div>
-                <Label className="text-sm">Tanggal Reset</Label>
+                <Label className="text-sm">Waktu Reset (Tanggal &amp; Jam)</Label>
                 <Input
-                  type="date"
+                  type="datetime-local"
                   value={resetForm.resetDate}
                   onChange={e => setResetForm(f => ({ ...f, resetDate: e.target.value }))}
                   className="mt-1"
                 />
               </div>
               <div>
-                <Label className="text-sm">Nilai Basis (hari awal)</Label>
+                <Label className="text-sm">Jam Basis (jam awal tambahan)</Label>
                 <Input
                   type="number"
                   min={0}
@@ -238,7 +241,7 @@ export default function LaggingIndicatorsPage() {
                   className="mt-1"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Contoh: isi 0 untuk mulai dari 0, atau isi angka tertentu jika sudah ada hari sebelumnya.
+                  Isi 0 untuk mulai dari 0. Isi angka jika ada jam carry-over dari periode sebelumnya.
                 </p>
               </div>
             </div>

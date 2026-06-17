@@ -6,12 +6,14 @@ import { authMiddleware } from "../lib/auth";
 const router = Router();
 router.use(authMiddleware);
 
-function calcNonLtiDays(resetDate: string, baseValue: number): number {
+// Calculate safe hours from the exact reset datetime (with sub-day precision)
+// baseValue = base hours to add on top of elapsed hours
+function calcSafeHours(resetDatetime: string, baseHours: number): number {
   const now = new Date();
-  const reset = new Date(resetDate);
+  const reset = new Date(resetDatetime);
   const diffMs = now.getTime() - reset.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  return baseValue + Math.max(0, diffDays);
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  return baseHours + Math.max(0, diffHours);
 }
 
 router.get("/", async (req, res) => {
@@ -30,8 +32,8 @@ router.get("/", async (req, res) => {
     .from(nonLtiSettingsTable)
     .where(eq(nonLtiSettingsTable.companyId, cid));
 
-  const nonLtiDays = nlt ? calcNonLtiDays(nlt.resetDate, nlt.baseValue) : 0;
-  const safeHours = nonLtiDays * 24;
+  const safeHours = nlt ? calcSafeHours(nlt.resetDate, nlt.baseValue) : 0;
+  const nonLtiDays = Math.floor(safeHours / 24);
 
   res.json({
     year,
@@ -87,9 +89,10 @@ router.put("/non-lti-reset", async (req, res) => {
   if (!cid) { res.status(403).json({ error: "Akses ditolak" }); return; }
 
   const baseValue = req.body.baseValue !== undefined ? parseInt(req.body.baseValue) : 0;
+  // Preserve full datetime (including time component) for hour-precision calculation
   const resetDate: string = req.body.resetDate
-    ? String(req.body.resetDate).split("T")[0]
-    : new Date().toISOString().split("T")[0];
+    ? String(req.body.resetDate)
+    : new Date().toISOString().slice(0, 16);
 
   const [existing] = await db
     .select()
