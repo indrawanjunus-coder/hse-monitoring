@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { RiskBadge } from "@/components/badges";
 import { Plus, Edit, Trash2, UsersRound, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import { Pagination } from "@/components/pagination";
 
 interface Category {
@@ -149,6 +150,8 @@ function CategoryForm({ cat, groups, users, onSave, onCancel }: {
 }
 
 export default function CategoriesPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState(false);
@@ -255,10 +258,12 @@ export default function CategoriesPage() {
                         onClick={() => { setEditCat(c); setDialog(true); }}>
                         <Edit className="w-3.5 h-3.5" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
-                        onClick={() => { if (confirm(`Hapus "${c.name}"?`)) deleteMutation.mutate(c.id); }}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      {isAdmin && (
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                          onClick={() => { if (confirm(`Hapus "${c.name}"?`)) deleteMutation.mutate(c.id); }}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>

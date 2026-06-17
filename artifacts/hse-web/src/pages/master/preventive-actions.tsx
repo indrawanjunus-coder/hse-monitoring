@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, ShieldCheck, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import { Pagination } from "@/components/pagination";
 
 interface PreventiveAction { id: number; name: string; description?: string }
@@ -44,6 +45,8 @@ function PreventiveActionForm({ pa, onSave, onCancel }: {
 }
 
 export default function PreventiveActionsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState(false);
@@ -101,7 +104,7 @@ export default function PreventiveActionsPage() {
               </div>
               <div className="flex gap-1">
                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { setEditPa(pa); setDialog(true); }}><Edit className="w-3.5 h-3.5" /></Button>
-                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700" onClick={() => { if (confirm(`Hapus "${pa.name}"?`)) deleteMutation.mutate(pa.id); }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                {isAdmin && <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700" onClick={() => { if (confirm(`Hapus "${pa.name}"?`)) deleteMutation.mutate(pa.id); }}><Trash2 className="w-3.5 h-3.5" /></Button>}
               </div>
             </div>
             {pa.description && <p className="text-sm text-gray-500 mt-2">{pa.description}</p>}

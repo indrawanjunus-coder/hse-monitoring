@@ -43,6 +43,9 @@ router.get("/", authMiddleware, async (req, res) => {
       lt(workPermitsTable.workEnd, today),
     ));
 
+  const isEmployee = req.user!.role === "employee";
+  const uid = req.user!.id;
+
   const rows = await db
     .select({
       id: workPermitsTable.id,
@@ -67,7 +70,10 @@ router.get("/", authMiddleware, async (req, res) => {
     })
     .from(workPermitsTable)
     .leftJoin(workPermitTypesTable, eq(workPermitsTable.typeId, workPermitTypesTable.id))
-    .where(cid ? eq(workPermitsTable.companyId, cid) : undefined)
+    .where(and(
+      cid ? eq(workPermitsTable.companyId, cid) : undefined,
+      isEmployee ? eq(workPermitsTable.userId, uid) : undefined,
+    ))
     .orderBy(desc(workPermitsTable.createdAt));
   res.json(rows);
 });
@@ -507,6 +513,7 @@ router.post(
       const [permit] = await db.insert(workPermitsTable).values({
         permitCode,
         companyId: cid,
+        userId: req.user!.id,
         typeId: typeIdNum,
         name, phone, email,
         emergencyName, emergencyPhone,

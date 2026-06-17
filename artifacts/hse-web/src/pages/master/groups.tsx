@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, UsersRound, User, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import { Pagination } from "@/components/pagination";
 
 interface Member { userId: number; name: string; nik: string; email?: string }
@@ -132,6 +133,8 @@ function GroupForm({ group, onSave, onCancel, allUsers }: {
 }
 
 export default function GroupsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState(false);
@@ -211,12 +214,14 @@ export default function GroupsPage() {
                 <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => openEdit(g)}>
                   <Edit className="w-3.5 h-3.5" />
                 </Button>
-                <Button
-                  variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                  onClick={() => { if (confirm(`Hapus group "${g.name}"?`)) deleteMutation.mutate(g.id); }}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
+                {isAdmin && (
+                  <Button
+                    variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                    onClick={() => { if (confirm(`Hapus group "${g.name}"?`)) deleteMutation.mutate(g.id); }}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                )}
               </div>
             </div>
 

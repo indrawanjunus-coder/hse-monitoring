@@ -1,11 +1,13 @@
 import { integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { companiesTable } from "./companies";
+import { usersTable } from "./users";
 import { workPermitTypesTable } from "./work-permit-types";
 
 export const workPermitsTable = pgTable("work_permits", {
   id: serial("id").primaryKey(),
   permitCode: text("permit_code").notNull().unique(),
   companyId: integer("company_id").references(() => companiesTable.id),
+  userId: integer("user_id").references(() => usersTable.id),
   typeId: integer("type_id").references(() => workPermitTypesTable.id),
   name: text("name").notNull(),
   phone: text("phone").notNull(),

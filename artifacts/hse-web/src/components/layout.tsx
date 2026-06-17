@@ -100,7 +100,7 @@ const navItems: NavItem[] = [
         icon: <AlertTriangle className="w-4 h-4 text-orange-500" />,
         badge: <PendingApprovalBadge />,
       },
-      { label: "Laporan Work Permit", href: "/work-permits/report", icon: <QrCode className="w-4 h-4" /> },
+      { label: "Laporan Work Permit", href: "/work-permits/report", icon: <QrCode className="w-4 h-4" />, supervisorOrAdmin: true },
     ],
   },
   { label: "Profil", href: "/profile", icon: <UserCircle className="w-4 h-4" /> },

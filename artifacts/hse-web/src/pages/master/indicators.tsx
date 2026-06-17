@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Edit, Trash2, Target, ChevronDown, ChevronUp, X, BookOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 
 interface Indicator {
   id: number;
@@ -110,6 +111,8 @@ function IndicatorForm({ indicator, onSave, onCancel }: {
 }
 
 function QuestionLinker({ indicator }: { indicator: Indicator }) {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -180,12 +183,14 @@ function QuestionLinker({ indicator }: { indicator: Indicator }) {
                 <p className="text-xs font-medium text-gray-800 line-clamp-2">{q.text}</p>
                 <p className="text-xs text-gray-400 mt-0.5">{q.templateName} · Bobot: {q.weight}</p>
               </div>
-              <button
-                onClick={() => deleteMutation.mutate(q.id)}
-                className="text-red-400 hover:text-red-600 flex-shrink-0 mt-0.5"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => deleteMutation.mutate(q.id)}
+                  className="text-red-400 hover:text-red-600 flex-shrink-0 mt-0.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           ))}
 
@@ -245,6 +250,8 @@ function QuestionLinker({ indicator }: { indicator: Indicator }) {
 }
 
 export default function IndicatorsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState(false);
@@ -331,10 +338,12 @@ export default function IndicatorsPage() {
                       onClick={() => { setEditIndicator(ind); setDialog(true); }}>
                       <Edit className="w-3.5 h-3.5" />
                     </Button>
-                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                      onClick={() => { if (confirm(`Hapus "${ind.name}"?`)) deleteMutation.mutate(ind.id); }}>
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                    {isAdmin && (
+                      <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                        onClick={() => { if (confirm(`Hapus "${ind.name}"?`)) deleteMutation.mutate(ind.id); }}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </div>
 

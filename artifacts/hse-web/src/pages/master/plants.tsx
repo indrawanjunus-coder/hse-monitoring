@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Plus, Edit, Trash2, MapPin, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth-context";
 import { Pagination } from "@/components/pagination";
 
 interface Plant { id: number; name: string; code?: string; description?: string; location?: string }
@@ -56,6 +57,8 @@ function PlantForm({ plant, onSave, onCancel }: {
 }
 
 export default function PlantsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState(false);
@@ -115,7 +118,7 @@ export default function PlantsPage() {
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => { setEditPlant(p); setDialog(true); }}><Edit className="w-3.5 h-3.5" /></Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700" onClick={() => { if (confirm(`Hapus "${p.name}"?`)) deleteMutation.mutate(p.id); }}><Trash2 className="w-3.5 h-3.5" /></Button>
+                      {isAdmin && <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700" onClick={() => { if (confirm(`Hapus "${p.name}"?`)) deleteMutation.mutate(p.id); }}><Trash2 className="w-3.5 h-3.5" /></Button>}
                     </div>
                   </td>
                 </tr>

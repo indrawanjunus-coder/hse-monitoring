@@ -72,6 +72,7 @@ export async function autoMigrate() {
       { table: "maps",               column: "view_url",      definition: "TEXT" },
       { table: "non_lti_settings",   column: "walk_talk_template_id", definition: "INTEGER" },
       { table: "non_lti_settings",   column: "hazard_template_id",    definition: "INTEGER" },
+      { table: "work_permits",       column: "user_id",               definition: "INTEGER REFERENCES users(id)" },
     ];
 
     for (const { table, column, definition } of columnsToAdd) {

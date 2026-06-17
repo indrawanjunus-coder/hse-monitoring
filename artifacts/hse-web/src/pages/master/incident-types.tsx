@@ -242,10 +242,12 @@ export default function IncidentTypesPage() {
                           <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setEditTarget(t)}>
                             <Edit className="w-3.5 h-3.5" />
                           </Button>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
-                            onClick={() => handleDelete(t)}>
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          {isAdmin && (
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-red-500 hover:text-red-700"
+                              onClick={() => handleDelete(t)}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     )}

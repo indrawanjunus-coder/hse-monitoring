@@ -436,6 +436,7 @@ export default function TemplatesPage() {
   const [limitError, setLimitError] = useState<string | null>(null);
 
   const canManage = user?.role === "admin" || user?.role === "supervisor";
+  const canDelete = user?.role === "admin";
 
   const { data: templates = [], isLoading } = useQuery<Template[]>({
     queryKey: ["templates"],
@@ -588,10 +589,12 @@ export default function TemplatesPage() {
                           >
                             {t.isActive === false ? <Power className="w-3.5 h-3.5" /> : <PowerOff className="w-3.5 h-3.5" />}
                           </Button>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
-                            onClick={() => { if (confirm("Hapus template ini?")) deleteMutation.mutate(t.id); }}>
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          {canDelete && (
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                              onClick={() => { if (confirm("Hapus template ini?")) deleteMutation.mutate(t.id); }}>
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                         </>
                       )}
                     </div>
