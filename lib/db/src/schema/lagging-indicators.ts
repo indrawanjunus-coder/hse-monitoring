@@ -19,6 +19,8 @@ export const nonLtiSettingsTable = pgTable("non_lti_settings", {
   companyId: integer("company_id").notNull().references(() => companiesTable.id),
   resetDate: text("reset_date").notNull(),
   baseValue: integer("base_value").notNull().default(0),
+  walkTalkTemplateId: integer("walk_talk_template_id"),
+  hazardTemplateId: integer("hazard_template_id"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

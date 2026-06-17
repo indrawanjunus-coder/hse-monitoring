@@ -70,6 +70,8 @@ export async function autoMigrate() {
       { table: "inspections",        column: "map_markers",  definition: "TEXT" },
       { table: "maps",               column: "drive_file_id", definition: "TEXT" },
       { table: "maps",               column: "view_url",      definition: "TEXT" },
+      { table: "non_lti_settings",   column: "walk_talk_template_id", definition: "INTEGER" },
+      { table: "non_lti_settings",   column: "hazard_template_id",    definition: "INTEGER" },
     ];
 
     for (const { table, column, definition } of columnsToAdd) {

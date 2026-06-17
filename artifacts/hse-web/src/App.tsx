@@ -16,6 +16,7 @@ import ActionMatrixPage from "@/pages/reports/action-matrix";
 import SmtpSettingsPage from "@/pages/settings/smtp";
 import GdriveSettingsPage from "@/pages/settings/gdrive";
 import BackupPage from "@/pages/settings/backup";
+import DashboardSettingsPage from "@/pages/settings/dashboard";
 import UsersPage from "@/pages/master/users";
 import CategoriesPage from "@/pages/master/categories";
 import GroupsPage from "@/pages/master/groups";
@@ -96,6 +97,7 @@ function MainApp() {
           <Route path="/reports/followup" component={FollowupReportPage} />
           <Route path="/reports/monthly" component={MonthlyReportPage} />
           <Route path="/reports/action-matrix" component={ActionMatrixPage} />
+          <Route path="/settings/dashboard" component={DashboardSettingsPage} />
           <Route path="/settings/smtp" component={SmtpSettingsPage} />
           <Route path="/settings/gdrive" component={GdriveSettingsPage} />
           <Route path="/settings/backup" component={BackupPage} />

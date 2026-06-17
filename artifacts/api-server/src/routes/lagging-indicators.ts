@@ -47,6 +47,8 @@ router.get("/", async (req, res) => {
     safeHours,
     resetDate: nlt?.resetDate ?? null,
     baseValue: nlt?.baseValue ?? 0,
+    walkTalkTemplateId: nlt?.walkTalkTemplateId ?? null,
+    hazardTemplateId: nlt?.hazardTemplateId ?? null,
   });
 });
 
@@ -74,6 +76,41 @@ router.put("/", async (req, res) => {
   } else {
     await db.insert(laggingIndicatorsTable).values({
       companyId: cid, year, fatality, lti, mti, firstAid, nearMisses, hazardId,
+    });
+  }
+
+  res.json({ ok: true });
+});
+
+router.put("/dashboard-templates", async (req, res) => {
+  const role = req.user!.role;
+  if (role !== "admin" && role !== "supervisor") {
+    res.status(403).json({ error: "Hanya supervisor/admin yang dapat mengubah pengaturan ini" }); return;
+  }
+  const cid = req.user!.companyId;
+  if (!cid) { res.status(403).json({ error: "Akses ditolak" }); return; }
+
+  const walkTalkTemplateId = req.body.walkTalkTemplateId != null ? parseInt(req.body.walkTalkTemplateId) || null : null;
+  const hazardTemplateId   = req.body.hazardTemplateId   != null ? parseInt(req.body.hazardTemplateId)   || null : null;
+
+  const [existing] = await db
+    .select()
+    .from(nonLtiSettingsTable)
+    .where(eq(nonLtiSettingsTable.companyId, cid));
+
+  if (existing) {
+    await db
+      .update(nonLtiSettingsTable)
+      .set({ walkTalkTemplateId, hazardTemplateId, updatedAt: new Date() })
+      .where(eq(nonLtiSettingsTable.id, existing.id));
+  } else {
+    // Create row with placeholder resetDate if none exists
+    await db.insert(nonLtiSettingsTable).values({
+      companyId: cid,
+      resetDate: new Date().toISOString().slice(0, 16),
+      baseValue: 0,
+      walkTalkTemplateId,
+      hazardTemplateId,
     });
   }
 

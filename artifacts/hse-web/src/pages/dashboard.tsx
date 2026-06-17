@@ -45,6 +45,8 @@ interface LaggingData {
   fatality: number; lti: number; mti: number;
   firstAid: number; nearMisses: number; hazardId: number;
   nonLtiDays: number; safeHours: number;
+  walkTalkTemplateId: number | null;
+  hazardTemplateId: number | null;
 }
 
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
@@ -274,25 +276,35 @@ export default function DashboardPage() {
     queryFn: () => api.get("/dashboard/templates"),
   });
 
-  // Auto-select default templates when list loads
-  useEffect(() => {
-    if (templateList.length === 0) return;
-    if (!walkTalkId) {
-      const wt = templateList.find(t => /walk.?talk/i.test(t.name)) ?? templateList.find(t => /walk/i.test(t.name));
-      if (wt) setWalkTalkId(String(wt.id));
-    }
-    if (!hazardTplId) {
-      const ht = templateList.find(t => /IT\s*harian/i.test(t.name)) ?? templateList.find(t => /harian/i.test(t.name));
-      if (ht) setHazardTplId(String(ht.id));
-    }
-  }, [templateList]);
-
-  // Lagging indicator query
+  // Lagging indicator query — must be before the useEffect that references it
   const { data: lagging } = useQuery<LaggingData>({
     queryKey: ["lagging-indicators", year],
     queryFn: () => api.get(`/lagging-indicators?year=${year}`),
     staleTime: 30_000,
   });
+
+  // Auto-select default templates: prefer saved settings, fall back to regex name-match
+  useEffect(() => {
+    if (templateList.length === 0) return;
+    if (!walkTalkId) {
+      const savedId = lagging?.walkTalkTemplateId;
+      if (savedId && templateList.find(t => t.id === savedId)) {
+        setWalkTalkId(String(savedId));
+      } else {
+        const wt = templateList.find(t => /walk.?talk/i.test(t.name)) ?? templateList.find(t => /walk/i.test(t.name));
+        if (wt) setWalkTalkId(String(wt.id));
+      }
+    }
+    if (!hazardTplId) {
+      const savedId = lagging?.hazardTemplateId;
+      if (savedId && templateList.find(t => t.id === savedId)) {
+        setHazardTplId(String(savedId));
+      } else {
+        const ht = templateList.find(t => /IT\s*harian/i.test(t.name)) ?? templateList.find(t => /harian/i.test(t.name));
+        if (ht) setHazardTplId(String(ht.id));
+      }
+    }
+  }, [templateList, lagging]);
 
   // Template summary queries — tplMonth=0 triggers yearly aggregate in the API
   const { data: walkTalkData, isLoading: walkTalkLoading } = useQuery<TemplateSummary>({

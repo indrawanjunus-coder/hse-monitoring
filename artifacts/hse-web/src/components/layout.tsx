@@ -107,6 +107,7 @@ const navItems: NavItem[] = [
   {
     label: "Pengaturan", href: "/settings", icon: <Settings className="w-4 h-4" />, adminOnly: true,
     children: [
+      { label: "Dashboard", href: "/settings/dashboard", icon: <BarChart2 className="w-4 h-4" /> },
       { label: "Email (SMTP)", href: "/settings/smtp", icon: <Mail className="w-4 h-4" /> },
       { label: "Google Drive", href: "/settings/gdrive", icon: <Cloud className="w-4 h-4" /> },
       { label: "Backup Database", href: "/settings/backup", icon: <Database className="w-4 h-4" />, adminOnly: true },
