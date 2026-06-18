@@ -624,7 +624,7 @@ export default function DashboardPage() {
               </div>
               <AlertTriangle className="w-5 h-5 mt-0.5 text-blue-500" />
             </div>
-            <div className="text-4xl font-bold text-blue-700">{mtdTotal}</div>
+            <div className="text-4xl font-bold text-blue-700">{mode === "yearly" ? ytdTotal : mtdTotal}</div>
             <div className="mt-2 text-xs text-gray-500 flex gap-3">
               <span>YTD {year}: <strong className="text-gray-700">{ytdTotal}</strong></span>
               <span>All time: <strong className="text-gray-700">{totalAllTime}</strong></span>
@@ -682,10 +682,12 @@ export default function DashboardPage() {
           color="violet"
         />
 
-        {/* Card C: Hazard Ditemukan vs Batas Hazard Bulanan */}
+        {/* Card C: Hazard Ditemukan vs Batas Hazard */}
         {(() => {
-          const allowance = lagging?.monthlyHazardAllowance ?? 0;
-          const found = mtdTotal;
+          const isYearly = mode === "yearly";
+          const monthlyAllowance = lagging?.monthlyHazardAllowance ?? 0;
+          const allowance = monthlyAllowance > 0 ? (isYearly ? monthlyAllowance * 12 : monthlyAllowance) : 0;
+          const found = isYearly ? ytdTotal : mtdTotal;
           const pct = allowance > 0 ? Math.round((found / allowance) * 100) : 0;
           const overLimit = allowance > 0 && found > allowance;
           const barColor = overLimit ? "bg-red-500" : pct >= 80 ? "bg-yellow-500" : "bg-green-500";
@@ -696,16 +698,20 @@ export default function DashboardPage() {
                 <div className="flex items-start gap-2 mb-3">
                   <FileBarChart className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
                   <p className="text-sm font-medium text-gray-700 leading-tight">
-                    Hazard Ditemukan vs Batas Hazard Bulanan
+                    Hazard Ditemukan vs Batas Hazard {isYearly ? "Tahunan" : "Bulanan"}
                   </p>
                 </div>
                 <p className="text-xs text-gray-400 mb-3">
-                  MTD · {MONTHS_FULL[month - 1]} {year}
+                  {isYearly
+                    ? `YTD · Tahun ${year}${monthlyAllowance > 0 ? ` · batas ${monthlyAllowance}/bln × 12` : ""}`
+                    : `MTD · ${MONTHS_FULL[month - 1]} ${year}`}
                 </p>
                 {allowance === 0 ? (
                   <>
                     <div className="text-3xl font-bold text-orange-600">{found}</div>
-                    <p className="text-xs text-gray-400 mt-1">hazard ditemukan (batas bulanan belum diset)</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      hazard ditemukan (batas {isYearly ? "tahunan" : "bulanan"} belum diset)
+                    </p>
                   </>
                 ) : (
                   <>
@@ -720,7 +726,7 @@ export default function DashboardPage() {
                     <p className="text-xs text-gray-500">
                       {overLimit
                         ? <span className="text-red-600 font-semibold">Melewati batas! ({found - allowance} melebihi)</span>
-                        : <span>{allowance - found} hazard tersisa dari batas bulanan</span>
+                        : <span>{allowance - found} hazard tersisa dari batas {isYearly ? "tahunan" : "bulanan"}</span>
                       }
                     </p>
                   </>
