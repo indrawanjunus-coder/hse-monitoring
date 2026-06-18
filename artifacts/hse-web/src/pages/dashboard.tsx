@@ -59,6 +59,46 @@ interface IncidentBreakdown {
   byPlant:    { name: string; value: number }[];
 }
 
+interface HeatmapCell { count: number; incidentIds: number[] }
+interface RiskHeatmap {
+  year: number; month: number; total: number; plotted: number;
+  probLabels: string[];
+  impactLabels: string[];
+  matrix: HeatmapCell[][];
+}
+
+const PROB_LABELS: Record<string, string> = {
+  rare:          "Rare",
+  unlikely:      "Unlikely",
+  possible:      "Possible",
+  likely:        "Likely",
+  almost_certain:"Almost Certain",
+};
+const IMPACT_LABELS: Record<string, string> = {
+  insignificant: "Insignificant",
+  minor:         "Minor",
+  moderate:      "Moderate",
+  major:         "Major",
+  catastrophic:  "Catastrophic",
+};
+
+// Standard AS/NZS 4360 Risk Matrix zone lookup
+// rows = prob index 0..4 (Rare→Almost Certain), cols = impact index 0..4 (Insignificant→Catastrophic)
+const RISK_ZONE: Array<Array<"low"|"medium"|"high"|"critical">> = [
+  ["low",    "low",    "low",    "medium", "medium"],  // Rare
+  ["low",    "low",    "medium", "medium", "high"  ],  // Unlikely
+  ["low",    "medium", "medium", "high",   "high"  ],  // Possible
+  ["medium", "medium", "high",   "high",   "critical"],// Likely
+  ["medium", "high",   "high",   "critical","critical"],// Almost Certain
+];
+
+const ZONE_STYLE = {
+  low:      { bg: "bg-green-100",  border: "border-green-300",  text: "text-green-800",  dot: "bg-green-400",  label: "Low"      },
+  medium:   { bg: "bg-yellow-100", border: "border-yellow-300", text: "text-yellow-800", dot: "bg-yellow-400", label: "Medium"   },
+  high:     { bg: "bg-orange-100", border: "border-orange-300", text: "text-orange-800", dot: "bg-orange-400", label: "High"     },
+  critical: { bg: "bg-red-100",    border: "border-red-300",    text: "text-red-800",    dot: "bg-red-500",    label: "Critical" },
+};
+
 const PIE_COLORS = [
   "#3b82f6","#ef4444","#f59e0b","#10b981","#8b5cf6",
   "#06b6d4","#f97316","#84cc16","#e879f9","#14b8a6",
@@ -302,6 +342,14 @@ export default function DashboardPage() {
   const { data: breakdown } = useQuery<IncidentBreakdown>({
     queryKey: ["dashboard-incident-breakdown", year],
     queryFn: () => api.get(`/dashboard/incident-breakdown?year=${year}&month=0`),
+    staleTime: 30_000,
+  });
+
+  // Risk Heat Map — uses current month (or full year if mode=yearly)
+  const heatmapMonth = mode === "yearly" ? 0 : month;
+  const { data: heatmap } = useQuery<RiskHeatmap>({
+    queryKey: ["dashboard-risk-heatmap", year, heatmapMonth],
+    queryFn: () => api.get(`/dashboard/risk-heatmap?year=${year}&month=${heatmapMonth}`),
     staleTime: 30_000,
   });
 
@@ -720,7 +768,123 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Row 5: Incident Breakdown Pie Charts ── */}
+      {/* ── Row 5: Risk Heat Map ── */}
+      {heatmap && (
+        <div className="rounded-2xl border bg-white shadow-sm p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+            <div>
+              <h3 className="text-base font-semibold text-slate-800">Risk Heat Map</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Probability vs Impact · {heatmap.total} incident
+                {mode === "yearly"
+                  ? ` tahun ${year}`
+                  : ` bulan ${MONTHS_FULL[month - 1]} ${year}`}
+                {heatmap.plotted < heatmap.total && (
+                  <span className="ml-1 text-amber-600">({heatmap.plotted} terpetakan — pastikan Tipe Incident sudah dikonfigurasi probabilitynya)</span>
+                )}
+              </p>
+            </div>
+            {/* Legend */}
+            <div className="flex flex-wrap gap-2 text-xs">
+              {(["low","medium","high","critical"] as const).map(z => (
+                <span key={z} className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full border font-medium ${ZONE_STYLE[z].bg} ${ZONE_STYLE[z].border} ${ZONE_STYLE[z].text}`}>
+                  <span className={`w-2 h-2 rounded-full ${ZONE_STYLE[z].dot}`} />
+                  {ZONE_STYLE[z].label}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse" style={{ minWidth: 520 }}>
+              <thead>
+                <tr>
+                  {/* corner cell */}
+                  <th className="pb-2 pr-3 text-right w-32 text-xs text-slate-400 font-normal align-bottom">
+                    Probability ↓ / Impact →
+                  </th>
+                  {(heatmap.impactLabels).map((imp, iIdx) => (
+                    <th key={imp} className="pb-2 text-center">
+                      <div className={`text-xs font-semibold px-1 py-0.5 rounded ${
+                        iIdx === 0 ? "text-slate-500" :
+                        iIdx === 1 ? "text-green-700" :
+                        iIdx === 2 ? "text-yellow-700" :
+                        iIdx === 3 ? "text-orange-700" : "text-red-700"
+                      }`}>
+                        {IMPACT_LABELS[imp] ?? imp}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {/* Render from Almost Certain (top) down to Rare (bottom) */}
+                {[...heatmap.probLabels].reverse().map((prob, revIdx) => {
+                  const pIdx = heatmap.probLabels.length - 1 - revIdx;
+                  return (
+                    <tr key={prob}>
+                      {/* Row label */}
+                      <td className="pr-3 py-1 text-right">
+                        <span className="text-xs font-semibold text-slate-600">
+                          {PROB_LABELS[prob] ?? prob}
+                        </span>
+                      </td>
+                      {heatmap.impactLabels.map((imp, iIdx) => {
+                        const cell = heatmap.matrix[pIdx]?.[iIdx];
+                        const zone = RISK_ZONE[pIdx]?.[iIdx] ?? "low";
+                        const style = ZONE_STYLE[zone];
+                        const hasIncidents = (cell?.count ?? 0) > 0;
+                        return (
+                          <td key={imp} className="p-1">
+                            <div
+                              className={`
+                                relative flex flex-col items-center justify-center
+                                rounded-xl border-2 transition-all
+                                ${style.bg} ${style.border}
+                                ${hasIncidents ? "shadow-sm" : "opacity-60"}
+                              `}
+                              style={{ minHeight: 64, minWidth: 72 }}
+                              title={hasIncidents
+                                ? `${cell!.count} incident · ${style.label} Risk (${PROB_LABELS[prob] ?? prob} × ${IMPACT_LABELS[imp] ?? imp})`
+                                : `${style.label} Risk zone`
+                              }
+                            >
+                              {hasIncidents ? (
+                                <>
+                                  <span className={`text-2xl font-black ${style.text} tabular-nums leading-none`}>
+                                    {cell!.count}
+                                  </span>
+                                  <span className={`text-[10px] font-medium ${style.text} opacity-70 mt-0.5`}>
+                                    incident
+                                  </span>
+                                </>
+                              ) : (
+                                <span className={`text-xs ${style.text} opacity-40`}>—</span>
+                              )}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {heatmap.plotted === 0 && (
+            <div className="mt-4 text-center text-sm text-slate-400 py-4 border-t">
+              Belum ada data untuk ditampilkan. Pastikan:
+              <ul className="mt-1 text-xs space-y-0.5">
+                <li>1. Tipe Incident sudah dikonfigurasi <span className="font-medium">Probability</span>-nya di Master Tipe Incident</li>
+                <li>2. Ada incident yang tercatat untuk periode ini</li>
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Row 6: Incident Breakdown Pie Charts ── */}
       {breakdown && breakdown.total > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 

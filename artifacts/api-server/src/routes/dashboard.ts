@@ -639,6 +639,70 @@ router.get("/template-weekly", async (req, res) => {
   res.json({ month, year, templateId, departments });
 });
 
+// Risk Heat Map: probability (from incidentTypesTable) vs impact (from categoriesTable)
+router.get("/risk-heatmap", async (req, res) => {
+  const now   = new Date();
+  const year  = req.query.year  ? parseInt(req.query.year  as string) : now.getFullYear();
+  const month = req.query.month ? parseInt(req.query.month as string) : now.getMonth() + 1;
+  const cid   = req.user!.companyId;
+
+  const PROB_VALS  = ["rare", "unlikely", "possible", "likely", "almost_certain"] as const;
+  const IMPACT_VALS = ["insignificant", "minor", "moderate", "major", "catastrophic"] as const;
+
+  // Fetch incidents for the period
+  const datePrefix = month > 0
+    ? `${year}-${String(month).padStart(2, "0")}`
+    : `${year}-`;
+
+  const allIncidents = cid
+    ? await db.select().from(incidentsTable).where(eq(incidentsTable.companyId, cid))
+    : await db.select().from(incidentsTable);
+
+  const incidents = allIncidents.filter(i => i.incidentDate.startsWith(datePrefix));
+
+  // Fetch lookup tables
+  const categories = cid
+    ? await db.select().from(categoriesTable).where(eq(categoriesTable.companyId, cid))
+    : await db.select().from(categoriesTable);
+
+  const incidentTypes = cid
+    ? await db.select({ code: incidentTypesTable.code, probability: incidentTypesTable.probability })
+        .from(incidentTypesTable).where(eq(incidentTypesTable.companyId, cid))
+    : await db.select({ code: incidentTypesTable.code, probability: incidentTypesTable.probability })
+        .from(incidentTypesTable);
+
+  // Build matrix: cells[probIdx][impactIdx] = list of incident ids/titles
+  type Cell = { count: number; incidentIds: number[] };
+  const matrix: Cell[][] = PROB_VALS.map(() =>
+    IMPACT_VALS.map(() => ({ count: 0, incidentIds: [] }))
+  );
+
+  let plotted = 0;
+  for (const inc of incidents) {
+    const cat = categories.find(c => c.id === inc.categoryId);
+    const impact = cat?.riskLevel as string | undefined;
+    if (!impact || !IMPACT_VALS.includes(impact as typeof IMPACT_VALS[number])) continue;
+
+    // Look up probability from incidentTypesTable by code match
+    const itType = incidentTypes.find(t => t.code === inc.incidentType);
+    const probability = itType?.probability as string | undefined;
+    if (!probability || !PROB_VALS.includes(probability as typeof PROB_VALS[number])) continue;
+
+    const pIdx = PROB_VALS.indexOf(probability as typeof PROB_VALS[number]);
+    const iIdx = IMPACT_VALS.indexOf(impact as typeof IMPACT_VALS[number]);
+    matrix[pIdx]![iIdx]!.count++;
+    matrix[pIdx]![iIdx]!.incidentIds.push(inc.id);
+    plotted++;
+  }
+
+  res.json({
+    year, month, total: incidents.length, plotted,
+    probLabels: PROB_VALS,
+    impactLabels: IMPACT_VALS,
+    matrix,
+  });
+});
+
 // Incident breakdown: by category (department) and by plant (area)
 router.get("/incident-breakdown", async (req, res) => {
   const now = new Date();
