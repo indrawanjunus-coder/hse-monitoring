@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import {
   FileText, Building2, ClipboardList, CheckCircle2, XCircle, ShieldCheck,
-  AlertCircle, Target, TrendingUp, ChevronRight,
+  AlertCircle, Target, TrendingUp, ChevronRight, ChevronDown, User, Loader2,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -40,6 +40,16 @@ interface TemplateDetailResponse {
     totalDepts: number; totalExpected: number; totalActual: number;
     compliant: number; partial: number; none: number; avgAchievement: number | null;
   };
+}
+
+interface DeptUserRow {
+  userId: number; userName: string; userNik: string;
+  departmentId: number | null; departmentName: string;
+  inspectionCount: number; lastInspectedAt: string;
+}
+interface DeptUserResponse {
+  users: DeptUserRow[];
+  totalInspections: number;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -165,6 +175,116 @@ function TemplateListView({ onSelect }: { onSelect: (id: number) => void }) {
         </Card>
       )}
     </div>
+  );
+}
+
+// ── Expandable dept row with user list ────────────────────────────────────────
+function DeptExpandRow({
+  row, templateId, applied, index,
+}: {
+  row: DeptDetailRow; templateId: number; applied: { from: string; to: string }; index: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const meta = STATUS_META[row.status];
+  const Icon = meta.icon;
+  const deptKey = row.departmentId === null ? "null" : String(row.departmentId);
+
+  const { data: usersData, isLoading: usersLoading } = useQuery<DeptUserResponse>({
+    queryKey: ["template-dept-users", templateId, deptKey, applied.from, applied.to],
+    queryFn: () => api.get(
+      `/reports/template-dept-users?templateId=${templateId}&departmentId=${deptKey}&from=${applied.from}&to=${applied.to}`
+    ),
+    enabled: open,
+    staleTime: 60_000,
+  });
+
+  const fmtDate = (s: string) => s
+    ? new Date(s).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })
+    : "—";
+
+  const rowBg = index % 2 === 0 ? "bg-white" : "bg-slate-50/50";
+  const hasActual = row.actual > 0;
+
+  return (
+    <>
+      <tr
+        className={`${rowBg} cursor-pointer hover:bg-blue-50/60 transition-colors group`}
+        onClick={() => setOpen(v => !v)}
+      >
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2">
+            <div className={`w-5 h-5 rounded flex items-center justify-center text-slate-400 group-hover:text-blue-500 transition-colors`}>
+              {open ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+            </div>
+            <span className="font-medium text-slate-800">{row.departmentName}</span>
+            {hasActual && (
+              <span className="text-xs text-slate-400 flex items-center gap-1">
+                <User className="w-3 h-3" /> klik untuk detail
+              </span>
+            )}
+          </div>
+        </td>
+        <td className="px-4 py-3 text-center font-semibold text-indigo-700">{row.expected}</td>
+        <td className="px-4 py-3 text-center font-bold text-blue-700">{row.actual}</td>
+        <td className="px-4 py-3"><AchievementBar pct={row.achievement} /></td>
+        <td className="px-4 py-3 text-center">
+          <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-medium ${meta.cls}`}>
+            <Icon className="w-3 h-3" />{meta.label}
+          </span>
+        </td>
+      </tr>
+
+      {open && (
+        <tr className={rowBg}>
+          <td colSpan={5} className="px-0 py-0">
+            <div className="mx-4 mb-3 rounded-lg border border-slate-200 overflow-hidden bg-white shadow-sm">
+              {usersLoading ? (
+                <div className="flex items-center justify-center gap-2 py-5 text-sm text-slate-400">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Memuat data user...
+                </div>
+              ) : !usersData || usersData.users.length === 0 ? (
+                <div className="py-5 text-center text-sm text-slate-400">
+                  Tidak ada inspeksi yang tercatat di departemen ini pada periode ini.
+                </div>
+              ) : (
+                <>
+                  <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+                    <User className="w-4 h-4 text-blue-500" />
+                    <span className="text-xs font-semibold text-slate-600">
+                      {usersData.users.length} user · {usersData.totalInspections} total inspeksi
+                    </span>
+                  </div>
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-slate-100 bg-slate-50/50">
+                      <tr>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">Nama</th>
+                        <th className="text-left px-4 py-2 text-xs font-semibold text-slate-500">NIK</th>
+                        <th className="text-center px-4 py-2 text-xs font-semibold text-blue-500">Inspeksi</th>
+                        <th className="text-right px-4 py-2 text-xs font-semibold text-slate-500">Terakhir Submit</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {usersData.users.map((u, ui) => (
+                        <tr key={u.userId} className={ui % 2 === 0 ? "bg-white" : "bg-slate-50/30"}>
+                          <td className="px-4 py-2.5 font-medium text-slate-800">{u.userName}</td>
+                          <td className="px-4 py-2.5 text-slate-500 font-mono text-xs">{u.userNik}</td>
+                          <td className="px-4 py-2.5 text-center">
+                            <span className="inline-flex items-center justify-center w-8 h-6 bg-blue-100 text-blue-700 font-bold text-sm rounded-md">
+                              {u.inspectionCount}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-xs text-slate-500">{fmtDate(u.lastInspectedAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -304,23 +424,15 @@ function TemplateDetailView({ templateId, onBack }: { templateId: number; onBack
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {data.rows.map((row, i) => {
-                      const meta = STATUS_META[row.status];
-                      const Icon = meta.icon;
-                      return (
-                        <tr key={String(row.departmentId ?? "null")} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                          <td className="px-4 py-3 font-medium text-slate-800">{row.departmentName}</td>
-                          <td className="px-4 py-3 text-center font-semibold text-indigo-700">{row.expected}</td>
-                          <td className="px-4 py-3 text-center font-bold text-blue-700">{row.actual}</td>
-                          <td className="px-4 py-3"><AchievementBar pct={row.achievement} /></td>
-                          <td className="px-4 py-3 text-center">
-                            <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-medium ${meta.cls}`}>
-                              <Icon className="w-3 h-3" />{meta.label}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {data.rows.map((row, i) => (
+                      <DeptExpandRow
+                        key={String(row.departmentId ?? "null")}
+                        row={row}
+                        templateId={templateId}
+                        applied={applied}
+                        index={i}
+                      />
+                    ))}
                   </tbody>
                   <tfoot className="bg-slate-100 border-t-2 border-slate-300 font-bold">
                     <tr>

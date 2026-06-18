@@ -763,6 +763,69 @@ router.get("/template-detail", async (req, res) => {
   });
 });
 
+// ─── Template Detail: users who submitted in a specific department ────────────
+router.get("/template-dept-users", async (req, res) => {
+  const cid = req.user!.companyId;
+  if (!cid) { res.status(403).json({ error: "Akses ditolak" }); return; }
+
+  const templateId = req.query.templateId ? parseInt(String(req.query.templateId)) : null;
+  if (!templateId) { res.status(400).json({ error: "templateId wajib diisi" }); return; }
+
+  const departmentId = req.query.departmentId !== undefined
+    ? (req.query.departmentId === "null" ? null : parseInt(String(req.query.departmentId)))
+    : undefined;
+
+  const now = new Date();
+  const defaultFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const defaultTo   = now.toISOString().slice(0, 10);
+  const fromStr = req.query.from ? String(req.query.from) : defaultFrom;
+  const toStr   = req.query.to   ? String(req.query.to)   : defaultTo;
+
+  // Get inspections for this template + company + department in period
+  const deptCondition = departmentId === undefined
+    ? undefined
+    : departmentId === null
+      ? sql`${usersTable.departmentId} IS NULL`
+      : eq(usersTable.departmentId, departmentId);
+
+  const rows = await db.select({
+    userId:     usersTable.id,
+    userName:   usersTable.name,
+    userNik:    usersTable.nik,
+    deptId:     usersTable.departmentId,
+    deptName:   departmentsTable.name,
+    cnt:        count(),
+    lastAt:     sql<string>`max(${inspectionsTable.inspectedAt})`,
+  }).from(inspectionsTable)
+    .innerJoin(usersTable, eq(inspectionsTable.supervisorId, usersTable.id))
+    .leftJoin(departmentsTable, eq(usersTable.departmentId, departmentsTable.id))
+    .where(and(
+      eq(inspectionsTable.templateId, templateId),
+      eq(usersTable.companyId, cid),
+      gte(inspectionsTable.inspectedAt, fromStr),
+      lte(inspectionsTable.inspectedAt, toStr + "T23:59:59"),
+      deptCondition,
+    ))
+    .groupBy(usersTable.id, usersTable.name, usersTable.nik, usersTable.departmentId, departmentsTable.name)
+    .orderBy(desc(count()));
+
+  res.json({
+    templateId,
+    departmentId: departmentId ?? null,
+    period: { from: fromStr, to: toStr },
+    users: rows.map(r => ({
+      userId:       r.userId,
+      userName:     r.userName,
+      userNik:      r.userNik,
+      departmentId: r.deptId,
+      departmentName: r.deptName ?? "(Tanpa Dept)",
+      inspectionCount: Number(r.cnt),
+      lastInspectedAt: r.lastAt,
+    })),
+    totalInspections: rows.reduce((s, r) => s + Number(r.cnt), 0),
+  });
+});
+
 // ─── Department Hazard & Incident Summary Report ────────────────────────────
 router.get("/department-summary", async (req, res) => {
   const cid = req.user!.companyId;
