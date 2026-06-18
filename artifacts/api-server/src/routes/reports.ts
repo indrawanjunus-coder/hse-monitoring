@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, incidentsTable, usersTable, categoriesTable, actionsTable, groupsTable, plantsTable, indicatorsTable, indicatorQuestionsTable, questionsTable, inspectionAnswersTable, inspectionsTable, schedulesTable, scheduleGroupsTable, scheduleUsersTable, templatesTable } from "@workspace/db";
+import { db, incidentsTable, usersTable, categoriesTable, actionsTable, groupsTable, plantsTable, indicatorsTable, indicatorQuestionsTable, questionsTable, inspectionAnswersTable, inspectionsTable, schedulesTable, scheduleGroupsTable, scheduleUsersTable, templatesTable, departmentsTable, nonLtiSettingsTable } from "@workspace/db";
 import { eq, desc, gte, lte, and, inArray, sql, count } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 
@@ -582,6 +582,189 @@ router.get("/schedule-compliance", async (req, res) => {
   const avgRate = rows.length > 0 ? rows.reduce((s, r) => s + r.complianceRate, 0) / rows.length : 0;
 
   res.json({ rows, summary: { total: rows.length, compliant, partial, none, avgRate } });
+});
+
+// ─── Department Hazard & Incident Summary Report ────────────────────────────
+router.get("/department-summary", async (req, res) => {
+  const cid = req.user!.companyId;
+  if (!cid) { res.status(403).json({ error: "Akses ditolak" }); return; }
+
+  // Default: current month
+  const now = new Date();
+  const defaultFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const defaultTo   = now.toISOString().slice(0, 10);
+  const from = req.query.from ? String(req.query.from) : defaultFrom;
+  const to   = req.query.to   ? String(req.query.to)   : defaultTo;
+
+  // Weeks in period (used for target proration)
+  const daysDiff = Math.max(1, Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / 86400000) + 1);
+  const weeks = parseFloat((daysDiff / 7).toFixed(2));
+
+  // Monthly hazard target from company settings
+  const [nlt] = await db.select().from(nonLtiSettingsTable).where(eq(nonLtiSettingsTable.companyId, cid));
+  const monthlyTarget  = nlt?.monthlyHazardAllowance ?? 0;
+  const weeklyTarget   = monthlyTarget > 0 ? parseFloat((monthlyTarget / 4).toFixed(1)) : 0;
+  const periodTarget   = monthlyTarget > 0 ? parseFloat((weeklyTarget * weeks).toFixed(1)) : 0;
+
+  // All departments for this company
+  const departments = await db.select().from(departmentsTable).where(eq(departmentsTable.companyId, cid));
+  const deptTarget = departments.length > 0 && periodTarget > 0
+    ? parseFloat((periodTarget / departments.length).toFixed(1))
+    : 0;
+
+  // Inspections (hazard submissions) in period, grouped by supervisor's departmentId
+  const rawHazards = await db.select({
+    deptId:   usersTable.departmentId,
+    deptName: departmentsTable.name,
+    cnt:      count(),
+  })
+    .from(inspectionsTable)
+    .innerJoin(usersTable, eq(inspectionsTable.supervisorId, usersTable.id))
+    .leftJoin(departmentsTable, eq(usersTable.departmentId, departmentsTable.id))
+    .where(and(
+      eq(usersTable.companyId, cid),
+      gte(inspectionsTable.inspectedAt, from),
+      lte(inspectionsTable.inspectedAt, to + "T23:59:59"),
+    ))
+    .groupBy(usersTable.departmentId, departmentsTable.name);
+
+  // Incidents in period, grouped by reporter's departmentId
+  const rawIncidents = await db.select({
+    deptId:   usersTable.departmentId,
+    deptName: departmentsTable.name,
+    cnt:      count(),
+  })
+    .from(incidentsTable)
+    .innerJoin(usersTable, eq(incidentsTable.reporterId, usersTable.id))
+    .leftJoin(departmentsTable, eq(usersTable.departmentId, departmentsTable.id))
+    .where(and(
+      eq(incidentsTable.companyId, cid),
+      gte(incidentsTable.incidentDate, from),
+      lte(incidentsTable.incidentDate, to),
+    ))
+    .groupBy(usersTable.departmentId, departmentsTable.name);
+
+  // Build dept map (include all departments + any that submitted without dept)
+  const deptMap = new Map<string, { departmentId: number | null; departmentName: string; hazards: number; incidents: number }>();
+  for (const d of departments) {
+    deptMap.set(String(d.id), { departmentId: d.id, departmentName: d.name, hazards: 0, incidents: 0 });
+  }
+
+  for (const h of rawHazards) {
+    const key = String(h.deptId ?? "null");
+    if (!deptMap.has(key)) deptMap.set(key, { departmentId: h.deptId ?? null, departmentName: h.deptName ?? "(Tanpa Dept)", hazards: 0, incidents: 0 });
+    deptMap.get(key)!.hazards += Number(h.cnt);
+  }
+  for (const inc of rawIncidents) {
+    const key = String(inc.deptId ?? "null");
+    if (!deptMap.has(key)) deptMap.set(key, { departmentId: inc.deptId ?? null, departmentName: inc.deptName ?? "(Tanpa Dept)", hazards: 0, incidents: 0 });
+    deptMap.get(key)!.incidents += Number(inc.cnt);
+  }
+
+  const rows = [...deptMap.values()].map(d => {
+    const achievement = deptTarget > 0 ? Math.min(100, parseFloat(((d.hazards / deptTarget) * 100).toFixed(1))) : null;
+    const status = achievement === null ? "no_target"
+      : achievement >= 100 ? "compliant"
+      : achievement >= 50  ? "partial"
+      : "none";
+    return { ...d, deptTarget, achievement, status };
+  }).sort((a, b) => a.departmentName.localeCompare(b.departmentName));
+
+  const totalHazards   = rows.reduce((s, r) => s + r.hazards, 0);
+  const totalIncidents = rows.reduce((s, r) => s + r.incidents, 0);
+  const compliant = rows.filter(r => r.status === "compliant").length;
+  const partial   = rows.filter(r => r.status === "partial").length;
+  const none      = rows.filter(r => r.status === "none").length;
+  const avgAchievement = rows.filter(r => r.achievement !== null).length > 0
+    ? parseFloat((rows.filter(r => r.achievement !== null).reduce((s, r) => s + (r.achievement ?? 0), 0) / rows.filter(r => r.achievement !== null).length).toFixed(1))
+    : null;
+
+  res.json({
+    period: { from, to, days: daysDiff, weeks },
+    weeklyTarget,
+    periodTarget,
+    deptTarget,
+    rows,
+    summary: {
+      totalDepts: rows.length,
+      totalHazards,
+      totalIncidents,
+      compliant,
+      partial,
+      none,
+      avgAchievement,
+    },
+  });
+});
+
+// ─── Template Report ─────────────────────────────────────────────────────────
+router.get("/templates", async (req, res) => {
+  const cid = req.user!.companyId;
+  if (!cid) { res.status(403).json({ error: "Akses ditolak" }); return; }
+
+  const now = new Date();
+  const defaultFrom = `${now.getFullYear()}-01-01`;
+  const defaultTo   = now.toISOString().slice(0, 10);
+  const from = req.query.from ? String(req.query.from) : defaultFrom;
+  const to   = req.query.to   ? String(req.query.to)   : defaultTo;
+
+  const templates = await db.select().from(templatesTable).where(eq(templatesTable.companyId, cid));
+
+  // Question counts per template
+  const qCounts = await db.select({
+    templateId: questionsTable.templateId,
+    cnt:        count(),
+  }).from(questionsTable)
+    .where(inArray(questionsTable.templateId, templates.map(t => t.id)))
+    .groupBy(questionsTable.templateId);
+  const qMap = Object.fromEntries(qCounts.map(r => [r.templateId, Number(r.cnt)]));
+
+  // Schedule counts per template (for this company)
+  const sCounts = await db.select({
+    templateId: schedulesTable.templateId,
+    cnt:        count(),
+  }).from(schedulesTable)
+    .where(and(eq(schedulesTable.companyId, cid), inArray(schedulesTable.templateId, templates.map(t => t.id))))
+    .groupBy(schedulesTable.templateId);
+  const sMap = Object.fromEntries(sCounts.map(r => [r.templateId, Number(r.cnt)]));
+
+  // Inspection counts per template in period (join to supervisor user to confirm company)
+  const iCounts = await db.select({
+    templateId: inspectionsTable.templateId,
+    cnt:        count(),
+  }).from(inspectionsTable)
+    .innerJoin(usersTable, eq(inspectionsTable.supervisorId, usersTable.id))
+    .where(and(
+      eq(usersTable.companyId, cid),
+      inArray(inspectionsTable.templateId, templates.map(t => t.id)),
+      gte(inspectionsTable.inspectedAt, from),
+      lte(inspectionsTable.inspectedAt, to + "T23:59:59"),
+    ))
+    .groupBy(inspectionsTable.templateId);
+  const iMap = Object.fromEntries(iCounts.map(r => [r.templateId, Number(r.cnt)]));
+
+  const rows = templates.map(t => ({
+    id:             t.id,
+    name:           t.name,
+    description:    t.description ?? null,
+    isActive:       t.isActive,
+    createdAt:      t.createdAt.toISOString(),
+    questionCount:  qMap[t.id] ?? 0,
+    scheduleCount:  sMap[t.id] ?? 0,
+    inspectionCount: iMap[t.id] ?? 0,
+  })).sort((a, b) => b.inspectionCount - a.inspectionCount);
+
+  const active   = rows.filter(r => r.isActive).length;
+  const inactive = rows.filter(r => !r.isActive).length;
+  const totalInspections = rows.reduce((s, r) => s + r.inspectionCount, 0);
+  const totalSchedules   = rows.reduce((s, r) => s + r.scheduleCount, 0);
+  const totalQuestions   = rows.reduce((s, r) => s + r.questionCount, 0);
+
+  res.json({
+    period: { from, to },
+    rows,
+    summary: { total: rows.length, active, inactive, totalInspections, totalSchedules, totalQuestions },
+  });
 });
 
 export default router;

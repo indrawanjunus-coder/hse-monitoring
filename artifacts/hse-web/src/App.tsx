@@ -28,6 +28,8 @@ import PreventiveActionsPage from "@/pages/master/preventive-actions";
 import IncidentTypesPage from "@/pages/master/incident-types";
 import IndicatorReportPage from "@/pages/reports/indicator-report";
 import ScheduleCompliancePage from "@/pages/reports/schedule-compliance";
+import DepartmentReportPage from "@/pages/reports/department-report";
+import TemplateReportPage from "@/pages/reports/template-report";
 import LogsPage from "@/pages/admin/logs";
 import RegisterPage from "@/pages/register";
 import PaymentPage from "@/pages/payment";
@@ -115,6 +117,8 @@ function MainApp() {
           <Route path="/master/maps" component={MapsPage} />
           <Route path="/reports/indicators" component={IndicatorReportPage} />
           <Route path="/reports/schedule-compliance" component={ScheduleCompliancePage} />
+          <Route path="/reports/department" component={DepartmentReportPage} />
+          <Route path="/reports/templates" component={TemplateReportPage} />
           <Route path="/admin/logs" component={LogsPage} />
           <Route path="/payment" component={PaymentPage} />
           <Route path="/testimonial" component={TestimonialPage} />

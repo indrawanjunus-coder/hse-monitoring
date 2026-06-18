@@ -32,6 +32,8 @@ import {
   FileCheck,
   QrCode,
   TrendingDown,
+  Building2,
+  FileText,
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./ui/button";
@@ -86,6 +88,8 @@ const navItems: NavItem[] = [
       { label: "Laporan Bulanan", href: "/reports/monthly", icon: <FileBarChart className="w-4 h-4" /> },
       { label: "Matrix Aksi per Plant", href: "/reports/action-matrix", icon: <Grid3X3 className="w-4 h-4" /> },
       { label: "Laporan Indikator EHS", href: "/reports/indicators", icon: <Target className="w-4 h-4" />, supervisorOrAdmin: true },
+      { label: "Laporan per Departemen", href: "/reports/department", icon: <Building2 className="w-4 h-4" />, supervisorOrAdmin: true },
+      { label: "Laporan Template", href: "/reports/templates", icon: <FileText className="w-4 h-4" />, supervisorOrAdmin: true },
     ],
   },
   { label: "Lagging Indicator", href: "/lagging-indicators", icon: <TrendingDown className="w-4 h-4" />, supervisorOrAdmin: true },
