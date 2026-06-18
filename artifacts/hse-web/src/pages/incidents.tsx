@@ -100,6 +100,152 @@ function AttachmentIcon({ mimeType }: { mimeType: string }) {
   return <FileImage className="w-4 h-4 text-blue-500" />;
 }
 
+interface AnnotatorMarker { id: string; x: number; y: number; color: "green" | "yellow" | "red"; }
+
+async function burnMarkersIntoImage(file: File, markers: AnnotatorMarker[]): Promise<File> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0);
+      const r = Math.max(12, Math.round(Math.min(canvas.width, canvas.height) * 0.018));
+      markers.forEach(m => {
+        const cx = (m.x / 100) * canvas.width;
+        const cy = (m.y / 100) * canvas.height;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r + 3, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = MARKER_COLORS[m.color] ?? "#ef4444";
+        ctx.fill();
+      });
+      canvas.toBlob(blob => {
+        if (!blob) { reject(new Error("Gagal render anotasi")); return; }
+        resolve(new File([blob], file.name.replace(/\.[^.]+$/, "") + "_annotated.jpg", { type: "image/jpeg" }));
+      }, "image/jpeg", 0.93);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Gagal baca gambar")); };
+    img.src = url;
+  });
+}
+
+const COLOR_META: Record<string, { bg: string; label: string; ring: string }> = {
+  green:  { bg: "#22c55e", label: "Aman",             ring: "#16a34a" },
+  yellow: { bg: "#eab308", label: "Perlu Perhatian",  ring: "#ca8a04" },
+  red:    { bg: "#ef4444", label: "Bahaya",            ring: "#dc2626" },
+};
+
+function ImageAnnotator({
+  file, previewUrl, initialMarkers, onSave, onClose,
+}: {
+  file: File;
+  previewUrl: string;
+  initialMarkers: AnnotatorMarker[];
+  onSave: (markers: AnnotatorMarker[]) => void;
+  onClose: () => void;
+}) {
+  const [markers, setMarkers] = useState<AnnotatorMarker[]>(initialMarkers);
+  const [activeColor, setActiveColor] = useState<"green" | "yellow" | "red">("red");
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  const handleImgClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!imgRef.current) return;
+    const rect = imgRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    setMarkers(prev => [...prev, { id: `${Date.now()}-${Math.random()}`, x, y, color: activeColor }]);
+  };
+
+  const removeMarker = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setMarkers(prev => prev.filter(m => m.id !== id));
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/85 flex flex-col" onClick={e => e.stopPropagation()}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-gray-950/90">
+        <div>
+          <p className="text-sm font-semibold text-white truncate max-w-[260px]">{file.name}</p>
+          <p className="text-xs text-gray-400">Klik foto untuk menambah penanda · Klik penanda untuk hapus</p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" variant="ghost" className="text-gray-300 hover:text-white h-8" onClick={onClose}>Batal</Button>
+          <Button size="sm" className="h-8 bg-blue-600 hover:bg-blue-700" onClick={() => { onSave(markers); onClose(); }}>
+            Simpan ({markers.length} penanda)
+          </Button>
+        </div>
+      </div>
+
+      {/* Color picker */}
+      <div className="flex items-center justify-center gap-2 py-2.5 bg-gray-900/90">
+        {(["green", "yellow", "red"] as const).map(c => (
+          <button
+            key={c}
+            onClick={() => setActiveColor(c)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+            style={{
+              background: activeColor === c ? COLOR_META[c]!.bg : "#374151",
+              color: c === "yellow" && activeColor === c ? "#1f2937" : "white",
+              outline: activeColor === c ? `3px solid ${COLOR_META[c]!.ring}` : "none",
+              outlineOffset: "2px",
+              opacity: activeColor === c ? 1 : 0.55,
+            }}
+          >
+            <span className="w-2.5 h-2.5 rounded-full bg-white/50 inline-block" />
+            {COLOR_META[c]!.label}
+          </button>
+        ))}
+        {markers.length > 0 && (
+          <button
+            onClick={() => setMarkers([])}
+            className="px-3 py-1.5 rounded-full text-xs text-gray-300 bg-gray-700 hover:bg-gray-600 ml-2"
+          >
+            Hapus Semua
+          </button>
+        )}
+      </div>
+
+      {/* Image canvas */}
+      <div className="flex-1 overflow-auto flex items-center justify-center p-4">
+        <div className="relative inline-block cursor-crosshair select-none" onClick={handleImgClick}>
+          <img
+            ref={imgRef}
+            src={previewUrl}
+            alt={file.name}
+            className="max-h-[65vh] max-w-[90vw] rounded-lg shadow-2xl"
+            draggable={false}
+          />
+          {markers.map(m => (
+            <button
+              key={m.id}
+              title="Klik untuk hapus"
+              onClick={e => removeMarker(m.id, e)}
+              style={{
+                left: `${m.x}%`,
+                top: `${m.y}%`,
+                background: MARKER_COLORS[m.color] ?? "#ef4444",
+              }}
+              className="absolute w-5 h-5 rounded-full border-2 border-white shadow-lg transform -translate-x-1/2 -translate-y-1/2 hover:scale-125 transition-transform z-10"
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="py-2 text-center">
+        <p className="text-xs text-gray-500">{markers.length} penanda · warna aktif: <span style={{ color: COLOR_META[activeColor]!.bg }}>{COLOR_META[activeColor]!.label}</span></p>
+      </div>
+    </div>
+  );
+}
+
 interface Incident {
   id: number;
   reporterId: number;
@@ -321,6 +467,9 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
   const [needsFurtherAction, setNeedsFurtherAction] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pendingPreviews, setPendingPreviews] = useState<(string | null)[]>([]);
+  const [pendingMarkers, setPendingMarkers] = useState<AnnotatorMarker[][]>([]);
+  const [annotateIndex, setAnnotateIndex] = useState<number | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -404,14 +553,36 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
-    setPendingFiles(prev => {
-      const existing = new Set(prev.map(f => f.name + f.size));
-      return [...prev, ...files.filter(f => !existing.has(f.name + f.size))];
-    });
+    const existing = new Set(pendingFiles.map(f => f.name + f.size));
+    const newFiles = files.filter(f => !existing.has(f.name + f.size));
+    setPendingFiles(prev => [...prev, ...newFiles]);
+    setPendingPreviews(prev => [...prev, ...newFiles.map(f => f.type.startsWith("image/") ? URL.createObjectURL(f) : null)]);
+    setPendingMarkers(prev => [...prev, ...newFiles.map(() => [] as AnnotatorMarker[])]);
     e.target.value = "";
   };
 
-  const removeFile = (idx: number) => setPendingFiles(prev => prev.filter((_, i) => i !== idx));
+  const removeFile = (idx: number) => {
+    const url = pendingPreviews[idx];
+    if (url) URL.revokeObjectURL(url);
+    setPendingFiles(prev => prev.filter((_, i) => i !== idx));
+    setPendingPreviews(prev => prev.filter((_, i) => i !== idx));
+    setPendingMarkers(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleAnnotatorSave = async (idx: number, markers: AnnotatorMarker[]) => {
+    setPendingMarkers(prev => { const n = [...prev]; n[idx] = markers; return n; });
+    if (markers.length === 0) return;
+    try {
+      const annotated = await burnMarkersIntoImage(pendingFiles[idx]!, markers);
+      const newUrl = URL.createObjectURL(annotated);
+      const oldUrl = pendingPreviews[idx];
+      if (oldUrl) URL.revokeObjectURL(oldUrl);
+      setPendingFiles(prev => { const n = [...prev]; n[idx] = annotated; return n; });
+      setPendingPreviews(prev => { const n = [...prev]; n[idx] = newUrl; return n; });
+    } catch {
+      /* silently keep original if burn fails */
+    }
+  };
 
   const picGroupName = selectedCategory?.picGroupName;
   const totalRecipients = recipientGroups.length + recipientUsers.length;
@@ -574,17 +745,79 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
           Klik untuk pilih foto atau PDF
         </div>
         {pendingFiles.length > 0 && (
-          <div className="space-y-1.5">
-            {pendingFiles.map((f, i) => (
-              <div key={i} className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-3 py-2 text-sm">
-                {f.type === "application/pdf" ? <FileText className="w-4 h-4 text-red-500 shrink-0" /> : <FileImage className="w-4 h-4 text-blue-500 shrink-0" />}
-                <span className="truncate flex-1">{f.name}</span>
-                <span className="text-xs text-gray-400 shrink-0">{formatBytes(f.size)}</span>
-                <button onClick={() => removeFile(i)} className="text-gray-400 hover:text-red-500">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
+          <div className="space-y-2">
+            {pendingFiles.map((f, i) => {
+              const previewUrl = pendingPreviews[i] ?? null;
+              const markerCount = (pendingMarkers[i] ?? []).length;
+              const isImage = f.type.startsWith("image/");
+              return (
+                <div key={i} className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                  {/* Thumbnail (image only) */}
+                  {isImage && previewUrl && (
+                    <div
+                      className="relative group cursor-pointer"
+                      onClick={() => setAnnotateIndex(i)}
+                    >
+                      <img
+                        src={previewUrl}
+                        alt={f.name}
+                        className="w-full max-h-40 object-cover"
+                      />
+                      {/* Marker dot overlay on thumbnail */}
+                      {(pendingMarkers[i] ?? []).map(m => (
+                        <div
+                          key={m.id}
+                          className="absolute w-3 h-3 rounded-full border-2 border-white shadow pointer-events-none"
+                          style={{
+                            left: `${m.x}%`,
+                            top: `${m.y}%`,
+                            transform: "translate(-50%,-50%)",
+                            background: MARKER_COLORS[m.color] ?? "#ef4444",
+                          }}
+                        />
+                      ))}
+                      {/* Hover overlay */}
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 bg-white/90 text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-full shadow">
+                          <Eye className="w-3.5 h-3.5" />
+                          Beri Penanda
+                        </div>
+                      </div>
+                      {markerCount > 0 && (
+                        <div className="absolute top-2 right-2 flex gap-1">
+                          {Array.from(new Set((pendingMarkers[i] ?? []).map(m => m.color))).map(c => (
+                            <span key={c} className="w-4 h-4 rounded-full border-2 border-white shadow" style={{ background: MARKER_COLORS[c] ?? "#ccc" }} />
+                          ))}
+                          <span className="text-xs bg-black/60 text-white px-1.5 rounded-full leading-4 h-4 flex items-center">{markerCount}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* File info row */}
+                  <div className="flex items-center gap-2 px-3 py-2 text-sm">
+                    {f.type === "application/pdf"
+                      ? <FileText className="w-4 h-4 text-red-500 shrink-0" />
+                      : <FileImage className="w-4 h-4 text-blue-500 shrink-0" />}
+                    <span className="truncate flex-1 text-gray-700">{f.name}</span>
+                    <span className="text-xs text-gray-400 shrink-0">{formatBytes(f.size)}</span>
+                    {isImage && (
+                      <button
+                        type="button"
+                        onClick={() => setAnnotateIndex(i)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium shrink-0 flex items-center gap-1"
+                        title="Buka untuk memberi penanda warna"
+                      >
+                        <Eye className="w-3 h-3" />
+                        Anotasi
+                      </button>
+                    )}
+                    <button type="button" onClick={() => removeFile(i)} className="text-gray-400 hover:text-red-500 shrink-0">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
         {uploadStatus && (
@@ -612,6 +845,16 @@ function IncidentForm({ onSave, onDone, onCancel, plants, categories, actions, p
           {saving ? (uploadStatus || "Menyimpan...") : "Kirim Laporan"}
         </Button>
       </DialogFooter>
+
+      {annotateIndex !== null && pendingPreviews[annotateIndex] && (
+        <ImageAnnotator
+          file={pendingFiles[annotateIndex]!}
+          previewUrl={pendingPreviews[annotateIndex]!}
+          initialMarkers={pendingMarkers[annotateIndex] ?? []}
+          onSave={(markers) => handleAnnotatorSave(annotateIndex, markers)}
+          onClose={() => setAnnotateIndex(null)}
+        />
+      )}
     </div>
   );
 }
