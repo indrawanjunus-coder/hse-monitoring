@@ -5,6 +5,8 @@ import { PageHeader } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
@@ -98,6 +100,23 @@ const ZONE_STYLE = {
   high:     { bg: "bg-orange-100", border: "border-orange-300", text: "text-orange-800", dot: "bg-orange-400", label: "High"     },
   critical: { bg: "bg-red-100",    border: "border-red-300",    text: "text-red-800",    dot: "bg-red-500",    label: "Critical" },
 };
+
+interface CellIncident {
+  id: number;
+  detail: string;
+  incidentDate: string;
+  incidentType: string | null;
+  status: string;
+  categoryName: string | null;
+  plantName: string | null;
+}
+
+interface SelectedCell {
+  prob: string;
+  impact: string;
+  zone: "low" | "medium" | "high" | "critical";
+  incidentIds: number[];
+}
 
 const PIE_COLORS = [
   "#3b82f6","#ef4444","#f59e0b","#10b981","#8b5cf6",
@@ -351,6 +370,15 @@ export default function DashboardPage() {
     queryKey: ["dashboard-risk-heatmap", year, heatmapMonth],
     queryFn: () => api.get(`/dashboard/risk-heatmap?year=${year}&month=${heatmapMonth}`),
     staleTime: 30_000,
+  });
+
+  // Heatmap cell drill-down
+  const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
+  const { data: cellIncidents = [], isLoading: cellLoading } = useQuery<CellIncident[]>({
+    queryKey: ["heatmap-cell-incidents", selectedCell?.incidentIds],
+    queryFn: () => api.get(`/dashboard/incidents-detail?ids=${selectedCell!.incidentIds.join(",")}`),
+    enabled: !!selectedCell && selectedCell.incidentIds.length > 0,
+    staleTime: 60_000,
   });
 
   // Auto-select default templates: prefer saved settings, fall back to regex name-match
@@ -837,15 +865,27 @@ export default function DashboardPage() {
                         return (
                           <td key={imp} className="p-1">
                             <div
+                              onClick={() => {
+                                if (hasIncidents) {
+                                  setSelectedCell({
+                                    prob,
+                                    impact: imp,
+                                    zone,
+                                    incidentIds: cell!.incidentIds,
+                                  });
+                                }
+                              }}
                               className={`
                                 relative flex flex-col items-center justify-center
                                 rounded-xl border-2 transition-all
                                 ${style.bg} ${style.border}
-                                ${hasIncidents ? "shadow-sm" : "opacity-60"}
+                                ${hasIncidents
+                                  ? "shadow-sm cursor-pointer hover:brightness-95 hover:shadow-md active:scale-95"
+                                  : "opacity-60"}
                               `}
                               style={{ minHeight: 64, minWidth: 72 }}
                               title={hasIncidents
-                                ? `${cell!.count} incident · ${style.label} Risk (${PROB_LABELS[prob] ?? prob} × ${IMPACT_LABELS[imp] ?? imp})`
+                                ? `Klik untuk melihat ${cell!.count} incident · ${style.label} Risk`
                                 : `${style.label} Risk zone`
                               }
                             >
@@ -998,6 +1038,79 @@ export default function DashboardPage() {
 
         </div>
       )}
+
+      {/* ── Heatmap Drill-Down Dialog ── */}
+      <Dialog open={!!selectedCell} onOpenChange={open => { if (!open) setSelectedCell(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          {selectedCell && (() => {
+            const style = ZONE_STYLE[selectedCell.zone];
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-semibold border ${style.bg} ${style.border} ${style.text}`}>
+                      <span className={`w-2.5 h-2.5 rounded-full ${style.dot}`} />
+                      {style.label} Risk
+                    </span>
+                    <span className="text-slate-600 font-normal text-sm">
+                      {PROB_LABELS[selectedCell.prob]} × {IMPACT_LABELS[selectedCell.impact]}
+                    </span>
+                  </DialogTitle>
+                </DialogHeader>
+
+                {cellLoading ? (
+                  <div className="py-8 text-center text-sm text-gray-400">Memuat data incident...</div>
+                ) : cellIncidents.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-gray-400">Tidak ada data ditemukan</div>
+                ) : (
+                  <div className="space-y-2 mt-1">
+                    <p className="text-xs text-gray-500 mb-3">
+                      {cellIncidents.length} incident dalam zona ini
+                    </p>
+                    {cellIncidents.map(inc => (
+                      <Link key={inc.id} to={`/incidents/${inc.id}`}
+                        onClick={() => setSelectedCell(null)}
+                        className="block"
+                      >
+                        <div className="flex items-start gap-3 p-3 rounded-lg border hover:bg-gray-50 transition-colors cursor-pointer group">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-800 line-clamp-2 group-hover:text-blue-700">
+                              {inc.detail}
+                            </p>
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              <span className="text-xs text-gray-400">{inc.incidentDate}</span>
+                              {inc.categoryName && (
+                                <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded-full">{inc.categoryName}</span>
+                              )}
+                              {inc.plantName && (
+                                <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">{inc.plantName}</span>
+                              )}
+                              {inc.incidentType && (
+                                <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded-full">{inc.incidentType.replace(/_/g, " ")}</span>
+                              )}
+                            </div>
+                          </div>
+                          <Badge
+                            className={`flex-shrink-0 text-xs ${
+                              inc.status === "closed"
+                                ? "bg-green-100 text-green-700 border-green-200"
+                                : inc.status === "in_progress"
+                                ? "bg-amber-100 text-amber-700 border-amber-200"
+                                : "bg-red-100 text-red-700 border-red-200"
+                            } hover:opacity-80`}
+                          >
+                            {inc.status === "closed" ? "Selesai" : inc.status === "in_progress" ? "Proses" : "Open"}
+                          </Badge>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

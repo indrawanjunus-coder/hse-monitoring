@@ -640,6 +640,36 @@ router.get("/template-weekly", async (req, res) => {
   res.json({ month, year, templateId, departments });
 });
 
+// Fetch incident details by IDs (used by heatmap cell drill-down)
+router.get("/incidents-detail", async (req, res) => {
+  const rawIds = req.query.ids as string | undefined;
+  if (!rawIds?.trim()) { res.json([]); return; }
+  const ids = rawIds.split(",").map(Number).filter(n => !isNaN(n) && n > 0);
+  if (!ids.length) { res.json([]); return; }
+
+  const cid = req.user!.companyId;
+  const rows = await db
+    .select({
+      id: incidentsTable.id,
+      detail: incidentsTable.detail,
+      incidentDate: incidentsTable.incidentDate,
+      incidentType: incidentsTable.incidentType,
+      status: incidentsTable.status,
+      categoryName: categoriesTable.name,
+      plantName: plantsTable.name,
+    })
+    .from(incidentsTable)
+    .leftJoin(categoriesTable, eq(incidentsTable.categoryId, categoriesTable.id))
+    .leftJoin(plantsTable, eq(incidentsTable.plantId, plantsTable.id))
+    .where(
+      cid
+        ? and(inArray(incidentsTable.id, ids), eq(incidentsTable.companyId, cid))
+        : inArray(incidentsTable.id, ids)
+    );
+
+  res.json(rows);
+});
+
 // Risk Heat Map: probability (from incidentTypesTable) vs impact (from categoriesTable)
 router.get("/risk-heatmap", async (req, res) => {
   const now   = new Date();
