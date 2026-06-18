@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db, incidentsTable, categoriesTable, actionsTable, plantsTable,
   schedulesTable, scheduleGroupsTable, scheduleUsersTable,
-  groupMembersTable, groupsTable, usersTable, inspectionsTable, templatesTable } from "@workspace/db";
+  groupMembersTable, groupsTable, usersTable, inspectionsTable, templatesTable,
+  incidentTypesTable } from "@workspace/db";
 import { eq, inArray, and } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 
