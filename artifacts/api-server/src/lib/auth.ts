@@ -146,8 +146,9 @@ export async function companySubscriptionMiddleware(
     subCache.set(cid, { ok: true, exp: now + 60_000 });
     next();
   } catch (err) {
-    // On DB error, fail open (don't block user) to avoid outage
-    next();
+    // Fail-closed on DB error: do not grant access when we cannot verify subscription status.
+    // Return 503 so the client can distinguish a transient error from a permanent 402 paywall.
+    res.status(503).json({ message: "Layanan sementara tidak tersedia. Silakan coba lagi.", code: "SERVICE_UNAVAILABLE" });
   }
 }
 
