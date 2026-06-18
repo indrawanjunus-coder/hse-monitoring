@@ -184,7 +184,7 @@ router.get("/monthly", async (req, res) => {
       categoryId: cat.categoryId,
       categoryName: cat.categoryName,
       riskLevel,
-      fatal: catRows.filter(r => r.cat?.riskLevel === "fatal").length,
+      fatal: catRows.filter(r => r.cat?.riskLevel === "catastrophic" || r.cat?.riskLevel === "fatal").length,
       major: catRows.filter(r => r.cat?.riskLevel === "major").length,
       moderate: catRows.filter(r => r.cat?.riskLevel === "moderate").length,
       minor: catRows.filter(r => r.cat?.riskLevel === "minor").length,

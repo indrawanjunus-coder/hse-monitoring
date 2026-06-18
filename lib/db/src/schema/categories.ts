@@ -10,7 +10,7 @@ export const categoriesTable = pgTable("categories", {
   companyId: integer("company_id").references(() => companiesTable.id),
   name: text("name").notNull(),
   description: text("description"),
-  riskLevel: text("risk_level", { enum: ["minor", "moderate", "major", "fatal"] }).notNull().default("minor"),
+  riskLevel: text("risk_level", { enum: ["insignificant", "minor", "moderate", "major", "catastrophic"] }).notNull().default("minor"),
   picGroupId: integer("pic_group_id").references(() => groupsTable.id),
   color: text("color").default("#3B82F6"),
   createdAt: timestamp("created_at").notNull().defaultNow(),

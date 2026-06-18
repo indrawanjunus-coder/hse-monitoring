@@ -10,6 +10,7 @@ export const incidentTypesTable = pgTable("incident_types", {
   label: text("label").notNull(),
   description: text("description"),
   categoryId: integer("category_id"),
+  probability: text("probability", { enum: ["rare", "unlikely", "possible", "likely", "almost_certain"] }),
   isActive: boolean("is_active").notNull().default(true),
   orderIndex: integer("order_index").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),

@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Pagination } from "@/components/pagination";
 
 interface Category {
-  id: number; name: string; description?: string; riskLevel: "minor" | "moderate" | "major" | "fatal";
+  id: number; name: string; description?: string; riskLevel: "insignificant" | "minor" | "moderate" | "major" | "catastrophic";
   picGroupId?: number; picGroupName?: string; color?: string;
   groupIds?: number[]; userIds?: number[];
   groups?: { id: number; name: string }[];
@@ -68,7 +68,7 @@ function CategoryForm({ cat, groups, users, onSave, onCancel }: {
 }) {
   const [name, setName] = useState(cat?.name ?? "");
   const [description, setDescription] = useState(cat?.description ?? "");
-  const [riskLevel, setRiskLevel] = useState(cat?.riskLevel ?? "minor");
+  const [riskLevel, setRiskLevel] = useState(cat?.riskLevel ?? "minor" as string);
   const [selectedGroupIds, setSelectedGroupIds] = useState<number[]>(cat?.groupIds ?? []);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>(cat?.userIds ?? []);
   const [color, setColor] = useState(cat?.color ?? "#3B82F6");
@@ -97,14 +97,15 @@ function CategoryForm({ cat, groups, users, onSave, onCancel }: {
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Risk Level *</Label>
+          <Label>Impact *</Label>
           <Select value={riskLevel} onValueChange={setRiskLevel}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="insignificant">Insignificant</SelectItem>
               <SelectItem value="minor">Minor</SelectItem>
               <SelectItem value="moderate">Moderate</SelectItem>
               <SelectItem value="major">Major</SelectItem>
-              <SelectItem value="fatal">Fatal</SelectItem>
+              <SelectItem value="catastrophic">Catastrophic</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -202,7 +203,7 @@ export default function CategoriesPage() {
           <thead className="bg-gray-50 border-b">
             <tr>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Nama</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-600">Risk Level</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-600">Impact</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Group PIC</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">User PIC</th>
               <th className="text-left px-4 py-3 font-medium text-gray-600">Deskripsi</th>

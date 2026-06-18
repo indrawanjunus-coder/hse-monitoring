@@ -33,6 +33,7 @@ router.get("/", async (req, res) => {
         description: incidentTypesTable.description,
         categoryId: incidentTypesTable.categoryId,
         categoryName: categoriesTable.name,
+        probability: incidentTypesTable.probability,
         isActive: incidentTypesTable.isActive,
         orderIndex: incidentTypesTable.orderIndex,
         createdAt: incidentTypesTable.createdAt,
@@ -53,7 +54,7 @@ router.get("/", async (req, res) => {
 });
 
 router.post("/", requireAdmin, async (req, res) => {
-  const { code, label, description, categoryId, isActive, orderIndex } = req.body;
+  const { code, label, description, categoryId, probability, isActive, orderIndex } = req.body;
   if (!code?.trim() || !label?.trim()) {
     res.status(400).json({ error: "Kode dan label wajib diisi" }); return;
   }
@@ -84,11 +85,13 @@ router.post("/", requireAdmin, async (req, res) => {
       ? parseInt(String(categoryId)) : null;
     const isActiveBool = isActive === true || isActive === "true" || isActive === 1;
 
+    const validProb = ["rare","unlikely","possible","likely","almost_certain"];
     const [created] = await db.insert(incidentTypesTable).values({
       code: sanitizedCode,
       label: label.trim(),
       description: description?.trim() || null,
       categoryId: catId && !isNaN(catId) ? catId : null,
+      probability: probability && validProb.includes(probability) ? probability : null,
       isActive: isActiveBool,
       orderIndex: parseInt(String(orderIndex ?? 0)) || 0,
       companyId,
@@ -107,13 +110,14 @@ router.post("/", requireAdmin, async (req, res) => {
 router.put("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "ID tidak valid" }); return; }
-  const { label, description, categoryId, isActive, orderIndex } = req.body;
+  const { label, description, categoryId, probability, isActive, orderIndex } = req.body;
   const cid = req.user!.companyId;
 
   try {
     const catId = categoryId != null && categoryId !== "" && categoryId !== "none"
       ? parseInt(String(categoryId)) : null;
     const isActiveBool = isActive === true || isActive === "true" || isActive === 1;
+    const validProb = ["rare","unlikely","possible","likely","almost_certain"];
 
     const whereClause = cid ? and(eq(incidentTypesTable.id, id), eq(incidentTypesTable.companyId, cid)) : eq(incidentTypesTable.id, id);
     const [updated] = await db.update(incidentTypesTable)
@@ -121,6 +125,7 @@ router.put("/:id", requireAdmin, async (req, res) => {
         label: label?.trim(),
         description: description?.trim() || null,
         categoryId: catId && !isNaN(catId) ? catId : null,
+        probability: probability && validProb.includes(probability) ? probability : null,
         isActive: isActiveBool,
         orderIndex: parseInt(String(orderIndex ?? 0)) || 0,
       })

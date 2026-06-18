@@ -1,17 +1,28 @@
 import { cn } from "@/lib/utils";
 
-type RiskLevel = "minor" | "moderate" | "major" | "fatal" | "high" | "medium" | "low";
+type RiskLevel = "insignificant" | "minor" | "moderate" | "major" | "catastrophic" | "fatal" | "high" | "medium" | "low";
+type Probability = "rare" | "unlikely" | "possible" | "likely" | "almost_certain";
 type Status = "open" | "in_progress" | "closed" | "pending" | "completed" | "active" | string;
 
 const riskConfig: Record<RiskLevel, { label: string; class: string }> = {
+  insignificant: { label: "Insignificant", class: "bg-slate-100 text-slate-600 border border-slate-200" },
   minor: { label: "Minor", class: "bg-green-100 text-green-700 border border-green-200" },
   moderate: { label: "Moderate", class: "bg-yellow-100 text-yellow-700 border border-yellow-200" },
   major: { label: "Major", class: "bg-orange-100 text-orange-700 border border-orange-200" },
-  fatal: { label: "Fatal", class: "bg-red-100 text-red-700 border border-red-200" },
-  // Legacy aliases
+  catastrophic: { label: "Catastrophic", class: "bg-red-100 text-red-700 border border-red-200" },
+  // Legacy/aliases
+  fatal: { label: "Catastrophic", class: "bg-red-100 text-red-700 border border-red-200" },
   low: { label: "Minor", class: "bg-green-100 text-green-700 border border-green-200" },
   medium: { label: "Moderate", class: "bg-yellow-100 text-yellow-700 border border-yellow-200" },
   high: { label: "Major", class: "bg-orange-100 text-orange-700 border border-orange-200" },
+};
+
+const probabilityConfig: Record<Probability, { label: string; class: string }> = {
+  rare:          { label: "Rare",          class: "bg-slate-100 text-slate-600 border border-slate-200" },
+  unlikely:      { label: "Unlikely",      class: "bg-green-100 text-green-700 border border-green-200" },
+  possible:      { label: "Possible",      class: "bg-yellow-100 text-yellow-700 border border-yellow-200" },
+  likely:        { label: "Likely",        class: "bg-orange-100 text-orange-700 border border-orange-200" },
+  almost_certain:{ label: "Almost Certain",class: "bg-red-100 text-red-700 border border-red-200" },
 };
 
 const statusConfig: Record<string, { label: string; class: string }> = {
@@ -34,6 +45,15 @@ const incidentTypeConfig: Record<string, { label: string; class: string }> = {
 
 export function RiskBadge({ level }: { level: RiskLevel }) {
   const cfg = riskConfig[level] ?? { label: level, class: "bg-gray-100 text-gray-700 border border-gray-200" };
+  return (
+    <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold", cfg.class)}>
+      {cfg.label}
+    </span>
+  );
+}
+
+export function ProbabilityBadge({ probability }: { probability: string }) {
+  const cfg = probabilityConfig[probability as Probability] ?? { label: probability, class: "bg-gray-100 text-gray-700 border border-gray-200" };
   return (
     <span className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold", cfg.class)}>
       {cfg.label}
@@ -84,8 +104,17 @@ export const INCIDENT_TYPES = [
 ] as const;
 
 export const SEVERITY_LEVELS = [
+  { value: "insignificant", label: "Insignificant" },
   { value: "minor", label: "Minor" },
   { value: "moderate", label: "Moderate" },
   { value: "major", label: "Major" },
-  { value: "fatal", label: "Fatal" },
+  { value: "catastrophic", label: "Catastrophic" },
+] as const;
+
+export const PROBABILITY_LEVELS = [
+  { value: "rare",          label: "Rare" },
+  { value: "unlikely",      label: "Unlikely" },
+  { value: "possible",      label: "Possible" },
+  { value: "likely",        label: "Likely" },
+  { value: "almost_certain",label: "Almost Certain" },
 ] as const;

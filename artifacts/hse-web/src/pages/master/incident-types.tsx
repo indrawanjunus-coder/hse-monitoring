@@ -14,6 +14,7 @@ import { Plus, Edit, Trash2, AlertTriangle, Search, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
 import { Pagination } from "@/components/pagination";
+import { ProbabilityBadge } from "@/components/badges";
 
 interface Category { id: number; name: string }
 
@@ -24,6 +25,7 @@ interface IncidentType {
   description?: string | null;
   categoryId?: number | null;
   categoryName?: string | null;
+  probability?: string | null;
   isActive: boolean;
   orderIndex: number;
 }
@@ -38,6 +40,7 @@ function IncidentTypeForm({ type, categories, onSave, onCancel }: {
   const [label, setLabel] = useState(type?.label ?? "");
   const [description, setDescription] = useState(type?.description ?? "");
   const [categoryId, setCategoryId] = useState(type?.categoryId ? String(type.categoryId) : "none");
+  const [probability, setProbability] = useState(type?.probability ?? "none");
   const [isActive, setIsActive] = useState(type?.isActive ?? true);
   const [orderIndex, setOrderIndex] = useState(String(type?.orderIndex ?? 0));
   const [saving, setSaving] = useState(false);
@@ -51,6 +54,7 @@ function IncidentTypeForm({ type, categories, onSave, onCancel }: {
         label: label.trim(),
         description: description.trim() || null,
         categoryId: categoryId !== "none" ? parseInt(categoryId) : null,
+        probability: probability !== "none" ? probability : null,
         isActive,
         orderIndex: parseInt(orderIndex) || 0,
       });
@@ -80,6 +84,21 @@ function IncidentTypeForm({ type, categories, onSave, onCancel }: {
           </SelectContent>
         </Select>
         <p className="text-xs text-gray-500">Tipe incident ini akan muncul saat pelapor memilih kategori di atas.</p>
+      </div>
+      <div className="space-y-1">
+        <Label>Probability</Label>
+        <Select value={probability} onValueChange={setProbability}>
+          <SelectTrigger><SelectValue placeholder="Pilih probability..." /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">— Tidak ada —</SelectItem>
+            <SelectItem value="rare">Rare</SelectItem>
+            <SelectItem value="unlikely">Unlikely</SelectItem>
+            <SelectItem value="possible">Possible</SelectItem>
+            <SelectItem value="likely">Likely</SelectItem>
+            <SelectItem value="almost_certain">Almost Certain</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-gray-500">Kemungkinan kejadian tipe incident ini terjadi.</p>
       </div>
       <div className="space-y-1">
         <Label>Deskripsi</Label>
@@ -209,6 +228,7 @@ export default function IncidentTypesPage() {
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Label</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Kode</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">Kategori</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600 hidden lg:table-cell">Probability</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600 hidden md:table-cell">Deskripsi</th>
                   <th className="px-4 py-3 text-center font-semibold text-gray-600">Status</th>
                   {isAdmin && <th className="px-4 py-3" />}
@@ -227,6 +247,12 @@ export default function IncidentTypesPage() {
                       {t.categoryName
                         ? <Badge variant="outline" className="text-xs border-blue-200 text-blue-700 bg-blue-50">{t.categoryName}</Badge>
                         : <span className="text-gray-400 text-xs italic">Umum</span>
+                      }
+                    </td>
+                    <td className="px-4 py-3 hidden lg:table-cell">
+                      {t.probability
+                        ? <ProbabilityBadge probability={t.probability} />
+                        : <span className="text-gray-400 text-xs italic">—</span>
                       }
                     </td>
                     <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{t.description ?? "—"}</td>
