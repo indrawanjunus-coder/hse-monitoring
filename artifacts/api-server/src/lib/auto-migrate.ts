@@ -70,8 +70,14 @@ export async function autoMigrate() {
       { table: "inspections",        column: "map_markers",  definition: "TEXT" },
       { table: "maps",               column: "drive_file_id", definition: "TEXT" },
       { table: "maps",               column: "view_url",      definition: "TEXT" },
-      { table: "non_lti_settings",   column: "walk_talk_template_id", definition: "INTEGER" },
-      { table: "non_lti_settings",   column: "hazard_template_id",    definition: "INTEGER" },
+      { table: "non_lti_settings",   column: "walk_talk_template_id",   definition: "INTEGER" },
+      { table: "non_lti_settings",   column: "hazard_template_id",      definition: "INTEGER" },
+      { table: "non_lti_settings",   column: "work_hours_manual",        definition: "INTEGER DEFAULT 0" },
+      { table: "non_lti_settings",   column: "num_shifts",               definition: "INTEGER DEFAULT 1" },
+      { table: "non_lti_settings",   column: "num_employees",            definition: "INTEGER DEFAULT 0" },
+      { table: "non_lti_settings",   column: "num_outsource",            definition: "INTEGER DEFAULT 0" },
+      { table: "non_lti_settings",   column: "contractor_hours",         definition: "INTEGER DEFAULT 0" },
+      { table: "non_lti_settings",   column: "monthly_hazard_allowance", definition: "INTEGER DEFAULT 0" },
       { table: "work_permits",       column: "user_id",               definition: "INTEGER REFERENCES users(id)" },
     ];
 

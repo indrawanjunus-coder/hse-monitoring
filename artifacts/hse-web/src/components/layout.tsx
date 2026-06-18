@@ -85,7 +85,7 @@ const navItems: NavItem[] = [
       { label: "Laporan Followup", href: "/reports/followup", icon: <BarChart2 className="w-4 h-4" /> },
       { label: "Laporan Bulanan", href: "/reports/monthly", icon: <FileBarChart className="w-4 h-4" /> },
       { label: "Matrix Aksi per Plant", href: "/reports/action-matrix", icon: <Grid3X3 className="w-4 h-4" /> },
-      { label: "Laporan Indikator HSE", href: "/reports/indicators", icon: <Target className="w-4 h-4" />, supervisorOrAdmin: true },
+      { label: "Laporan Indikator EHS", href: "/reports/indicators", icon: <Target className="w-4 h-4" />, supervisorOrAdmin: true },
     ],
   },
   { label: "Lagging Indicator", href: "/lagging-indicators", icon: <TrendingDown className="w-4 h-4" />, supervisorOrAdmin: true },
@@ -125,7 +125,7 @@ const navItems: NavItem[] = [
       { label: "Aksi", href: "/master/actions", icon: <Wrench className="w-4 h-4" /> },
       { label: "Tindakan Preventif", href: "/master/preventive-actions", icon: <Target className="w-4 h-4" /> },
       { label: "Tipe Incident", href: "/master/incident-types", icon: <AlertTriangle className="w-4 h-4" /> },
-      { label: "Indikator HSE", href: "/master/indicators", icon: <Target className="w-4 h-4" /> },
+      { label: "Indikator EHS", href: "/master/indicators", icon: <Target className="w-4 h-4" /> },
       { label: "Tipe Work Permit", href: "/master/work-permit-types", icon: <FileCheck className="w-4 h-4" />, adminOnly: true },
       { label: "Map Lokasi", href: "/master/maps", icon: <MapPin className="w-4 h-4" />, adminOnly: true },
     ],
@@ -215,7 +215,7 @@ function IndicatorWidget() {
         onClick={() => navigate("/master/indicators")}
       >
         <Target className="w-3.5 h-3.5" />
-        Indikator HSE
+        Indikator EHS
       </button>
       <div className="space-y-2">
         {indicators.slice(0, 4).map(ind => {
@@ -274,7 +274,7 @@ function Sidebar() {
             <span className="text-white text-xs font-bold">H</span>
           </div>
           <div>
-            <p className="text-sm font-bold text-gray-900">HSE System</p>
+            <p className="text-sm font-bold text-gray-900">EHS System</p>
             <p className="text-xs text-gray-400">Health, Safety & Environment</p>
           </div>
         </div>

@@ -21,6 +21,13 @@ export const nonLtiSettingsTable = pgTable("non_lti_settings", {
   baseValue: integer("base_value").notNull().default(0),
   walkTalkTemplateId: integer("walk_talk_template_id"),
   hazardTemplateId: integer("hazard_template_id"),
+  // Safe-hours formula parameters
+  workHoursManual: integer("work_hours_manual").default(0),   // jam kerja (0 = auto dari nonLtiDays×24)
+  numShifts: integer("num_shifts").default(1),                // jumlah shift
+  numEmployees: integer("num_employees").default(0),          // jumlah karyawan
+  numOutsource: integer("num_outsource").default(0),          // jumlah karyawan outsource
+  contractorHours: integer("contractor_hours").default(0),    // jam kerja kontraktor
+  monthlyHazardAllowance: integer("monthly_hazard_allowance").default(0), // batas hazard per bulan
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

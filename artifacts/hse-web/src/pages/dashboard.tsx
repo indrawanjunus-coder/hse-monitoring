@@ -47,6 +47,7 @@ interface LaggingData {
   nonLtiDays: number; safeHours: number;
   walkTalkTemplateId: number | null;
   hazardTemplateId: number | null;
+  monthlyHazardAllowance: number;
 }
 
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
@@ -343,7 +344,7 @@ export default function DashboardPage() {
   return (
     <div className="p-6 space-y-6">
       <PageHeader
-        title="Dashboard HSE"
+        title="Dashboard EHS"
         subtitle="Monitor kesehatan, keselamatan, dan lingkungan"
         action={
           <div className="flex items-center gap-2 flex-wrap">
@@ -517,16 +518,16 @@ export default function DashboardPage() {
             <div className="flex items-start justify-between mb-3">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Hazard Identification Report</p>
-                <p className="text-xs text-gray-400 mt-0.5">Semua periode</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {mode === "monthly" ? `Bulan berjalan · ${MONTHS_FULL[month - 1]} ${year}` : `Tahun ${year}`}
+                </p>
               </div>
               <AlertTriangle className="w-5 h-5 mt-0.5 text-blue-500" />
             </div>
-            <div className="text-4xl font-bold text-blue-700">{totalAllTime}</div>
+            <div className="text-4xl font-bold text-blue-700">{mtdTotal}</div>
             <div className="mt-2 text-xs text-gray-500 flex gap-3">
               <span>YTD {year}: <strong className="text-gray-700">{ytdTotal}</strong></span>
-              {mode === "monthly" && (
-                <span>{MONTHS_SHORT[month - 1]}: <strong className="text-gray-700">{mtdTotal}</strong></span>
-              )}
+              <span>All time: <strong className="text-gray-700">{totalAllTime}</strong></span>
             </div>
           </CardContent>
         </Card>
@@ -581,19 +582,53 @@ export default function DashboardPage() {
           color="violet"
         />
 
-        {/* Card C: Hazard Report (IT Harian) vs Target */}
-        <TemplateVsTargetCard
-          label={`${hazardTplName} vs ${mode === "yearly" ? "Target Tahunan" : "Target Bulanan"}`}
-          templateId={hazardTplId}
-          templateList={templateList}
-          onChangeTemplate={setHazardTplId}
-          data={hazardTplData}
-          isLoading={hazardTplLoading}
-          month={tplMonth}
-          year={year}
-          icon={FileBarChart}
-          color="orange"
-        />
+        {/* Card C: Hazard Ditemukan vs Batas Hazard Bulanan */}
+        {(() => {
+          const allowance = lagging?.monthlyHazardAllowance ?? 0;
+          const found = mtdTotal;
+          const pct = allowance > 0 ? Math.round((found / allowance) * 100) : 0;
+          const overLimit = allowance > 0 && found > allowance;
+          const barColor = overLimit ? "bg-red-500" : pct >= 80 ? "bg-yellow-500" : "bg-green-500";
+          const textColor = overLimit ? "text-red-700" : pct >= 80 ? "text-yellow-700" : "text-green-700";
+          return (
+            <Card className="border-orange-100 bg-orange-50/30">
+              <CardContent className="pt-4 pb-5">
+                <div className="flex items-start gap-2 mb-3">
+                  <FileBarChart className="w-4 h-4 text-orange-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm font-medium text-gray-700 leading-tight">
+                    Hazard Ditemukan vs Batas Hazard Bulanan
+                  </p>
+                </div>
+                <p className="text-xs text-gray-400 mb-3">
+                  MTD · {MONTHS_FULL[month - 1]} {year}
+                </p>
+                {allowance === 0 ? (
+                  <>
+                    <div className="text-3xl font-bold text-orange-600">{found}</div>
+                    <p className="text-xs text-gray-400 mt-1">hazard ditemukan (batas bulanan belum diset)</p>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-baseline gap-1 mb-1">
+                      <span className={`text-3xl font-bold ${textColor}`}>{found}</span>
+                      <span className="text-gray-400 text-sm">/ {allowance}</span>
+                      <span className={`ml-auto text-lg font-bold ${textColor}`}>{pct}%</span>
+                    </div>
+                    <div className="relative w-full bg-gray-100 rounded-full h-2.5 mb-2">
+                      <div className={`${barColor} h-2.5 rounded-full transition-all`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      {overLimit
+                        ? <span className="text-red-600 font-semibold">Melewati batas! ({found - allowance} melebihi)</span>
+                        : <span>{allowance - found} hazard tersisa dari batas bulanan</span>
+                      }
+                    </p>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
       </div>
 
       {/* ── Row 4: Lagging Indicator Pyramid ── */}
@@ -613,21 +648,37 @@ export default function DashboardPage() {
         <div className="flex flex-col lg:flex-row gap-8 items-center">
           {/* Pyramid */}
           <div className="flex-1 w-full max-w-lg mx-auto">
-            {[
-              { label: "Fatality", value: lagging?.fatality ?? 0, bg: "bg-red-800", text: "text-white", width: "w-[22%]" },
-              { label: "Lost Time Incident", value: lagging?.lti ?? 0, bg: "bg-red-500", text: "text-white", width: "w-[36%]" },
-              { label: "Medical Treatment Incident", value: lagging?.mti ?? 0, bg: "bg-orange-400", text: "text-white", width: "w-[50%]" },
-              { label: "First Aid", value: lagging?.firstAid ?? 0, bg: "bg-yellow-400", text: "text-slate-800", width: "w-[64%]" },
-              { label: "Near Misses", value: lagging?.nearMisses ?? 0, bg: "bg-blue-400", text: "text-white", width: "w-[78%]" },
-              { label: "Unsafe Conditions & Acts (Hazard ID)", value: lagging?.hazardId ?? 0, bg: "bg-blue-700", text: "text-white", width: "w-full" },
-            ].map((row, i) => (
-              <div key={i} className="flex items-center gap-3 mb-1.5">
-                <div className={`${row.width} flex items-center justify-center rounded-sm py-2 px-3 ${row.bg} transition-all ml-auto`}>
-                  <span className={`text-sm font-bold mr-2 ${row.text}`}>{row.value.toLocaleString()}</span>
-                </div>
-                <span className="text-xs text-slate-600 w-52 leading-tight flex-shrink-0">{row.label}</span>
-              </div>
-            ))}
+            {(() => {
+              const rows = [
+                { label: "Fatality",                              value: lagging?.fatality   ?? 0, bg: "bg-red-800",   text: "text-white"       },
+                { label: "Lost Time Incident",                    value: lagging?.lti        ?? 0, bg: "bg-red-500",   text: "text-white"       },
+                { label: "Medical Treatment Incident",            value: lagging?.mti        ?? 0, bg: "bg-orange-400",text: "text-white"       },
+                { label: "First Aid",                             value: lagging?.firstAid   ?? 0, bg: "bg-yellow-400",text: "text-slate-800"   },
+                { label: "Near Misses",                           value: lagging?.nearMisses ?? 0, bg: "bg-blue-400",  text: "text-white"       },
+                { label: "Unsafe Conditions & Acts (Hazard ID)",  value: lagging?.hazardId   ?? 0, bg: "bg-blue-700",  text: "text-white"       },
+              ];
+              const maxVal = Math.max(...rows.map(r => r.value), 1);
+              return rows.map((row, i) => {
+                if (row.value === 0) return (
+                  <div key={i} className="flex items-center gap-3 mb-1.5 opacity-40">
+                    <div className="ml-auto w-0" />
+                    <span className="text-xs text-slate-400 w-52 leading-tight flex-shrink-0 italic">{row.label}: 0</span>
+                  </div>
+                );
+                const pct = Math.max(10, Math.round((row.value / maxVal) * 100));
+                return (
+                  <div key={i} className="flex items-center gap-3 mb-1.5">
+                    <div
+                      className={`flex items-center justify-center rounded-sm py-2 px-3 ${row.bg} transition-all ml-auto`}
+                      style={{ width: `${pct}%` }}
+                    >
+                      <span className={`text-sm font-bold mr-2 ${row.text}`}>{row.value.toLocaleString()}</span>
+                    </div>
+                    <span className="text-xs text-slate-600 w-52 leading-tight flex-shrink-0">{row.label}</span>
+                  </div>
+                );
+              });
+            })()}
           </div>
 
           {/* Non LTI Days + Safe Hours */}

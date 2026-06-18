@@ -91,7 +91,7 @@ export default function LoginPage() {
               </div>
             </div>
             <h2 className="text-3xl font-bold text-white leading-snug mb-4">
-              Portal HSE<br />{company.name}
+              Portal EHS<br />{company.name}
             </h2>
             <p className="text-slate-400 text-sm leading-relaxed">
               Login dengan NIK dan password akun Anda di perusahaan ini.
@@ -106,7 +106,7 @@ export default function LoginPage() {
             </h2>
             <p className="text-slate-400 text-sm leading-relaxed">
               Platform terpadu untuk pemantauan jadwal inspeksi, pelaporan
-              hazard & insiden, serta pengelolaan data master HSE perusahaan.
+              hazard & insiden, serta pengelolaan data master EHS perusahaan.
             </p>
           </div>
         )}
