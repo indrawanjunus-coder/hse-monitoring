@@ -5,15 +5,33 @@ import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from "recharts";
 import {
   Building2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp, Printer,
-  Target, FileSpreadsheet, ChevronDown, Check,
+  Target, FileSpreadsheet, ChevronDown, Check, Calendar,
 } from "lucide-react";
+
+// ── Period helpers ─────────────────────────────────────────────────────────────
+const MONTHS_ID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+const YEARS = [2023, 2024, 2025, 2026, 2027];
+type PeriodMode = "monthly" | "yearly";
+
+function getPeriod(mode: PeriodMode, month: number, year: number) {
+  if (mode === "yearly") {
+    return { from: `${year}-01-01`, to: `${year}-12-31`, label: String(year) };
+  }
+  const lastDay = new Date(year, month, 0).getDate();
+  const mm = String(month).padStart(2, "0");
+  return {
+    from: `${year}-${mm}-01`,
+    to: `${year}-${mm}-${String(lastDay).padStart(2, "0")}`,
+    label: `${MONTHS_ID[month - 1]} ${year}`,
+  };
+}
 
 interface DeptRow {
   departmentId: number | null;
@@ -36,9 +54,6 @@ interface DeptReport {
   };
 }
 
-const now = new Date();
-const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-const today = now.toISOString().slice(0, 10);
 
 const STATUS_META = {
   compliant:  { label: "Sesuai Target", cls: "bg-green-100 text-green-700 border-green-200" },
@@ -136,9 +151,11 @@ function DeptMultiSelect({
 }
 
 export default function DepartmentReportPage() {
-  const [from, setFrom] = useState(firstOfMonth);
-  const [to, setTo]     = useState(today);
-  const [applied, setApplied] = useState({ from: firstOfMonth, to: today });
+  const nowD = new Date();
+  const [mode, setMode] = useState<PeriodMode>("monthly");
+  const [month, setMonth] = useState(nowD.getMonth() + 1);
+  const [year, setYear]   = useState(nowD.getFullYear());
+  const [applied, setApplied] = useState(() => getPeriod("monthly", nowD.getMonth() + 1, nowD.getFullYear()));
   const [selectedDepts, setSelectedDepts] = useState<Set<string>>(new Set());
 
   const { data, isLoading } = useQuery<DeptReport>({
@@ -190,7 +207,7 @@ export default function DepartmentReportPage() {
       `${data.summary.compliant}/${data.rows.length} sesuai`,
     ];
     const metaRows = [
-      [`Periode: ${data.period.from} s/d ${data.period.to}`],
+      [`Periode: ${applied.label}`],
       [`Minggu dalam periode: ${data.period.weeks.toFixed(1)}`],
       [`Target mingguan hazard (total): ${data.weeklyTarget > 0 ? data.weeklyTarget : "—"}`],
       [],
@@ -198,7 +215,7 @@ export default function DepartmentReportPage() {
     const ws = XLSX.utils.aoa_to_sheet([...metaRows, header, ...rows, footer]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Hazard & Insiden per Dept");
-    XLSX.writeFile(wb, `laporan-dept-${applied.from}-${applied.to}.xlsx`);
+    XLSX.writeFile(wb, `laporan-dept-${applied.label.replace(/ /g, "-")}.xlsx`);
   };
 
   const sum = data?.summary;
@@ -214,16 +231,50 @@ export default function DepartmentReportPage() {
       <Card>
         <CardContent className="pt-5">
           <div className="flex flex-wrap items-end gap-3">
+            {/* Mode toggle */}
             <div className="space-y-1">
-              <Label className="text-xs">Dari Tanggal</Label>
-              <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="w-40 text-sm" />
+              <Label className="text-xs">Tampilkan Per</Label>
+              <div className="flex rounded-md border overflow-hidden text-sm">
+                <button
+                  onClick={() => setMode("monthly")}
+                  className={`px-3 py-1.5 transition-colors ${mode === "monthly" ? "bg-primary text-primary-foreground font-medium" : "bg-background hover:bg-slate-50"}`}
+                >Bulan</button>
+                <button
+                  onClick={() => setMode("yearly")}
+                  className={`px-3 py-1.5 transition-colors border-l ${mode === "yearly" ? "bg-primary text-primary-foreground font-medium" : "bg-background hover:bg-slate-50"}`}
+                >Tahun</button>
+              </div>
             </div>
+            {/* Month (only for monthly mode) */}
+            {mode === "monthly" && (
+              <div className="space-y-1">
+                <Label className="text-xs">Bulan</Label>
+                <Select value={String(month)} onValueChange={v => setMonth(Number(v))}>
+                  <SelectTrigger className="w-36 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MONTHS_ID.map((m, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {/* Year */}
             <div className="space-y-1">
-              <Label className="text-xs">Sampai Tanggal</Label>
-              <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="w-40 text-sm" />
+              <Label className="text-xs">Tahun</Label>
+              <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
+                <SelectTrigger className="w-24 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            <Button onClick={() => setApplied({ from, to })} disabled={isLoading}>
-              Terapkan
+            <Button
+              onClick={() => setApplied(getPeriod(mode, month, year))}
+              disabled={isLoading}
+              className="flex items-center gap-2"
+            >
+              <Calendar className="w-4 h-4" /> Terapkan
             </Button>
             {data && data.rows.length > 0 && (
               <div className="space-y-1">

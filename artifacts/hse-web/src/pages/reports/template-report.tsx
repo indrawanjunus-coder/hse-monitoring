@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, useCallback } from "react";
+import * as XLSX from "xlsx";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
@@ -13,7 +13,26 @@ import {
 import {
   FileText, Building2, ClipboardList, CheckCircle2, XCircle, ShieldCheck,
   AlertCircle, Target, TrendingUp, ChevronRight, ChevronDown, User, Loader2,
+  FileSpreadsheet, Calendar,
 } from "lucide-react";
+
+// ── Period helpers ─────────────────────────────────────────────────────────────
+const MONTHS_ID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+const YEARS = [2023, 2024, 2025, 2026, 2027];
+type PeriodMode = "monthly" | "yearly";
+
+function getPeriod(mode: PeriodMode, month: number, year: number) {
+  if (mode === "yearly") {
+    return { from: `${year}-01-01`, to: `${year}-12-31`, label: String(year) };
+  }
+  const lastDay = new Date(year, month, 0).getDate();
+  const mm = String(month).padStart(2, "0");
+  return {
+    from: `${year}-${mm}-01`,
+    to: `${year}-${mm}-${String(lastDay).padStart(2, "0")}`,
+    label: `${MONTHS_ID[month - 1]} ${year}`,
+  };
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface TemplateListRow {
@@ -53,9 +72,6 @@ interface DeptUserResponse {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-const now = new Date();
-const defaultFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-const defaultTo   = now.toISOString().slice(0, 10);
 
 const STATUS_META = {
   compliant:  { label: "Sesuai",    icon: CheckCircle2, cls: "text-green-600 bg-green-50 border-green-200" },
@@ -290,15 +306,47 @@ function DeptExpandRow({
 
 // ── Template Detail View (after selecting a template) ─────────────────────────
 function TemplateDetailView({ templateId, onBack }: { templateId: number; onBack: () => void }) {
-  const [from, setFrom] = useState(defaultFrom);
-  const [to, setTo]     = useState(defaultTo);
-  const [applied, setApplied] = useState({ from: defaultFrom, to: defaultTo });
+  const nowD = new Date();
+  const [mode, setMode] = useState<PeriodMode>("monthly");
+  const [month, setMonth] = useState(nowD.getMonth() + 1);
+  const [year, setYear]   = useState(nowD.getFullYear());
+  const [applied, setApplied] = useState(() => getPeriod("monthly", nowD.getMonth() + 1, nowD.getFullYear()));
 
   const { data, isLoading } = useQuery<TemplateDetailResponse>({
     queryKey: ["report-template-detail", templateId, applied.from, applied.to],
     queryFn: () => api.get(`/reports/template-detail?templateId=${templateId}&from=${applied.from}&to=${applied.to}`),
     enabled: !!templateId,
   });
+
+  const exportExcel = () => {
+    if (!data) return;
+    const header = ["Departemen", "Ekspektasi", "Realisasi", "Pencapaian (%)", "Status"];
+    const rows = (data.rows ?? []).map(r => [
+      r.departmentName,
+      r.expected,
+      r.actual,
+      r.achievement != null ? r.achievement.toFixed(1) + "%" : "—",
+      r.status === "compliant" ? "Sesuai" : r.status === "partial" ? "Sebagian" : r.status === "none" ? "Nihil" : "—",
+    ]);
+    const sum = data.summary;
+    const footer = [
+      "TOTAL",
+      sum?.totalExpected ?? "",
+      sum?.totalActual ?? "",
+      sum?.avgAchievement != null ? sum.avgAchievement.toFixed(1) + "%" : "—",
+      `${sum?.compliant ?? 0}/${sum?.totalDepts ?? 0} sesuai`,
+    ];
+    const metaRows = [
+      [`Template: ${data.template.name}`],
+      [`Periode: ${applied.label}`],
+      [`Jadwal aktif: ${data.scheduleCount}`],
+      [],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([...metaRows, header, ...rows, footer]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template per Dept");
+    XLSX.writeFile(wb, `laporan-template-${templateId}-${applied.label.replace(/ /g, "-")}.xlsx`);
+  };
 
   const chartData = (data?.rows ?? []).map(r => ({
     name: r.departmentName.length > 14 ? r.departmentName.slice(0, 12) + "…" : r.departmentName,
@@ -331,19 +379,59 @@ function TemplateDetailView({ templateId, onBack }: { templateId: number; onBack
       <Card>
         <CardContent className="pt-5">
           <div className="flex flex-wrap items-end gap-3">
+            {/* Mode toggle */}
             <div className="space-y-1">
-              <Label className="text-xs">Dari Tanggal</Label>
-              <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="w-40 text-sm" />
+              <Label className="text-xs">Tampilkan Per</Label>
+              <div className="flex rounded-md border overflow-hidden text-sm">
+                <button
+                  onClick={() => setMode("monthly")}
+                  className={`px-3 py-1.5 transition-colors ${mode === "monthly" ? "bg-primary text-primary-foreground font-medium" : "bg-background hover:bg-slate-50"}`}
+                >Bulan</button>
+                <button
+                  onClick={() => setMode("yearly")}
+                  className={`px-3 py-1.5 transition-colors border-l ${mode === "yearly" ? "bg-primary text-primary-foreground font-medium" : "bg-background hover:bg-slate-50"}`}
+                >Tahun</button>
+              </div>
             </div>
+            {mode === "monthly" && (
+              <div className="space-y-1">
+                <Label className="text-xs">Bulan</Label>
+                <Select value={String(month)} onValueChange={v => setMonth(Number(v))}>
+                  <SelectTrigger className="w-36 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MONTHS_ID.map((m, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-1">
-              <Label className="text-xs">Sampai Tanggal</Label>
-              <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="w-40 text-sm" />
+              <Label className="text-xs">Tahun</Label>
+              <Select value={String(year)} onValueChange={v => setYear(Number(v))}>
+                <SelectTrigger className="w-24 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {YEARS.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-            <Button onClick={() => setApplied({ from, to })} disabled={isLoading}>Terapkan</Button>
+            <Button
+              onClick={() => setApplied(getPeriod(mode, month, year))}
+              disabled={isLoading}
+              className="flex items-center gap-2"
+            >
+              <Calendar className="w-4 h-4" /> Terapkan
+            </Button>
+            <div className="ml-auto">
+              <Button variant="outline" onClick={exportExcel} disabled={!data || (data.rows ?? []).length === 0}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" /> Export Excel
+              </Button>
+            </div>
           </div>
           {data && (
             <p className="mt-3 text-xs text-muted-foreground">
-              Jadwal aktif menggunakan template ini: <strong>{data.scheduleCount}</strong> jadwal
+              Periode: <strong>{applied.label}</strong> ·
+              Jadwal aktif: <strong>{data.scheduleCount}</strong> jadwal
             </p>
           )}
         </CardContent>
