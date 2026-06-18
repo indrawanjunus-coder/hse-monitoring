@@ -310,7 +310,7 @@ function PrintView({ schedules }: { schedules: Schedule[] }) {
   return (
     <div className="hidden print:block">
       <div className="text-center mb-6">
-        <h1 className="text-xl font-bold">Daftar Jadwal Inspeksi HSE</h1>
+        <h1 className="text-xl font-bold">Daftar Jadwal Inspeksi EHS</h1>
         <p className="text-sm text-gray-500">Dicetak pada {new Date().toLocaleDateString("id-ID", { dateStyle: "full" })}</p>
       </div>
       <table className="w-full border-collapse text-sm">

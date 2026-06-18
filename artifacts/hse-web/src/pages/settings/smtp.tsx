@@ -36,7 +36,7 @@ export default function SmtpSettingsPage() {
   const [protocol, setProtocol] = useState<"TLS" | "STARTTLS">("STARTTLS");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [fromName, setFromName] = useState("HSE System");
+  const [fromName, setFromName] = useState("EHS System");
   const [fromEmail, setFromEmail] = useState("");
   const [testEmail, setTestEmail] = useState("");
   const [testing, setTesting] = useState(false);
@@ -153,7 +153,7 @@ export default function SmtpSettingsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Nama Pengirim</Label>
-              <Input value={fromName} onChange={e => setFromName(e.target.value)} placeholder="HSE System" />
+              <Input value={fromName} onChange={e => setFromName(e.target.value)} placeholder="EHS System" />
             </div>
             <div className="space-y-2">
               <Label>Email Pengirim</Label>

@@ -153,7 +153,7 @@ export default function IndicatorReportPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Laporan Indikator HSE"
+        title="Laporan Indikator EHS"
         subtitle="Persentase pencapaian indikator berdasarkan hasil inspeksi"
       />
 
@@ -204,7 +204,7 @@ export default function IndicatorReportPage() {
         <div className="text-center py-16 text-gray-400">
           <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p className="font-medium">Belum ada data indikator</p>
-          <p className="text-sm">Tambahkan indikator dan hubungkan pertanyaan dari halaman Master Indikator HSE</p>
+          <p className="text-sm">Tambahkan indikator dan hubungkan pertanyaan dari halaman Master Indikator EHS</p>
         </div>
       ) : (
         <>

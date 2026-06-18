@@ -293,7 +293,7 @@ export default function IndicatorsPage() {
     <div className="p-6">
       <PageHeader
         title="Master Indikator"
-        subtitle="Kelola indikator HSE (ISO, SMK3, dll.) dan pertanyaan yang mempengaruhi persentasenya"
+        subtitle="Kelola indikator EHS (ISO, SMK3, dll.) dan pertanyaan yang mempengaruhi persentasenya"
         action={
           <div className="flex gap-2">
             {indicators.length === 0 && (

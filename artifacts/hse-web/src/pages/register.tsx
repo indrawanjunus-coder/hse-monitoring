@@ -211,7 +211,7 @@ export default function RegisterPage() {
         {step === "plan" && (
           <div>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Pilih Paket Langganan</h1>
-            <p className="text-gray-500 mb-6">Mulai kelola HSE perusahaan Anda dengan mudah</p>
+            <p className="text-gray-500 mb-6">Mulai kelola EHS perusahaan Anda dengan mudah</p>
 
             {/* Billing period filter toggle */}
             <div className="flex bg-gray-100 rounded-xl p-1 mb-6 max-w-xs">

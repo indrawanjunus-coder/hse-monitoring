@@ -42,13 +42,13 @@ const FEATURES = [
   {
     icon: BarChart2,
     title: "Dashboard & Laporan",
-    desc: "Laporan followup H&I, kepatuhan jadwal, action matrix, dan indikator kinerja HSE dalam satu tampilan.",
+    desc: "Laporan followup H&I, kepatuhan jadwal, action matrix, dan indikator kinerja EHS dalam satu tampilan.",
     color: "bg-green-50 text-green-600",
   },
   {
     icon: Users,
     title: "Manajemen Tim & Grup",
-    desc: "Atur struktur tim HSE, tentukan PIC per kategori, dan kelola notifikasi email per grup kerja.",
+    desc: "Atur struktur tim EHS, tentukan PIC per kategori, dan kelola notifikasi email per grup kerja.",
     color: "bg-purple-50 text-purple-600",
   },
   {
@@ -103,7 +103,7 @@ const STATIC_TESTIMONIALS = [
     authorName: "Andi Prasetyo",
     authorRole: "HSE Manager",
     authorCompany: "PT. Karya Cipta Industri",
-    content: "HSE Monitor membantu kami mengelola lebih dari 200 jadwal inspeksi per bulan dengan mudah. Laporan otomatis sangat menghemat waktu.",
+    content: "EHS Monitor membantu kami mengelola lebih dari 200 jadwal inspeksi per bulan dengan mudah. Laporan otomatis sangat menghemat waktu.",
     rating: 5,
   },
   {
@@ -211,7 +211,7 @@ function PortalLoginModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <div className="font-semibold text-gray-900">Masuk ke Portal</div>
-            <div className="text-xs text-gray-500">Portal HSE Perusahaan Anda</div>
+            <div className="text-xs text-gray-500">Portal EHS Perusahaan Anda</div>
           </div>
         </div>
 
@@ -344,10 +344,10 @@ function DefaultLanding() {
           <div className="max-w-2xl">
             <div className="inline-flex items-center gap-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 text-xs font-medium px-3 py-1.5 rounded-full mb-6">
               <Zap className="w-3.5 h-3.5" />
-              Platform HSE Terpadu untuk Industri Indonesia
+              Platform EHS Terpadu untuk Industri Indonesia
             </div>
             <h1 className="text-4xl md:text-5xl font-bold leading-tight mb-5">
-              Kelola HSE Dan Audit Operasional Perusahaan<br />
+              Kelola EHS Dan Audit Operasional Perusahaan<br />
               <span className="text-blue-400">Lebih Mudah & Efisien</span>
             </h1>
             <p className="text-slate-300 text-lg mb-8 leading-relaxed">
@@ -504,7 +504,7 @@ function DefaultLanding() {
         <div className="max-w-6xl mx-auto px-4">
           <div className="text-center mb-12">
             <div className="text-blue-600 font-semibold text-sm mb-2 uppercase tracking-wide">Testimoni</div>
-            <h2 className="text-3xl font-bold text-gray-900">Dipercaya Profesional HSE</h2>
+            <h2 className="text-3xl font-bold text-gray-900">Dipercaya Profesional EHS</h2>
           </div>
           <div className={`grid gap-6 max-w-4xl mx-auto ${testimonials.length === 1 ? "max-w-lg" : testimonials.length === 2 ? "md:grid-cols-2 max-w-3xl" : "md:grid-cols-2 lg:grid-cols-3"}`}>
             {testimonials.map((t, i) => (
@@ -530,7 +530,7 @@ function DefaultLanding() {
         <div className="max-w-3xl mx-auto px-4 text-center">
           <h2 className="text-3xl font-bold text-white mb-4">Siap Mulai?</h2>
           <p className="text-blue-100 mb-8">
-            Daftar sekarang dan kelola HSE perusahaan Anda lebih efektif mulai hari ini.
+            Daftar sekarang dan kelola EHS perusahaan Anda lebih efektif mulai hari ini.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <a
@@ -558,7 +558,7 @@ function DefaultLanding() {
               <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center">
                 <Shield className="w-4 h-4 text-white" />
               </div>
-              <span className="font-semibold text-white text-sm">HSE Monitor</span>
+              <span className="font-semibold text-white text-sm">EHS Monitor</span>
             </div>
             <div className="flex items-center gap-6 text-sm">
               <a href="#fitur" className="hover:text-white transition-colors">Fitur</a>
@@ -566,7 +566,7 @@ function DefaultLanding() {
               <a href="/register" className="hover:text-white transition-colors">Daftar</a>
               <a href="/sysadmin" className="hover:text-white transition-colors text-xs opacity-50">Admin</a>
             </div>
-            <div className="text-xs">© 2026 HSE Monitor. Hak cipta dilindungi.</div>
+            <div className="text-xs">© 2026 EHS Monitor. Hak cipta dilindungi.</div>
           </div>
         </div>
       </footer>

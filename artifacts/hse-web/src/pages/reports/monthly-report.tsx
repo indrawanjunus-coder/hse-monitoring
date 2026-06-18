@@ -161,7 +161,7 @@ export default function MonthlyReportPage() {
         <>
           {/* Print header */}
           <div className="hidden print:block text-center mb-6">
-            <h1 className="text-xl font-bold">Laporan HSE — Hazard &amp; Incident</h1>
+            <h1 className="text-xl font-bold">Laporan EHS — Hazard &amp; Incident</h1>
             <p className="text-sm text-gray-500">Periode: {applied.from} s/d {applied.to}</p>
             <p className="text-sm text-gray-400">Dicetak pada {new Date().toLocaleDateString("id-ID", { dateStyle: "full" })}</p>
           </div>

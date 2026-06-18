@@ -134,7 +134,7 @@ export default function TestimonialPage() {
                 id="content"
                 value={content}
                 onChange={e => setContent(e.target.value)}
-                placeholder="Bagaimana H&A Monitoring System membantu pekerjaan HSE Anda? Fitur apa yang paling berguna?"
+                placeholder="Bagaimana H&A Monitoring System membantu pekerjaan EHS Anda? Fitur apa yang paling berguna?"
                 rows={5}
                 className="resize-none"
                 maxLength={500}
