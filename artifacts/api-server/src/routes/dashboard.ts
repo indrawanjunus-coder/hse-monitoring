@@ -639,4 +639,59 @@ router.get("/template-weekly", async (req, res) => {
   res.json({ month, year, templateId, departments });
 });
 
+// Incident breakdown: by category (department) and by plant (area)
+router.get("/incident-breakdown", async (req, res) => {
+  const now = new Date();
+  const year  = req.query.year  ? parseInt(req.query.year  as string) : now.getFullYear();
+  const month = req.query.month ? parseInt(req.query.month as string) : 0; // 0 = full year
+  const cid   = req.user!.companyId;
+
+  if (!cid && req.user!.role !== "sysadmin") {
+    res.status(403).json({ error: "Akses ditolak" }); return;
+  }
+
+  const allIncidents = cid
+    ? await db.select().from(incidentsTable).where(eq(incidentsTable.companyId, cid))
+    : await db.select().from(incidentsTable);
+
+  const yearPrefix = `${year}-`;
+  let incidents = allIncidents.filter(i => i.incidentDate.startsWith(yearPrefix));
+  if (month > 0) {
+    const prefix = `${year}-${String(month).padStart(2, "0")}`;
+    incidents = incidents.filter(i => i.incidentDate.startsWith(prefix));
+  }
+
+  const categories = cid
+    ? await db.select().from(categoriesTable).where(eq(categoriesTable.companyId, cid))
+    : await db.select().from(categoriesTable);
+  const plants = cid
+    ? await db.select().from(plantsTable).where(eq(plantsTable.companyId, cid))
+    : await db.select().from(plantsTable);
+
+  // by category
+  const catMap: Record<string, number> = {};
+  for (const inc of incidents) {
+    const cat = categories.find(c => c.id === inc.categoryId);
+    const name = cat?.name ?? "Lainnya";
+    catMap[name] = (catMap[name] ?? 0) + 1;
+  }
+  const byCategory = Object.entries(catMap)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+
+  // by plant/area
+  const plantMap: Record<string, number> = {};
+  for (const inc of incidents) {
+    const plant = plants.find(p => p.id === inc.plantId);
+    const name = plant?.name ?? "Tidak Diketahui";
+    plantMap[name] = (plantMap[name] ?? 0) + 1;
+  }
+  const byPlant = Object.entries(plantMap)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+
+  const total = incidents.length;
+  res.json({ year, month, total, byCategory, byPlant });
+});
+
 export default router;

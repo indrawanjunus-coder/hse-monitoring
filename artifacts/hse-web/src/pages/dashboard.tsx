@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
+  PieChart, Pie, Cell,
 } from "recharts";
 import {
   AlertTriangle, TrendingUp, ChevronLeft, ChevronRight,
@@ -49,6 +50,19 @@ interface LaggingData {
   hazardTemplateId: number | null;
   monthlyHazardAllowance: number;
 }
+
+interface IncidentBreakdown {
+  year: number;
+  month: number;
+  total: number;
+  byCategory: { name: string; value: number }[];
+  byPlant:    { name: string; value: number }[];
+}
+
+const PIE_COLORS = [
+  "#3b82f6","#ef4444","#f59e0b","#10b981","#8b5cf6",
+  "#06b6d4","#f97316","#84cc16","#e879f9","#14b8a6",
+];
 
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agt", "Sep", "Okt", "Nov", "Des"];
 const MONTHS_FULL  = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
@@ -281,6 +295,13 @@ export default function DashboardPage() {
   const { data: lagging } = useQuery<LaggingData>({
     queryKey: ["lagging-indicators", year],
     queryFn: () => api.get(`/lagging-indicators?year=${year}`),
+    staleTime: 30_000,
+  });
+
+  // Incident breakdown (by category + by plant) — always yearly for the pyramid section
+  const { data: breakdown } = useQuery<IncidentBreakdown>({
+    queryKey: ["dashboard-incident-breakdown", year],
+    queryFn: () => api.get(`/dashboard/incident-breakdown?year=${year}&month=0`),
     staleTime: 30_000,
   });
 
@@ -698,6 +719,121 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Row 5: Incident Breakdown Pie Charts ── */}
+      {breakdown && breakdown.total > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+          {/* Pie 1 — By Category (Departemen) */}
+          <div className="rounded-2xl border bg-white shadow-sm p-6">
+            <div className="mb-4">
+              <h3 className="text-base font-semibold text-slate-800">Laporan per Departemen / Kategori</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Distribusi {breakdown.total} laporan incident &amp; hazard tahun {year}
+              </p>
+            </div>
+            {breakdown.byCategory.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">Belum ada data</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie
+                      data={breakdown.byCategory}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={90}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {breakdown.byCategory.map((_, i) => (
+                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(val: number, _name, props) => [
+                        `${val} laporan (${Math.round((val / breakdown.total) * 100)}%)`,
+                        props.payload?.name,
+                      ]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-1.5">
+                  {breakdown.byCategory.map((d, i) => (
+                    <div key={d.name} className="flex items-center gap-2.5 text-sm">
+                      <span
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
+                      />
+                      <span className="flex-1 truncate text-slate-700 font-medium">{d.name}</span>
+                      <span className="text-slate-500 tabular-nums">{d.value}</span>
+                      <span className="text-xs text-slate-400 w-10 text-right tabular-nums">
+                        {Math.round((d.value / breakdown.total) * 100)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Pie 2 — By Plant (Area) */}
+          <div className="rounded-2xl border bg-white shadow-sm p-6">
+            <div className="mb-4">
+              <h3 className="text-base font-semibold text-slate-800">Laporan per Area</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Area dengan insiden terbanyak tahun {year}
+              </p>
+            </div>
+            {breakdown.byPlant.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">Belum ada data</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie
+                      data={breakdown.byPlant}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={90}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {breakdown.byPlant.map((_, i) => (
+                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(val: number, _name, props) => [
+                        `${val} laporan (${Math.round((val / breakdown.total) * 100)}%)`,
+                        props.payload?.name,
+                      ]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="space-y-1.5">
+                  {breakdown.byPlant.map((d, i) => (
+                    <div key={d.name} className="flex items-center gap-2.5 text-sm">
+                      <span
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
+                      />
+                      <span className="flex-1 truncate text-slate-700 font-medium">{d.name}</span>
+                      <span className="text-slate-500 tabular-nums">{d.value}</span>
+                      <span className="text-xs text-slate-400 w-10 text-right tabular-nums">
+                        {Math.round((d.value / breakdown.total) * 100)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
     </div>
   );
 }
