@@ -709,15 +709,31 @@ router.get("/risk-heatmap", async (req, res) => {
   );
 
   let plotted = 0;
+  let missingType = 0;       // incident_type not set (empty/null)
+  let missingProbability = 0; // has type code but probability not configured
+  let missingImpact = 0;     // category riskLevel not in new 5-value enum
+
   for (const inc of incidents) {
     const cat = categories.find(c => c.id === inc.categoryId);
     const impact = cat?.riskLevel as string | undefined;
-    if (!impact || !IMPACT_VALS.includes(impact as typeof IMPACT_VALS[number])) continue;
+    if (!impact || !IMPACT_VALS.includes(impact as typeof IMPACT_VALS[number])) {
+      missingImpact++;
+      continue;
+    }
+
+    // No incident type set at all
+    if (!inc.incidentType?.trim()) {
+      missingType++;
+      continue;
+    }
 
     // Look up probability from incidentTypesTable by code match
     const itType = incidentTypes.find(t => t.code === inc.incidentType);
     const probability = itType?.probability as string | undefined;
-    if (!probability || !PROB_VALS.includes(probability as typeof PROB_VALS[number])) continue;
+    if (!probability || !PROB_VALS.includes(probability as typeof PROB_VALS[number])) {
+      missingProbability++;
+      continue;
+    }
 
     const pIdx = PROB_VALS.indexOf(probability as typeof PROB_VALS[number]);
     const iIdx = IMPACT_VALS.indexOf(impact as typeof IMPACT_VALS[number]);
@@ -728,6 +744,7 @@ router.get("/risk-heatmap", async (req, res) => {
 
   res.json({
     year, month, total: incidents.length, plotted,
+    missingType, missingProbability, missingImpact,
     probLabels: PROB_VALS,
     impactLabels: IMPACT_VALS,
     matrix,

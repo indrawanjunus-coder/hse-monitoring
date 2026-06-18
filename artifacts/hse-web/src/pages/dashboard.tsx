@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -64,6 +64,9 @@ interface IncidentBreakdown {
 interface HeatmapCell { count: number; incidentIds: number[] }
 interface RiskHeatmap {
   year: number; month: number; total: number; plotted: number;
+  missingType: number;
+  missingProbability: number;
+  missingImpact: number;
   probLabels: string[];
   impactLabels: string[];
   matrix: HeatmapCell[][];
@@ -807,9 +810,17 @@ export default function DashboardPage() {
                 {mode === "yearly"
                   ? ` tahun ${year}`
                   : ` bulan ${MONTHS_FULL[month - 1]} ${year}`}
-                {heatmap.plotted < heatmap.total && (
-                  <span className="ml-1 text-amber-600">({heatmap.plotted} terpetakan — pastikan Tipe Incident sudah dikonfigurasi probabilitynya)</span>
-                )}
+                {heatmap.plotted < heatmap.total && (() => {
+                  const reasons: string[] = [];
+                  if (heatmap.missingType > 0) reasons.push(`${heatmap.missingType} tanpa Tipe Incident`);
+                  if (heatmap.missingProbability > 0) reasons.push(`${heatmap.missingProbability} Tipe Incident tanpa Probabilitas`);
+                  if (heatmap.missingImpact > 0) reasons.push(`${heatmap.missingImpact} Kategori tanpa Impact`);
+                  return (
+                    <span className="ml-1 text-amber-600">
+                      ({heatmap.plotted} terpetakan{reasons.length > 0 ? ` — ${reasons.join(", ")}` : ""})
+                    </span>
+                  );
+                })()}
               </p>
             </div>
             {/* Legend */}
@@ -1056,6 +1067,9 @@ export default function DashboardPage() {
                       {PROB_LABELS[selectedCell.prob]} × {IMPACT_LABELS[selectedCell.impact]}
                     </span>
                   </DialogTitle>
+                  <DialogDescription className="sr-only">
+                    Daftar incident pada zona {style.label} Risk dengan probability {PROB_LABELS[selectedCell.prob]} dan impact {IMPACT_LABELS[selectedCell.impact]}
+                  </DialogDescription>
                 </DialogHeader>
 
                 {cellLoading ? (
