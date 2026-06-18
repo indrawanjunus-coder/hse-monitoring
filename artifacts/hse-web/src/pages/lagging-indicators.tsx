@@ -22,6 +22,7 @@ interface LaggingData {
   safeHours: number;
   resetDate: string | null;
   baseValue: number;
+  contractorHours: number;
 }
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -35,8 +36,9 @@ export default function LaggingIndicatorsPage() {
   const [year, setYear] = useState(CURRENT_YEAR);
   const [form, setForm] = useState({
     fatality: 0, lti: 0, mti: 0, firstAid: 0, nearMisses: 0, hazardId: 0,
+    contractorHours: 0,
   });
-  const [resetForm, setResetForm] = useState({ baseValue: 0, resetDate: "" }); // resetDate = ISO datetime string "YYYY-MM-DDTHH:MM"
+  const [resetForm, setResetForm] = useState({ baseValue: 0, resetDate: "" });
   const [showResetModal, setShowResetModal] = useState(false);
 
   const { data, isLoading } = useQuery<LaggingData>({
@@ -53,12 +55,12 @@ export default function LaggingIndicatorsPage() {
         firstAid: data.firstAid,
         nearMisses: data.nearMisses,
         hazardId: data.hazardId,
+        contractorHours: data.contractorHours ?? 0,
       });
-      // Normalize stored value to "YYYY-MM-DDTHH:MM" for datetime-local input
       const rawDate = data.resetDate ?? new Date().toISOString().slice(0, 16);
       const normalized = rawDate.length === 10
-        ? `${rawDate}T00:00`       // date-only → treat as midnight
-        : rawDate.slice(0, 16);    // datetime → trim seconds/tz if any
+        ? `${rawDate}T00:00`
+        : rawDate.slice(0, 16);
       setResetForm({ baseValue: data.baseValue, resetDate: normalized });
     }
   }, [data]);
@@ -142,6 +144,24 @@ export default function LaggingIndicatorsPage() {
                 {field("Near Misses", "nearMisses", "bg-blue-400")}
                 {field("Unsafe Conditions & Acts (Hazard ID)", "hazardId", "bg-blue-600")}
 
+                <div className="border-t pt-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-3 h-3 rounded-full flex-shrink-0 bg-slate-400" />
+                    <Label className="w-60 text-sm font-medium">Jam Kerja Kontraktor (hours)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      className="w-28 text-center"
+                      value={form.contractorHours}
+                      onChange={e => setForm(f => ({ ...f, contractorHours: parseInt(e.target.value) || 0 }))}
+                      disabled={!isSupervisorOrAdmin}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground ml-7 mt-1">
+                    Digunakan dalam perhitungan Safe Hours: (Non LTI Days × 24) + Jam Kerja Kontraktor
+                  </p>
+                </div>
+
                 {isSupervisorOrAdmin && (
                   <div className="pt-2">
                     <Button
@@ -186,16 +206,23 @@ export default function LaggingIndicatorsPage() {
             </div>
 
             {data?.resetDate && (
-              <p className="text-xs text-muted-foreground text-center">
-                Dihitung dari:{" "}
-                <span className="font-medium">
-                  {new Date(data.resetDate).toLocaleString("id-ID", {
-                    day: "numeric", month: "long", year: "numeric",
-                    hour: "2-digit", minute: "2-digit",
-                  })}
-                </span>
-                {data.baseValue > 0 && <> + {data.baseValue.toLocaleString()} jam basis</>}
-              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground text-center">
+                  Dihitung dari:{" "}
+                  <span className="font-medium">
+                    {new Date(data.resetDate).toLocaleString("id-ID", {
+                      day: "numeric", month: "long", year: "numeric",
+                      hour: "2-digit", minute: "2-digit",
+                    })}
+                  </span>
+                  {data.baseValue > 0 && <> + {data.baseValue.toLocaleString()} jam basis</>}
+                </p>
+                {(data.contractorHours ?? 0) > 0 && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    + <span className="font-medium">{(data.contractorHours).toLocaleString()} jam</span> kontraktor
+                  </p>
+                )}
+              </div>
             )}
 
             {isSupervisorOrAdmin && (
