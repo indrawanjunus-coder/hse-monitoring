@@ -665,7 +665,7 @@ export default function DashboardPage() {
                     <span className="text-xs text-slate-400 w-52 leading-tight flex-shrink-0 italic">{row.label}: 0</span>
                   </div>
                 );
-                const pct = Math.max(10, Math.round((row.value / maxVal) * 100));
+                const pct = 10 + Math.round((row.value / maxVal) * 90);
                 return (
                   <div key={i} className="flex items-center gap-3 mb-1.5">
                     <div
