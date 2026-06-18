@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import * as XLSX from "xlsx";
 import { api } from "@/lib/api";
 import { PageHeader } from "@/components/layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,7 +11,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from "recharts";
 import {
-  Building2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp, Printer, Target,
+  Building2, AlertTriangle, ShieldCheck, ShieldAlert, TrendingUp, Printer,
+  Target, FileSpreadsheet, ChevronDown, Check,
 } from "lucide-react";
 
 interface DeptRow {
@@ -29,13 +31,8 @@ interface DeptReport {
   deptTarget: number;
   rows: DeptRow[];
   summary: {
-    totalDepts: number;
-    totalHazards: number;
-    totalIncidents: number;
-    compliant: number;
-    partial: number;
-    none: number;
-    avgAchievement: number | null;
+    totalDepts: number; totalHazards: number; totalIncidents: number;
+    compliant: number; partial: number; none: number; avgAchievement: number | null;
   };
 }
 
@@ -44,10 +41,10 @@ const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart
 const today = now.toISOString().slice(0, 10);
 
 const STATUS_META = {
-  compliant:  { label: "Sesuai Target",   cls: "bg-green-100 text-green-700 border-green-200" },
-  partial:    { label: "Sebagian",         cls: "bg-amber-100 text-amber-700 border-amber-200" },
-  none:       { label: "Tidak Ada",        cls: "bg-red-100 text-red-700 border-red-200" },
-  no_target:  { label: "—",               cls: "bg-slate-100 text-slate-500 border-slate-200" },
+  compliant:  { label: "Sesuai Target", cls: "bg-green-100 text-green-700 border-green-200" },
+  partial:    { label: "Sebagian",       cls: "bg-amber-100 text-amber-700 border-amber-200" },
+  none:       { label: "Tidak Ada",      cls: "bg-red-100 text-red-700 border-red-200" },
+  no_target:  { label: "—",             cls: "bg-slate-100 text-slate-500 border-slate-200" },
 };
 
 function AchievementBar({ pct }: { pct: number | null }) {
@@ -64,23 +61,145 @@ function AchievementBar({ pct }: { pct: number | null }) {
   );
 }
 
+// Multi-select department dropdown
+function DeptMultiSelect({
+  departments, selected, onChange,
+}: { departments: DeptRow[]; selected: Set<string>; onChange: (s: Set<string>) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const allKeys = departments.map(d => String(d.departmentId ?? "null"));
+  const allSelected = selected.size === 0 || selected.size === allKeys.length;
+
+  const toggle = (key: string) => {
+    const next = new Set(selected);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    onChange(next);
+  };
+  const toggleAll = () => onChange(allSelected ? new Set() : new Set(allKeys));
+
+  const label = allSelected
+    ? "Semua Departemen"
+    : selected.size === 1
+      ? departments.find(d => selected.has(String(d.departmentId ?? "null")))?.departmentName ?? "1 dipilih"
+      : `${selected.size} departemen dipilih`;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-2 border rounded-md px-3 py-1.5 text-sm bg-background min-w-[200px] max-w-[280px] truncate"
+      >
+        <Building2 className="w-4 h-4 text-slate-400 flex-shrink-0" />
+        <span className="flex-1 text-left truncate">{label}</span>
+        <ChevronDown className="w-4 h-4 text-slate-400 flex-shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute top-full mt-1 left-0 z-50 bg-white border rounded-lg shadow-lg min-w-[220px] max-h-64 overflow-y-auto">
+          <button
+            onClick={toggleAll}
+            className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-slate-50 border-b"
+          >
+            <div className={`w-4 h-4 rounded border flex items-center justify-center ${allSelected ? "bg-primary border-primary" : "border-slate-300"}`}>
+              {allSelected && <Check className="w-3 h-3 text-white" />}
+            </div>
+            <span className="font-medium">Semua Departemen</span>
+          </button>
+          {departments.map(d => {
+            const key = String(d.departmentId ?? "null");
+            const checked = selected.size === 0 ? true : selected.has(key);
+            return (
+              <button
+                key={key}
+                onClick={() => toggle(key)}
+                className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-slate-50"
+              >
+                <div className={`w-4 h-4 rounded border flex items-center justify-center ${checked ? "bg-primary border-primary" : "border-slate-300"}`}>
+                  {checked && <Check className="w-3 h-3 text-white" />}
+                </div>
+                <span>{d.departmentName}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DepartmentReportPage() {
   const [from, setFrom] = useState(firstOfMonth);
   const [to, setTo]     = useState(today);
   const [applied, setApplied] = useState({ from: firstOfMonth, to: today });
+  const [selectedDepts, setSelectedDepts] = useState<Set<string>>(new Set());
 
   const { data, isLoading } = useQuery<DeptReport>({
     queryKey: ["report-department", applied.from, applied.to],
     queryFn: () => api.get(`/reports/department-summary?from=${applied.from}&to=${applied.to}`),
   });
 
-  const chartData = (data?.rows ?? []).map(r => ({
+  // Reset filter when new data arrives
+  useEffect(() => { setSelectedDepts(new Set()); }, [data]);
+
+  const filteredRows = useMemo(() => {
+    if (!data) return [];
+    if (selectedDepts.size === 0) return data.rows;
+    return data.rows.filter(r => selectedDepts.has(String(r.departmentId ?? "null")));
+  }, [data, selectedDepts]);
+
+  const chartData = filteredRows.map(r => ({
     name: r.departmentName.length > 16 ? r.departmentName.slice(0, 14) + "…" : r.departmentName,
     fullName: r.departmentName,
     Hazard: r.hazards,
     Insiden: r.incidents,
     Target: data?.deptTarget ?? 0,
   }));
+
+  const filteredHazards   = filteredRows.reduce((s, r) => s + r.hazards, 0);
+  const filteredIncidents = filteredRows.reduce((s, r) => s + r.incidents, 0);
+
+  const exportExcel = () => {
+    if (!data) return;
+    const header = ["Departemen", "Hazard Submit", "Insiden Submit", "Total Submit", "Target Hazard (Periode)", "Target/Minggu", "Pencapaian (%)", "Status"];
+    const rows = filteredRows.map(r => [
+      r.departmentName,
+      r.hazards,
+      r.incidents,
+      r.hazards + r.incidents,
+      r.deptTarget > 0 ? r.deptTarget : "—",
+      data.weeklyTarget > 0 ? (data.weeklyTarget / Math.max(1, data.rows.length)).toFixed(1) : "—",
+      r.achievement != null ? r.achievement.toFixed(1) + "%" : "—",
+      STATUS_META[r.status].label,
+    ]);
+    const footer = [
+      "TOTAL",
+      filteredHazards,
+      filteredIncidents,
+      filteredHazards + filteredIncidents,
+      data.periodTarget > 0 ? data.periodTarget.toFixed(1) : "—",
+      data.weeklyTarget > 0 ? data.weeklyTarget.toFixed(1) : "—",
+      data.summary.avgAchievement != null ? data.summary.avgAchievement.toFixed(1) + "%" : "—",
+      `${data.summary.compliant}/${data.rows.length} sesuai`,
+    ];
+    const metaRows = [
+      [`Periode: ${data.period.from} s/d ${data.period.to}`],
+      [`Minggu dalam periode: ${data.period.weeks.toFixed(1)}`],
+      [`Target mingguan hazard (total): ${data.weeklyTarget > 0 ? data.weeklyTarget : "—"}`],
+      [],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([...metaRows, header, ...rows, footer]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Hazard & Insiden per Dept");
+    XLSX.writeFile(wb, `laporan-dept-${applied.from}-${applied.to}.xlsx`);
+  };
 
   const sum = data?.summary;
 
@@ -94,7 +213,7 @@ export default function DepartmentReportPage() {
       {/* Filter */}
       <Card>
         <CardContent className="pt-5">
-          <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Dari Tanggal</Label>
               <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="w-40 text-sm" />
@@ -106,14 +225,29 @@ export default function DepartmentReportPage() {
             <Button onClick={() => setApplied({ from, to })} disabled={isLoading}>
               Terapkan
             </Button>
-            <Button variant="outline" onClick={() => window.print()} className="ml-auto">
-              <Printer className="w-4 h-4 mr-2" /> Cetak
-            </Button>
+            {data && data.rows.length > 0 && (
+              <div className="space-y-1">
+                <Label className="text-xs">Filter Departemen</Label>
+                <DeptMultiSelect
+                  departments={data.rows}
+                  selected={selectedDepts}
+                  onChange={setSelectedDepts}
+                />
+              </div>
+            )}
+            <div className="ml-auto flex gap-2">
+              <Button variant="outline" onClick={exportExcel} disabled={!data || filteredRows.length === 0}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" /> Export Excel
+              </Button>
+              <Button variant="outline" onClick={() => window.print()}>
+                <Printer className="w-4 h-4 mr-2" /> Cetak
+              </Button>
+            </div>
           </div>
           {data && (
             <p className="mt-3 text-xs text-muted-foreground">
               Periode: <strong>{data.period.days} hari</strong> ({data.period.weeks.toFixed(1)} minggu) ·
-              Target mingguan hazard (total): <strong>{data.weeklyTarget > 0 ? data.weeklyTarget : "—"}</strong> ·
+              Target mingguan hazard: <strong>{data.weeklyTarget > 0 ? data.weeklyTarget : "—"}</strong> ·
               Target per dept: <strong>{data.deptTarget > 0 ? data.deptTarget : "—"}</strong>
               {data.weeklyTarget === 0 && (
                 <span className="ml-2 text-amber-600">
@@ -125,44 +259,48 @@ export default function DepartmentReportPage() {
         </CardContent>
       </Card>
 
-      {/* Summary Cards */}
       {isLoading ? (
         <div className="text-center text-sm text-muted-foreground py-12">Memuat data...</div>
       ) : data && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-            <Card className="col-span-2 md:col-span-1">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <Card className="col-span-1">
               <CardContent className="pt-5 text-center">
                 <Building2 className="w-5 h-5 mx-auto mb-1 text-slate-500" />
-                <div className="text-3xl font-black text-slate-800">{sum?.totalDepts ?? 0}</div>
+                <div className="text-3xl font-black text-slate-800">{filteredRows.length}</div>
                 <div className="text-xs text-slate-500 mt-0.5">Departemen</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-5 text-center">
                 <ShieldAlert className="w-5 h-5 mx-auto mb-1 text-blue-500" />
-                <div className="text-3xl font-black text-blue-700">{sum?.totalHazards ?? 0}</div>
+                <div className="text-3xl font-black text-blue-700">{filteredHazards}</div>
                 <div className="text-xs text-slate-500 mt-0.5">Total Hazard</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-5 text-center">
                 <AlertTriangle className="w-5 h-5 mx-auto mb-1 text-red-500" />
-                <div className="text-3xl font-black text-red-700">{sum?.totalIncidents ?? 0}</div>
+                <div className="text-3xl font-black text-red-700">{filteredIncidents}</div>
                 <div className="text-xs text-slate-500 mt-0.5">Total Insiden</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-5 text-center">
                 <ShieldCheck className="w-5 h-5 mx-auto mb-1 text-green-500" />
-                <div className="text-3xl font-black text-green-700">{sum?.compliant ?? 0}</div>
+                <div className="text-3xl font-black text-green-700">
+                  {filteredRows.filter(r => r.status === "compliant").length}
+                </div>
                 <div className="text-xs text-slate-500 mt-0.5">Sesuai Target</div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-5 text-center">
                 <Target className="w-5 h-5 mx-auto mb-1 text-amber-500" />
-                <div className="text-3xl font-black text-amber-700">{sum?.partial ?? 0}</div>
+                <div className="text-3xl font-black text-amber-700">
+                  {filteredRows.filter(r => r.status === "partial").length}
+                </div>
                 <div className="text-xs text-slate-500 mt-0.5">Sebagian</div>
               </CardContent>
             </Card>
@@ -172,7 +310,7 @@ export default function DepartmentReportPage() {
                 <div className="text-3xl font-black text-indigo-700">
                   {sum?.avgAchievement != null ? `${sum.avgAchievement.toFixed(0)}%` : "—"}
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">Rata-rata Pencapaian</div>
+                <div className="text-xs text-slate-500 mt-0.5">Rata-rata</div>
               </CardContent>
             </Card>
           </div>
@@ -195,7 +333,9 @@ export default function DepartmentReportPage() {
                     <Bar dataKey="Hazard" fill="#3b82f6" radius={[3, 3, 0, 0]} />
                     <Bar dataKey="Insiden" fill="#ef4444" radius={[3, 3, 0, 0]} />
                     {data.deptTarget > 0 && (
-                      <ReferenceLine y={data.deptTarget} stroke="#f59e0b" strokeDasharray="5 4" label={{ value: `Target: ${data.deptTarget}`, fontSize: 10, fill: "#b45309", position: "right" }} />
+                      <ReferenceLine y={data.deptTarget} stroke="#f59e0b" strokeDasharray="5 4"
+                        label={{ value: `Target: ${data.deptTarget}`, fontSize: 10, fill: "#b45309", position: "insideTopRight" }}
+                      />
                     )}
                   </BarChart>
                 </ResponsiveContainer>
@@ -211,24 +351,22 @@ export default function DepartmentReportPage() {
                   <thead className="bg-slate-50 border-y border-slate-200">
                     <tr>
                       <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Departemen</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-blue-600">Hazard Submit</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-red-600">Insiden Submit</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-slate-600">Total Submit</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-blue-600">Hazard</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-red-600">Insiden</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-slate-600">Total</th>
                       <th className="text-center px-4 py-3 text-xs font-semibold text-amber-600">Target Hazard</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-slate-600">Target/Minggu</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500">Target/Minggu</th>
                       <th className="px-4 py-3 text-xs font-semibold text-slate-600">Pencapaian</th>
                       <th className="text-center px-4 py-3 text-xs font-semibold text-slate-600">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {data.rows.map((row, i) => {
+                    {filteredRows.map((row, i) => {
                       const meta = STATUS_META[row.status];
                       return (
-                        <tr key={row.departmentId ?? "no-dept"} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                        <tr key={String(row.departmentId ?? "null")} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
                           <td className="px-4 py-3 font-medium text-slate-800">{row.departmentName}</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className="font-bold text-blue-700">{row.hazards}</span>
-                          </td>
+                          <td className="px-4 py-3 text-center font-bold text-blue-700">{row.hazards}</td>
                           <td className="px-4 py-3 text-center">
                             <span className={`font-bold ${row.incidents > 0 ? "text-red-600" : "text-slate-300"}`}>{row.incidents}</span>
                           </td>
@@ -239,9 +377,7 @@ export default function DepartmentReportPage() {
                           <td className="px-4 py-3 text-center text-slate-500 text-xs">
                             {data.weeklyTarget > 0 ? (data.weeklyTarget / Math.max(1, data.rows.length)).toFixed(1) : "—"}
                           </td>
-                          <td className="px-4 py-3">
-                            <AchievementBar pct={row.achievement} />
-                          </td>
+                          <td className="px-4 py-3"><AchievementBar pct={row.achievement} /></td>
                           <td className="px-4 py-3 text-center">
                             <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${meta.cls}`}>
                               {meta.label}
@@ -251,13 +387,12 @@ export default function DepartmentReportPage() {
                       );
                     })}
                   </tbody>
-                  {/* Total row */}
-                  <tfoot className="bg-slate-100 border-t-2 border-slate-300">
-                    <tr className="font-bold">
-                      <td className="px-4 py-3 text-slate-700">TOTAL</td>
-                      <td className="px-4 py-3 text-center text-blue-700">{sum?.totalHazards ?? 0}</td>
-                      <td className="px-4 py-3 text-center text-red-600">{sum?.totalIncidents ?? 0}</td>
-                      <td className="px-4 py-3 text-center text-slate-700">{(sum?.totalHazards ?? 0) + (sum?.totalIncidents ?? 0)}</td>
+                  <tfoot className="bg-slate-100 border-t-2 border-slate-300 font-bold">
+                    <tr>
+                      <td className="px-4 py-3 text-slate-700">TOTAL ({filteredRows.length} dept)</td>
+                      <td className="px-4 py-3 text-center text-blue-700">{filteredHazards}</td>
+                      <td className="px-4 py-3 text-center text-red-600">{filteredIncidents}</td>
+                      <td className="px-4 py-3 text-center text-slate-700">{filteredHazards + filteredIncidents}</td>
                       <td className="px-4 py-3 text-center text-amber-700">
                         {data.periodTarget > 0 ? data.periodTarget.toFixed(1) : "—"}
                       </td>
@@ -265,21 +400,17 @@ export default function DepartmentReportPage() {
                         {data.weeklyTarget > 0 ? data.weeklyTarget.toFixed(1) : "—"}
                       </td>
                       <td className="px-4 py-3">
-                        {sum?.avgAchievement != null && (
-                          <AchievementBar pct={sum.avgAchievement} />
-                        )}
+                        {sum?.avgAchievement != null && <AchievementBar pct={sum.avgAchievement} />}
                       </td>
                       <td className="px-4 py-3 text-center text-slate-500 text-xs">
-                        {sum && `${sum.compliant}/${sum.totalDepts} sesuai`}
+                        {`${filteredRows.filter(r => r.status === "compliant").length}/${filteredRows.length} sesuai`}
                       </td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
-              {data.rows.length === 0 && (
-                <div className="p-10 text-center text-sm text-muted-foreground">
-                  Tidak ada data di periode ini.
-                </div>
+              {filteredRows.length === 0 && (
+                <div className="p-10 text-center text-sm text-muted-foreground">Tidak ada data di periode ini.</div>
               )}
             </CardContent>
           </Card>

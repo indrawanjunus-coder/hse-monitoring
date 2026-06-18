@@ -6,6 +6,49 @@ import { authMiddleware } from "../lib/auth";
 const router = Router();
 router.use(authMiddleware);
 
+// ── Module-level schedule helpers (reused across routes) ──────────────────────
+function _countWeekday(from: Date, to: Date, dow: number): number {
+  const diffDays = Math.max(0, Math.round((to.getTime() - from.getTime()) / 86400000));
+  const firstOcc = (dow - from.getDay() + 7) % 7;
+  if (firstOcc > diffDays) return 0;
+  return Math.floor((diffDays - firstOcc) / 7) + 1;
+}
+function _countMonthDay(from: Date, to: Date, dom: number): number {
+  let cnt = 0;
+  const d = new Date(from.getFullYear(), from.getMonth(), dom);
+  if (d < from) d.setMonth(d.getMonth() + 1);
+  while (d <= to) { cnt++; d.setMonth(d.getMonth() + 1); }
+  return cnt;
+}
+function calcExpectedInRange(
+  freq: string,
+  rangeFrom: Date,
+  rangeTo: Date,
+  scheduleCreatedAt: Date,
+  dayOfWeek: number | null,
+  dayOfMonth: number | null,
+  customDays: string | null,
+): number {
+  const from = new Date(Math.max(rangeFrom.getTime(), scheduleCreatedAt.getTime()));
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(rangeTo);
+  if (to < from) return 0;
+  const diffDays = Math.round((to.getTime() - from.getTime()) / 86400000);
+  switch (freq) {
+    case "daily":    return diffDays + 1;
+    case "always":   return diffDays + 1;
+    case "weekly":   return dayOfWeek != null ? _countWeekday(from, to, dayOfWeek) : Math.floor(diffDays / 7) + 1;
+    case "biweekly": return Math.floor(diffDays / 14) + 1;
+    case "monthly":  return dayOfMonth != null ? _countMonthDay(from, to, dayOfMonth) : Math.floor(diffDays / 30) + 1;
+    case "custom": {
+      if (!customDays) return 0;
+      const days = customDays.split(",").map(d => parseInt(d.trim())).filter(d => !isNaN(d) && d >= 0 && d <= 6);
+      return days.reduce((s, dow) => s + _countWeekday(from, to, dow), 0);
+    }
+    default: return 0;
+  }
+}
+
 // H&I Followup report — incidents bucketed by hours since creation with enhanced details
 router.get("/followup", async (req, res) => {
   const { from, to } = req.query;
@@ -463,10 +506,10 @@ router.get("/schedule-compliance", async (req, res) => {
     ? await db.select().from(schedulesTable).where(eq(schedulesTable.companyId, cid))
     : await db.select().from(schedulesTable);
 
-  // Load templates, plants
+  // Load templates, plants (scoped to company so names are always correct)
   const [templates, plants] = await Promise.all([
-    db.select().from(templatesTable),
-    db.select().from(plantsTable),
+    cid ? db.select().from(templatesTable).where(eq(templatesTable.companyId, cid)) : db.select().from(templatesTable),
+    cid ? db.select().from(plantsTable).where(eq(plantsTable.companyId, cid)) : db.select().from(plantsTable),
   ]);
   const tmplMap = Object.fromEntries(templates.map(t => [t.id, t.name]));
   const plantMap = Object.fromEntries(plants.map(p => [p.id, p.name]));
@@ -582,6 +625,142 @@ router.get("/schedule-compliance", async (req, res) => {
   const avgRate = rows.length > 0 ? rows.reduce((s, r) => s + r.complianceRate, 0) / rows.length : 0;
 
   res.json({ rows, summary: { total: rows.length, compliant, partial, none, avgRate } });
+});
+
+// ─── Template Detail: per-department breakdown ───────────────────────────────
+router.get("/template-detail", async (req, res) => {
+  const cid = req.user!.companyId;
+  if (!cid) { res.status(403).json({ error: "Akses ditolak" }); return; }
+
+  const templateId = req.query.templateId ? parseInt(String(req.query.templateId)) : null;
+  if (!templateId) { res.status(400).json({ error: "templateId wajib diisi" }); return; }
+
+  const now = new Date();
+  const defaultFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const defaultTo   = now.toISOString().slice(0, 10);
+  const fromStr = req.query.from ? String(req.query.from) : defaultFrom;
+  const toStr   = req.query.to   ? String(req.query.to)   : defaultTo;
+  const fromDate = new Date(fromStr + "T00:00:00");
+  const toDate   = new Date(toStr   + "T23:59:59");
+
+  // Get the template
+  const [template] = await db.select().from(templatesTable)
+    .where(and(eq(templatesTable.id, templateId), eq(templatesTable.companyId, cid)));
+  if (!template) { res.status(404).json({ error: "Template tidak ditemukan" }); return; }
+
+  // All departments for this company
+  const allDepts = await db.select().from(departmentsTable).where(eq(departmentsTable.companyId, cid));
+
+  // Schedules using this template
+  const schedules = await db.select().from(schedulesTable)
+    .where(and(eq(schedulesTable.companyId, cid), eq(schedulesTable.templateId, templateId)));
+
+  // Schedule user assignments (explicit)
+  const schedUserRows = await db.select({
+    scheduleId: scheduleUsersTable.scheduleId,
+    userId:     scheduleUsersTable.userId,
+    deptId:     usersTable.departmentId,
+  }).from(scheduleUsersTable)
+    .innerJoin(usersTable, eq(scheduleUsersTable.userId, usersTable.id))
+    .where(inArray(scheduleUsersTable.scheduleId, schedules.map(s => s.id)));
+
+  // Legacy supervisorId on schedule
+  const schedWithSupervisor = schedules.filter(s => s.supervisorId != null);
+  const supervisorIds = [...new Set(schedWithSupervisor.map(s => s.supervisorId!))];
+  const supervisorUsers = supervisorIds.length > 0
+    ? await db.select({ id: usersTable.id, deptId: usersTable.departmentId })
+        .from(usersTable).where(inArray(usersTable.id, supervisorIds))
+    : [];
+  const supDeptMap = Object.fromEntries(supervisorUsers.map(u => [u.id, u.deptId]));
+
+  // Build deptId → expectedCount map
+  const deptExpected: Record<string, number> = {};
+  for (const s of schedules) {
+    // Get user list: explicit assignments or legacy supervisorId
+    const assignedUserDepts: (number | null)[] = [];
+    const explicitUsers = schedUserRows.filter(r => r.scheduleId === s.id);
+    if (explicitUsers.length > 0) {
+      for (const u of explicitUsers) assignedUserDepts.push(u.deptId);
+    } else if (s.supervisorId) {
+      assignedUserDepts.push(supDeptMap[s.supervisorId] ?? null);
+    }
+
+    const exp = calcExpectedInRange(s.frequency, fromDate, toDate, s.createdAt, s.dayOfWeek, s.dayOfMonth, s.customDays);
+    for (const deptId of assignedUserDepts) {
+      const key = String(deptId ?? "null");
+      deptExpected[key] = (deptExpected[key] ?? 0) + exp;
+    }
+  }
+
+  // Actual inspections in period for this template, grouped by supervisor's dept
+  const actualRows = await db.select({
+    deptId: usersTable.departmentId,
+    deptName: departmentsTable.name,
+    cnt: count(),
+  }).from(inspectionsTable)
+    .innerJoin(usersTable, eq(inspectionsTable.supervisorId, usersTable.id))
+    .leftJoin(departmentsTable, eq(usersTable.departmentId, departmentsTable.id))
+    .where(and(
+      eq(inspectionsTable.templateId, templateId),
+      eq(usersTable.companyId, cid),
+      gte(inspectionsTable.inspectedAt, fromStr),
+      lte(inspectionsTable.inspectedAt, toStr + "T23:59:59"),
+    ))
+    .groupBy(usersTable.departmentId, departmentsTable.name);
+
+  const actualMap: Record<string, { count: number; name: string }> = {};
+  for (const r of actualRows) {
+    actualMap[String(r.deptId ?? "null")] = { count: Number(r.cnt), name: r.deptName ?? "(Tanpa Dept)" };
+  }
+
+  // Merge: all depts + any that submitted
+  const deptMap = new Map<string, { departmentId: number | null; departmentName: string; expected: number; actual: number }>();
+  for (const d of allDepts) {
+    deptMap.set(String(d.id), { departmentId: d.id, departmentName: d.name, expected: 0, actual: 0 });
+  }
+  for (const [key, exp] of Object.entries(deptExpected)) {
+    if (!deptMap.has(key)) {
+      const name = actualMap[key]?.name ?? "(Tanpa Dept)";
+      deptMap.set(key, { departmentId: key === "null" ? null : parseInt(key), departmentName: name, expected: 0, actual: 0 });
+    }
+    deptMap.get(key)!.expected += Math.round(exp);
+  }
+  for (const [key, act] of Object.entries(actualMap)) {
+    if (!deptMap.has(key)) {
+      deptMap.set(key, { departmentId: key === "null" ? null : parseInt(key), departmentName: act.name, expected: 0, actual: 0 });
+    }
+    deptMap.get(key)!.actual += act.count;
+  }
+
+  const rows = [...deptMap.values()].map(d => {
+    const achievement = d.expected > 0 ? Math.min(100, parseFloat(((d.actual / d.expected) * 100).toFixed(1))) : null;
+    const status = achievement === null ? "no_target"
+      : achievement >= 100 ? "compliant" : achievement >= 50 ? "partial" : "none";
+    return { ...d, achievement, status };
+  }).sort((a, b) => a.departmentName.localeCompare(b.departmentName));
+
+  const totalExpected = rows.reduce((s, r) => s + r.expected, 0);
+  const totalActual   = rows.reduce((s, r) => s + r.actual, 0);
+  const withTarget    = rows.filter(r => r.achievement !== null);
+  const avgAchievement = withTarget.length > 0
+    ? parseFloat((withTarget.reduce((s, r) => s + (r.achievement ?? 0), 0) / withTarget.length).toFixed(1))
+    : null;
+
+  res.json({
+    template: { id: template.id, name: template.name, description: template.description, isActive: template.isActive },
+    period: { from: fromStr, to: toStr },
+    scheduleCount: schedules.length,
+    rows,
+    summary: {
+      totalDepts: rows.length,
+      totalExpected,
+      totalActual,
+      compliant: rows.filter(r => r.status === "compliant").length,
+      partial:   rows.filter(r => r.status === "partial").length,
+      none:      rows.filter(r => r.status === "none").length,
+      avgAchievement,
+    },
+  });
 });
 
 // ─── Department Hazard & Incident Summary Report ────────────────────────────

@@ -1,1 +1,2 @@
-- [Dashboard yearly target bug fix](yearly-target-fix.md) — template-summary yearly target must use schedule creation date, not fixed 52/24/12 multipliers
+- [Multi-tenancy architecture](multi-tenancy.md) — fully implemented; companies, paywall, sysadmin panel, /c/{slug}/ portal all done
+- [Report routes companyId](report-companyid.md) — all report routes scope to req.user.companyId; calcExpectedInRange helper at module level in reports.ts

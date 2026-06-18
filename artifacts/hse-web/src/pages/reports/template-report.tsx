@@ -6,79 +6,211 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
 } from "recharts";
 import {
-  FileText, Layers, ClipboardList, CheckCircle2, XCircle, Printer, HelpCircle, Calendar,
+  FileText, Building2, ClipboardList, CheckCircle2, XCircle, ShieldCheck,
+  AlertCircle, Target, TrendingUp, ChevronRight,
 } from "lucide-react";
 
-interface TemplateRow {
-  id: number;
-  name: string;
-  description: string | null;
-  isActive: boolean;
-  createdAt: string;
-  questionCount: number;
-  scheduleCount: number;
-  inspectionCount: number;
+// ── Types ──────────────────────────────────────────────────────────────────────
+interface TemplateListRow {
+  id: number; name: string; description: string | null;
+  isActive: boolean; createdAt: string;
+  questionCount: number; scheduleCount: number; inspectionCount: number;
 }
-interface TemplateReport {
+interface TemplateListResponse {
+  rows: TemplateListRow[];
+  summary: { total: number; active: number; inactive: number; totalInspections: number; totalSchedules: number; totalQuestions: number };
+}
+
+interface DeptDetailRow {
+  departmentId: number | null; departmentName: string;
+  expected: number; actual: number;
+  achievement: number | null; status: "compliant" | "partial" | "none" | "no_target";
+}
+interface TemplateDetailResponse {
+  template: { id: number; name: string; description: string | null; isActive: boolean };
   period: { from: string; to: string };
-  rows: TemplateRow[];
+  scheduleCount: number;
+  rows: DeptDetailRow[];
   summary: {
-    total: number;
-    active: number;
-    inactive: number;
-    totalInspections: number;
-    totalSchedules: number;
-    totalQuestions: number;
+    totalDepts: number; totalExpected: number; totalActual: number;
+    compliant: number; partial: number; none: number; avgAchievement: number | null;
   };
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────────
 const now = new Date();
-const defaultFrom = `${now.getFullYear()}-01-01`;
+const defaultFrom = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 const defaultTo   = now.toISOString().slice(0, 10);
 
-export default function TemplateReportPage() {
+const STATUS_META = {
+  compliant:  { label: "Sesuai",    icon: CheckCircle2, cls: "text-green-600 bg-green-50 border-green-200" },
+  partial:    { label: "Sebagian",  icon: AlertCircle,  cls: "text-amber-600 bg-amber-50 border-amber-200" },
+  none:       { label: "Nihil",     icon: XCircle,      cls: "text-red-600 bg-red-50 border-red-200" },
+  no_target:  { label: "—",         icon: Target,       cls: "text-slate-400 bg-slate-50 border-slate-200" },
+};
+
+function AchievementBar({ pct }: { pct: number | null }) {
+  if (pct === null) return <span className="text-xs text-slate-400">—</span>;
+  const w = Math.min(100, pct);
+  const color = pct >= 100 ? "bg-green-500" : pct >= 50 ? "bg-amber-400" : "bg-red-400";
+  return (
+    <div className="flex items-center gap-2 min-w-[130px]">
+      <div className="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${w}%` }} />
+      </div>
+      <span className="text-sm font-bold tabular-nums w-12 text-right">{pct.toFixed(0)}%</span>
+    </div>
+  );
+}
+
+// ── Template List View (initial screen) ────────────────────────────────────────
+function TemplateListView({ onSelect }: { onSelect: (id: number) => void }) {
+  const { data, isLoading } = useQuery<TemplateListResponse>({
+    queryKey: ["report-templates-overview"],
+    queryFn: () => api.get(`/reports/templates?from=2020-01-01&to=${defaultTo}`),
+    staleTime: 60_000,
+  });
+
+  const rows = data?.rows ?? [];
+  const maxInsp = Math.max(1, ...rows.map(r => r.inspectionCount));
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      {data && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card><CardContent className="pt-5 text-center">
+            <FileText className="w-5 h-5 mx-auto mb-1 text-slate-500" />
+            <div className="text-3xl font-black text-slate-800">{data.summary.total}</div>
+            <div className="text-xs text-slate-500 mt-0.5">Total Template</div>
+          </CardContent></Card>
+          <Card><CardContent className="pt-5 text-center">
+            <CheckCircle2 className="w-5 h-5 mx-auto mb-1 text-green-500" />
+            <div className="text-3xl font-black text-green-700">{data.summary.active}</div>
+            <div className="text-xs text-slate-500 mt-0.5">Aktif</div>
+          </CardContent></Card>
+          <Card><CardContent className="pt-5 text-center">
+            <ClipboardList className="w-5 h-5 mx-auto mb-1 text-blue-500" />
+            <div className="text-3xl font-black text-blue-700">{data.summary.totalSchedules}</div>
+            <div className="text-xs text-slate-500 mt-0.5">Total Jadwal</div>
+          </CardContent></Card>
+          <Card><CardContent className="pt-5 text-center">
+            <TrendingUp className="w-5 h-5 mx-auto mb-1 text-indigo-500" />
+            <div className="text-3xl font-black text-indigo-700">{data.summary.totalInspections}</div>
+            <div className="text-xs text-slate-500 mt-0.5">Total Inspeksi (YTD)</div>
+          </CardContent></Card>
+        </div>
+      )}
+
+      {/* Template list */}
+      {isLoading ? (
+        <div className="text-center text-sm text-muted-foreground py-12">Memuat daftar template...</div>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-y border-slate-200">
+                <tr>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Template</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500">Status</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-indigo-600">Pertanyaan</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-purple-600">Jadwal</th>
+                  <th className="px-4 py-3 text-xs font-semibold text-blue-600">Inspeksi (YTD)</th>
+                  <th className="px-2 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rows.map((row, i) => (
+                  <tr
+                    key={row.id}
+                    className={`cursor-pointer hover:bg-blue-50 transition-colors ${i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}
+                    onClick={() => onSelect(row.id)}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-slate-800">{row.name}</div>
+                      {row.description && <div className="text-xs text-slate-400 mt-0.5 line-clamp-1">{row.description}</div>}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${row.isActive ? "bg-green-50 text-green-700 border-green-200" : "bg-slate-100 text-slate-500 border-slate-200"}`}>
+                        {row.isActive ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
+                        {row.isActive ? "Aktif" : "Nonaktif"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center font-semibold text-indigo-700">{row.questionCount}</td>
+                    <td className="px-4 py-3 text-center font-semibold text-purple-700">{row.scheduleCount}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-2 rounded-full bg-slate-100 overflow-hidden">
+                          <div className="h-full rounded-full bg-blue-500" style={{ width: `${(row.inspectionCount / maxInsp) * 100}%` }} />
+                        </div>
+                        <span className={`font-bold tabular-nums ${row.inspectionCount > 0 ? "text-blue-700" : "text-slate-300"}`}>{row.inspectionCount}</span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-3 text-slate-400">
+                      <ChevronRight className="w-4 h-4" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {rows.length === 0 && (
+              <div className="p-10 text-center text-sm text-muted-foreground">Belum ada template.</div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Template Detail View (after selecting a template) ─────────────────────────
+function TemplateDetailView({ templateId, onBack }: { templateId: number; onBack: () => void }) {
   const [from, setFrom] = useState(defaultFrom);
   const [to, setTo]     = useState(defaultTo);
   const [applied, setApplied] = useState({ from: defaultFrom, to: defaultTo });
-  const [filterActive, setFilterActive] = useState<"all" | "active" | "inactive">("all");
 
-  const { data, isLoading } = useQuery<TemplateReport>({
-    queryKey: ["report-templates", applied.from, applied.to],
-    queryFn: () => api.get(`/reports/templates?from=${applied.from}&to=${applied.to}`),
+  const { data, isLoading } = useQuery<TemplateDetailResponse>({
+    queryKey: ["report-template-detail", templateId, applied.from, applied.to],
+    queryFn: () => api.get(`/reports/template-detail?templateId=${templateId}&from=${applied.from}&to=${applied.to}`),
+    enabled: !!templateId,
   });
 
-  const rows = (data?.rows ?? []).filter(r =>
-    filterActive === "all" ? true : filterActive === "active" ? r.isActive : !r.isActive
-  );
-
-  const chartData = rows
-    .slice()
-    .sort((a, b) => b.inspectionCount - a.inspectionCount)
-    .slice(0, 12)
-    .map(r => ({
-      name: r.name.length > 18 ? r.name.slice(0, 16) + "…" : r.name,
-      fullName: r.name,
-      Inspeksi: r.inspectionCount,
-      Jadwal: r.scheduleCount,
-    }));
+  const chartData = (data?.rows ?? []).map(r => ({
+    name: r.departmentName.length > 14 ? r.departmentName.slice(0, 12) + "…" : r.departmentName,
+    fullName: r.departmentName,
+    "Realisasi": r.actual,
+    "Ekspektasi": r.expected,
+  }));
 
   const sum = data?.summary;
 
   return (
-    <div className="p-6 space-y-6">
-      <PageHeader
-        title="Laporan Template"
-        subtitle="Rekapitulasi template checklist yang dibuat, jadwal, dan hasil inspeksi dalam periode"
-      />
+    <div className="space-y-5">
+      {/* Back + Title */}
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="sm" onClick={onBack}>← Kembali</Button>
+        {data && (
+          <div>
+            <span className="font-bold text-slate-800 text-base">{data.template.name}</span>
+            {!data.template.isActive && (
+              <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">Nonaktif</span>
+            )}
+            {data.template.description && (
+              <span className="ml-2 text-sm text-slate-500">{data.template.description}</span>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Filter */}
       <Card>
         <CardContent className="pt-5">
-          <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <Label className="text-xs">Dari Tanggal</Label>
               <Input type="date" value={from} onChange={e => setFrom(e.target.value)} className="w-40 text-sm" />
@@ -87,102 +219,70 @@ export default function TemplateReportPage() {
               <Label className="text-xs">Sampai Tanggal</Label>
               <Input type="date" value={to} onChange={e => setTo(e.target.value)} className="w-40 text-sm" />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Status Template</Label>
-              <div className="flex rounded-lg border overflow-hidden text-sm">
-                {(["all", "active", "inactive"] as const).map(v => (
-                  <button
-                    key={v}
-                    onClick={() => setFilterActive(v)}
-                    className={`px-3 py-1.5 font-medium transition-colors ${filterActive === v ? "bg-primary text-primary-foreground" : "bg-background text-slate-600 hover:bg-slate-50"}`}
-                  >
-                    {v === "all" ? "Semua" : v === "active" ? "Aktif" : "Tidak Aktif"}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <Button onClick={() => setApplied({ from, to })} disabled={isLoading}>
-              Terapkan
-            </Button>
-            <Button variant="outline" onClick={() => window.print()} className="ml-auto">
-              <Printer className="w-4 h-4 mr-2" /> Cetak
-            </Button>
+            <Button onClick={() => setApplied({ from, to })} disabled={isLoading}>Terapkan</Button>
           </div>
           {data && (
             <p className="mt-3 text-xs text-muted-foreground">
-              Jumlah inspeksi dihitung untuk periode: <strong>{data.period.from}</strong> s/d <strong>{data.period.to}</strong>
+              Jadwal aktif menggunakan template ini: <strong>{data.scheduleCount}</strong> jadwal
             </p>
           )}
         </CardContent>
       </Card>
 
       {isLoading ? (
-        <div className="text-center text-sm text-muted-foreground py-12">Memuat data...</div>
+        <div className="text-center text-sm text-muted-foreground py-12">Memuat detail...</div>
       ) : data && (
         <>
           {/* Summary Cards */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <Card>
-              <CardContent className="pt-5 text-center">
-                <FileText className="w-5 h-5 mx-auto mb-1 text-slate-500" />
-                <div className="text-3xl font-black text-slate-800">{sum?.total ?? 0}</div>
-                <div className="text-xs text-slate-500 mt-0.5">Total Template</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5 text-center">
-                <CheckCircle2 className="w-5 h-5 mx-auto mb-1 text-green-500" />
-                <div className="text-3xl font-black text-green-700">{sum?.active ?? 0}</div>
-                <div className="text-xs text-slate-500 mt-0.5">Aktif</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5 text-center">
-                <XCircle className="w-5 h-5 mx-auto mb-1 text-slate-400" />
-                <div className="text-3xl font-black text-slate-600">{sum?.inactive ?? 0}</div>
-                <div className="text-xs text-slate-500 mt-0.5">Tidak Aktif</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5 text-center">
-                <HelpCircle className="w-5 h-5 mx-auto mb-1 text-indigo-500" />
-                <div className="text-3xl font-black text-indigo-700">{sum?.totalQuestions ?? 0}</div>
-                <div className="text-xs text-slate-500 mt-0.5">Total Pertanyaan</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5 text-center">
-                <Calendar className="w-5 h-5 mx-auto mb-1 text-purple-500" />
-                <div className="text-3xl font-black text-purple-700">{sum?.totalSchedules ?? 0}</div>
-                <div className="text-xs text-slate-500 mt-0.5">Total Jadwal</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5 text-center">
-                <ClipboardList className="w-5 h-5 mx-auto mb-1 text-blue-500" />
-                <div className="text-3xl font-black text-blue-700">{sum?.totalInspections ?? 0}</div>
-                <div className="text-xs text-slate-500 mt-0.5">Total Inspeksi</div>
-              </CardContent>
-            </Card>
+            <Card><CardContent className="pt-5 text-center">
+              <Building2 className="w-5 h-5 mx-auto mb-1 text-slate-500" />
+              <div className="text-3xl font-black text-slate-800">{sum?.totalDepts ?? 0}</div>
+              <div className="text-xs text-slate-500 mt-0.5">Departemen</div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 text-center">
+              <ClipboardList className="w-5 h-5 mx-auto mb-1 text-indigo-500" />
+              <div className="text-3xl font-black text-indigo-700">{sum?.totalExpected ?? 0}</div>
+              <div className="text-xs text-slate-500 mt-0.5">Total Ekspektasi</div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 text-center">
+              <TrendingUp className="w-5 h-5 mx-auto mb-1 text-blue-500" />
+              <div className="text-3xl font-black text-blue-700">{sum?.totalActual ?? 0}</div>
+              <div className="text-xs text-slate-500 mt-0.5">Total Realisasi</div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 text-center">
+              <ShieldCheck className="w-5 h-5 mx-auto mb-1 text-green-500" />
+              <div className="text-3xl font-black text-green-700">{sum?.compliant ?? 0}</div>
+              <div className="text-xs text-slate-500 mt-0.5">Sesuai</div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 text-center">
+              <AlertCircle className="w-5 h-5 mx-auto mb-1 text-amber-500" />
+              <div className="text-3xl font-black text-amber-700">{sum?.partial ?? 0}</div>
+              <div className="text-xs text-slate-500 mt-0.5">Sebagian</div>
+            </CardContent></Card>
+            <Card><CardContent className="pt-5 text-center">
+              <Target className="w-5 h-5 mx-auto mb-1 text-slate-500" />
+              <div className="text-3xl font-black text-slate-700">
+                {sum?.avgAchievement != null ? `${sum.avgAchievement.toFixed(0)}%` : "—"}
+              </div>
+              <div className="text-xs text-slate-500 mt-0.5">Rata-rata</div>
+            </CardContent></Card>
           </div>
 
           {/* Chart */}
           {chartData.length > 0 && (
             <Card>
               <CardContent className="pt-5">
-                <h3 className="text-sm font-semibold mb-4 text-slate-700">
-                  Inspeksi & Jadwal per Template {chartData.length < rows.length && `(top ${chartData.length})`}
-                </h3>
+                <h3 className="text-sm font-semibold mb-4 text-slate-700">Realisasi vs Ekspektasi per Departemen</h3>
                 <ResponsiveContainer width="100%" height={260}>
                   <BarChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 60 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-35} textAnchor="end" interval={0} />
                     <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                    <Tooltip
-                      labelFormatter={(_, payload) => payload?.[0]?.payload?.fullName ?? ""}
-                    />
-                    <Bar dataKey="Inspeksi" fill="#3b82f6" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="Jadwal" fill="#a855f7" radius={[3, 3, 0, 0]} />
+                    <Tooltip labelFormatter={(_, p) => p?.[0]?.payload?.fullName ?? ""} />
+                    <Legend verticalAlign="top" />
+                    <Bar dataKey="Ekspektasi" fill="#e2e8f0" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="Realisasi"  fill="#3b82f6" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -196,80 +296,81 @@ export default function TemplateReportPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 border-y border-slate-200">
                     <tr>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600 w-8">#</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Nama Template</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-600">Departemen</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-indigo-600">Ekspektasi</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-blue-600">Realisasi</th>
+                      <th className="px-4 py-3 text-xs font-semibold text-slate-600">Pencapaian</th>
                       <th className="text-center px-4 py-3 text-xs font-semibold text-slate-600">Status</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-indigo-600">Pertanyaan</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-purple-600">Jadwal</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-blue-600">Inspeksi (Periode)</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500">Dibuat</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {rows.map((row, i) => (
-                      <tr key={row.id} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                        <td className="px-4 py-3 text-xs text-slate-400">{i + 1}</td>
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-slate-800">{row.name}</div>
-                          {row.description && (
-                            <div className="text-xs text-slate-400 mt-0.5 line-clamp-1">{row.description}</div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${row.isActive ? "bg-green-50 text-green-700 border-green-200" : "bg-slate-100 text-slate-500 border-slate-200"}`}>
-                            {row.isActive ? <CheckCircle2 className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-                            {row.isActive ? "Aktif" : "Nonaktif"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className="font-semibold text-indigo-700">{row.questionCount}</span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <span className={`font-semibold ${row.scheduleCount > 0 ? "text-purple-700" : "text-slate-300"}`}>{row.scheduleCount}</span>
-                        </td>
-                        <td className="px-4 py-3 text-center">
-                          <div className="flex items-center justify-center gap-2">
-                            <div className="w-20 h-2 rounded-full bg-slate-100 overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-blue-500"
-                                style={{ width: `${Math.min(100, (row.inspectionCount / Math.max(1, ...rows.map(r => r.inspectionCount))) * 100)}%` }}
-                              />
-                            </div>
-                            <span className={`font-bold tabular-nums ${row.inspectionCount > 0 ? "text-blue-700" : "text-slate-300"}`}>{row.inspectionCount}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-slate-500">
-                          {new Date(row.createdAt).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                        </td>
-                      </tr>
-                    ))}
+                    {data.rows.map((row, i) => {
+                      const meta = STATUS_META[row.status];
+                      const Icon = meta.icon;
+                      return (
+                        <tr key={String(row.departmentId ?? "null")} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                          <td className="px-4 py-3 font-medium text-slate-800">{row.departmentName}</td>
+                          <td className="px-4 py-3 text-center font-semibold text-indigo-700">{row.expected}</td>
+                          <td className="px-4 py-3 text-center font-bold text-blue-700">{row.actual}</td>
+                          <td className="px-4 py-3"><AchievementBar pct={row.achievement} /></td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full border font-medium ${meta.cls}`}>
+                              <Icon className="w-3 h-3" />{meta.label}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                   <tfoot className="bg-slate-100 border-t-2 border-slate-300 font-bold">
                     <tr>
-                      <td className="px-4 py-3" colSpan={2}>TOTAL ({rows.length} template)</td>
-                      <td />
-                      <td className="px-4 py-3 text-center text-indigo-700">
-                        {rows.reduce((s, r) => s + r.questionCount, 0)}
+                      <td className="px-4 py-3 text-slate-700">TOTAL</td>
+                      <td className="px-4 py-3 text-center text-indigo-700">{sum?.totalExpected ?? 0}</td>
+                      <td className="px-4 py-3 text-center text-blue-700">{sum?.totalActual ?? 0}</td>
+                      <td className="px-4 py-3">
+                        {sum?.avgAchievement != null && <AchievementBar pct={sum.avgAchievement} />}
                       </td>
-                      <td className="px-4 py-3 text-center text-purple-700">
-                        {rows.reduce((s, r) => s + r.scheduleCount, 0)}
+                      <td className="px-4 py-3 text-center text-slate-500 text-xs">
+                        {`${sum?.compliant ?? 0}/${sum?.totalDepts ?? 0} sesuai`}
                       </td>
-                      <td className="px-4 py-3 text-center text-blue-700">
-                        {rows.reduce((s, r) => s + r.inspectionCount, 0)}
-                      </td>
-                      <td />
                     </tr>
                   </tfoot>
                 </table>
               </div>
-              {rows.length === 0 && (
+              {data.rows.length === 0 && (
                 <div className="p-10 text-center text-sm text-muted-foreground">
-                  Tidak ada template ditemukan.
+                  Tidak ada data departemen untuk template ini di periode ini.
                 </div>
               )}
             </CardContent>
           </Card>
         </>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────────────
+export default function TemplateReportPage() {
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+
+  return (
+    <div className="p-6 space-y-6">
+      <PageHeader
+        title="Laporan Template"
+        subtitle={selectedTemplateId
+          ? "Detail pencapaian inspeksi per departemen untuk template ini"
+          : "Pilih template untuk melihat rincian pencapaian per departemen"
+        }
+      />
+
+      {selectedTemplateId === null ? (
+        <TemplateListView onSelect={setSelectedTemplateId} />
+      ) : (
+        <TemplateDetailView
+          templateId={selectedTemplateId}
+          onBack={() => setSelectedTemplateId(null)}
+        />
       )}
     </div>
   );
