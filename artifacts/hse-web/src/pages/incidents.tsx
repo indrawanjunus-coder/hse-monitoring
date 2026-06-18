@@ -885,6 +885,7 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
   const [followupNote, setFollowupNote] = useState(incident.followupNote ?? "");
   const [saving, setSaving] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
+  const [previewImgIdx, setPreviewImgIdx] = useState<number | null>(null);
   const [addUploadStatus, setAddUploadStatus] = useState("");
   const [addUploadErrors, setAddUploadErrors] = useState<string[]>([]);
   const [addUploading, setAddUploading] = useState(false);
@@ -1329,67 +1330,177 @@ function IncidentDetail({ incident, onClose, onUpdate, actions, preventiveAction
             {addUploadErrors.map((e, i) => <p key={i}>{e}</p>)}
           </div>
         )}
-        {incident.attachments && incident.attachments.length > 0 ? (
-          <div className="space-y-1.5">
-            {incident.attachments.map((a) => {
+        {incident.attachments && incident.attachments.length > 0 ? (() => {
+          const imageAtts = incident.attachments!.filter(a => a.mimeType.startsWith("image/"));
+          return (
+          <div className="space-y-2">
+            {incident.attachments!.map((a) => {
               const isImage = a.mimeType.startsWith("image/");
+              const imgIdx = isImage ? imageAtts.indexOf(a) : -1;
+              const thumbUrl = (() => {
+                if (!isImage) return null;
+                const fileId = a.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
+                if (fileId) return `https://lh3.googleusercontent.com/d/${fileId}`;
+                return a.viewUrl;
+              })();
               return (
                 <div
                   key={a.id}
-                  onClick={() => isImage ? setPreviewAttachment(a) : window.open(a.viewUrl, "_blank")}
-                  className="flex items-center gap-2.5 bg-white border border-gray-200 hover:border-blue-300 hover:bg-blue-50 rounded-md px-3 py-2 text-sm transition-colors group cursor-pointer"
+                  onClick={() => isImage ? setPreviewImgIdx(imgIdx) : window.open(a.viewUrl, "_blank")}
+                  className="border border-gray-200 hover:border-blue-300 rounded-lg overflow-hidden bg-white transition-colors group cursor-pointer"
                 >
-                  <AttachmentIcon mimeType={a.mimeType} />
-                  <span className="flex-1 truncate font-medium text-gray-800 group-hover:text-blue-700">{a.fileName}</span>
-                  <span className="text-xs text-gray-400 shrink-0">{formatBytes(a.fileSize)}</span>
-                  {isImage
-                    ? <Eye className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
-                    : <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
-                  }
+                  {isImage && thumbUrl && (
+                    <div className="relative overflow-hidden">
+                      <img
+                        src={thumbUrl}
+                        alt={a.fileName}
+                        className="w-full max-h-48 object-cover group-hover:brightness-95 transition-all"
+                        onError={e => {
+                          const fileId = a.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
+                          const el = e.currentTarget as HTMLImageElement;
+                          if (fileId && !el.src.includes("drive.google.com")) {
+                            el.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                          } else {
+                            el.src = a.viewUrl;
+                          }
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 text-gray-800 text-xs font-semibold px-3 py-1.5 rounded-full shadow flex items-center gap-1.5">
+                          <Eye className="w-3.5 h-3.5" />
+                          Lihat Penuh
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2.5 px-3 py-2 text-sm">
+                    <AttachmentIcon mimeType={a.mimeType} />
+                    <span className="flex-1 truncate font-medium text-gray-700 group-hover:text-blue-700">{a.fileName}</span>
+                    <span className="text-xs text-gray-400 shrink-0">{formatBytes(a.fileSize)}</span>
+                    {isImage
+                      ? <Eye className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
+                      : <ExternalLink className="w-3.5 h-3.5 text-gray-300 group-hover:text-blue-500 shrink-0" />
+                    }
+                  </div>
                 </div>
               );
             })}
           </div>
-        ) : (
+          );
+        })() : (
           !addUploading && <p className="text-xs text-gray-400 text-center py-2">Belum ada lampiran</p>
         )}
       </div>
 
-      {previewAttachment && (
-        <Dialog open onOpenChange={() => setPreviewAttachment(null)}>
-          <DialogContent className="max-w-3xl p-0 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b bg-gray-50">
-              <p className="text-sm font-medium truncate">{previewAttachment.fileName}</p>
-              <div className="flex items-center gap-2 shrink-0">
-                <a href={previewAttachment.viewUrl} target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-blue-600 flex items-center gap-1 hover:underline">
-                  <ExternalLink className="w-3 h-3" /> Buka di Drive
+      {previewImgIdx !== null && (() => {
+        const imageAtts = incident.attachments?.filter(a => a.mimeType.startsWith("image/")) ?? [];
+        const cur = imageAtts[previewImgIdx];
+        if (!cur) return null;
+        const imgSrc = (() => {
+          const fileId = cur.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
+          return fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : cur.viewUrl;
+        })();
+        const hasPrev = previewImgIdx > 0;
+        const hasNext = previewImgIdx < imageAtts.length - 1;
+        return (
+          <div
+            className="fixed inset-0 z-[60] bg-black/90 flex flex-col"
+            onClick={() => setPreviewImgIdx(null)}
+          >
+            {/* Header */}
+            <div
+              className="flex items-center justify-between px-4 py-3 bg-gray-950/80 shrink-0"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white truncate">{cur.fileName}</p>
+                {imageAtts.length > 1 && (
+                  <p className="text-xs text-gray-400">{previewImgIdx + 1} / {imageAtts.length}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <a
+                  href={cur.viewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                  onClick={e => e.stopPropagation()}
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> Buka di Drive
                 </a>
-                <button onClick={() => setPreviewAttachment(null)} className="text-gray-400 hover:text-gray-700 ml-2">
-                  <X className="w-4 h-4" />
+                <button
+                  onClick={e => { e.stopPropagation(); setPreviewImgIdx(null); }}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
-            <div className="bg-black flex items-center justify-center" style={{ minHeight: 400 }}>
+
+            {/* Image area */}
+            <div className="flex-1 flex items-center justify-center relative min-h-0 p-4">
+              {hasPrev && (
+                <button
+                  onClick={e => { e.stopPropagation(); setPreviewImgIdx(i => (i ?? 0) - 1); }}
+                  className="absolute left-4 z-10 bg-white/10 hover:bg-white/25 text-white rounded-full w-10 h-10 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+              )}
+
               <img
-                src={(() => {
-                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
-                  return fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : previewAttachment.viewUrl;
-                })()}
-                alt={previewAttachment.fileName}
-                className="max-h-[70vh] max-w-full object-contain"
-                onError={(e) => {
-                  const img = e.currentTarget as HTMLImageElement;
-                  const fileId = previewAttachment.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
-                  if (fileId && !img.src.includes("drive.google.com")) {
-                    img.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                key={cur.id}
+                src={imgSrc}
+                alt={cur.fileName}
+                className="max-h-full max-w-full object-contain rounded-sm shadow-2xl select-none"
+                style={{ maxHeight: "calc(100vh - 120px)" }}
+                onClick={e => e.stopPropagation()}
+                onError={e => {
+                  const el = e.currentTarget as HTMLImageElement;
+                  const fileId = cur.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
+                  if (fileId && !el.src.includes("drive.google.com")) {
+                    el.src = `https://drive.google.com/uc?export=view&id=${fileId}`;
+                  } else if (!el.src.includes("viewUrl")) {
+                    el.src = cur.viewUrl;
                   }
                 }}
               />
+
+              {hasNext && (
+                <button
+                  onClick={e => { e.stopPropagation(); setPreviewImgIdx(i => (i ?? 0) + 1); }}
+                  className="absolute right-4 z-10 bg-white/10 hover:bg-white/25 text-white rounded-full w-10 h-10 flex items-center justify-center transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
             </div>
-          </DialogContent>
-        </Dialog>
-      )}
+
+            {/* Strip thumbnails (jika > 1 gambar) */}
+            {imageAtts.length > 1 && (
+              <div className="flex gap-2 px-4 pb-4 justify-center shrink-0" onClick={e => e.stopPropagation()}>
+                {imageAtts.map((at, idx) => {
+                  const fid = at.viewUrl.split("/d/")[1]?.split("/")[0] ?? "";
+                  const tUrl = fid ? `https://lh3.googleusercontent.com/d/${fid}` : at.viewUrl;
+                  return (
+                    <button
+                      key={at.id}
+                      onClick={() => setPreviewImgIdx(idx)}
+                      className={`w-14 h-14 rounded overflow-hidden border-2 shrink-0 transition-all ${idx === previewImgIdx ? "border-blue-400 opacity-100" : "border-transparent opacity-50 hover:opacity-80"}`}
+                    >
+                      <img src={tUrl} alt={at.fileName} className="w-full h-full object-cover" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Comment Thread — Catatan Tindak Lanjut */}
       <div className="border-t pt-3 space-y-2">
