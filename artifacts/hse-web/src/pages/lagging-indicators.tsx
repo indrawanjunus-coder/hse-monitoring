@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth-context";
-import { RotateCcw, Save, ShieldAlert } from "lucide-react";
+import { RotateCcw, Save, ShieldAlert, History, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface LaggingData {
   year: number;
@@ -25,7 +26,35 @@ interface LaggingData {
   contractorHours: number;
 }
 
+interface ResetHistoryRow {
+  id: number;
+  resetAt: string;
+  resetDate: string;
+  baseValue: number;
+  nonLtiDays: number;
+  safeHours: number;
+  fatality: number;
+  lti: number;
+  mti: number;
+  firstAid: number;
+  nearMisses: number;
+  hazardId: number;
+  resetByName: string | null;
+}
+
+interface ResetHistoryResponse {
+  total: number;
+  rows: ResetHistoryRow[];
+}
+
 const CURRENT_YEAR = new Date().getFullYear();
+
+function fmtDt(s: string) {
+  return new Date(s).toLocaleString("id-ID", {
+    day: "2-digit", month: "short", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
 
 export default function LaggingIndicatorsPage() {
   const { user } = useAuth();
@@ -41,9 +70,18 @@ export default function LaggingIndicatorsPage() {
   const [resetForm, setResetForm] = useState({ baseValue: 0, resetDate: "" });
   const [showResetModal, setShowResetModal] = useState(false);
 
+  const [histLimit, setHistLimit] = useState(20);
+  const [histPage, setHistPage] = useState(0);
+
   const { data, isLoading } = useQuery<LaggingData>({
     queryKey: ["lagging-indicators", year],
     queryFn: () => api.get(`/lagging-indicators?year=${year}`),
+  });
+
+  const { data: histData, isLoading: histLoading } = useQuery<ResetHistoryResponse>({
+    queryKey: ["lagging-reset-history", histLimit, histPage],
+    queryFn: () => api.get(`/lagging-indicators/reset-history?limit=${histLimit}&offset=${histPage * histLimit}`),
+    staleTime: 30_000,
   });
 
   useEffect(() => {
@@ -82,8 +120,10 @@ export default function LaggingIndicatorsPage() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["lagging-indicators"] });
+      qc.invalidateQueries({ queryKey: ["lagging-reset-history"] });
       setShowResetModal(false);
-      toast({ title: "Counter direset", description: "Jam Aman berhasil direset." });
+      setHistPage(0);
+      toast({ title: "Counter direset", description: "Jam Aman berhasil direset. Riwayat sebelumnya tersimpan." });
     },
     onError: () => toast({ title: "Gagal reset", variant: "destructive" }),
   });
@@ -102,6 +142,10 @@ export default function LaggingIndicatorsPage() {
       />
     </div>
   );
+
+  const histTotal = histData?.total ?? 0;
+  const histRows  = histData?.rows  ?? [];
+  const totalPages = Math.ceil(histTotal / histLimit);
 
   return (
     <div className="p-6 space-y-6">
@@ -239,6 +283,167 @@ export default function LaggingIndicatorsPage() {
         </Card>
       </div>
 
+      {/* ── History Section ── */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <History className="w-5 h-5 text-slate-500" />
+              Riwayat Reset Jam Aman
+              {histTotal > 0 && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({histTotal} entri)
+                </span>
+              )}
+            </CardTitle>
+            <Select value={String(histLimit)} onValueChange={v => { setHistLimit(Number(v)); setHistPage(0); }}>
+              <SelectTrigger className="w-28 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="20">20 / halaman</SelectItem>
+                <SelectItem value="50">50 / halaman</SelectItem>
+                <SelectItem value="100">100 / halaman</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {histLoading ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">Memuat riwayat...</div>
+          ) : histRows.length === 0 ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              Belum ada riwayat reset. Riwayat akan tersimpan otomatis setiap kali Reset Jam Aman dilakukan.
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 border-y border-slate-200">
+                    <tr>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Waktu Reset</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 whitespace-nowrap">Periode Mulai</th>
+                      <th className="text-center px-3 py-2.5 text-xs font-medium text-slate-500">Hari Aman</th>
+                      <th className="text-center px-3 py-2.5 text-xs font-medium text-slate-500">Safe Hours</th>
+                      <th className="text-center px-3 py-2.5 text-xs font-medium text-red-700">Fatal</th>
+                      <th className="text-center px-3 py-2.5 text-xs font-medium text-red-500">LTI</th>
+                      <th className="text-center px-3 py-2.5 text-xs font-medium text-orange-500">MTI</th>
+                      <th className="text-center px-3 py-2.5 text-xs font-medium text-yellow-600">First Aid</th>
+                      <th className="text-center px-3 py-2.5 text-xs font-medium text-blue-400">Near Miss</th>
+                      <th className="text-center px-3 py-2.5 text-xs font-medium text-blue-600">Hazard ID</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500">Direset Oleh</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {histRows.map((row, i) => (
+                      <tr key={row.id} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                        <td className="px-4 py-3 text-xs text-slate-700 whitespace-nowrap">
+                          {fmtDt(row.resetAt)}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">
+                          {fmtDt(row.resetDate)}
+                          {row.baseValue > 0 && (
+                            <span className="ml-1 text-slate-400">+{row.baseValue.toLocaleString()}j</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-center font-semibold text-slate-800">
+                          {row.nonLtiDays.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-3 text-center font-semibold text-slate-800">
+                          {row.safeHours.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span className={`font-bold ${row.fatality > 0 ? "text-red-700" : "text-slate-300"}`}>
+                            {row.fatality}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span className={`font-bold ${row.lti > 0 ? "text-red-500" : "text-slate-300"}`}>
+                            {row.lti}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span className={`font-bold ${row.mti > 0 ? "text-orange-500" : "text-slate-300"}`}>
+                            {row.mti}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span className={`font-bold ${row.firstAid > 0 ? "text-yellow-600" : "text-slate-300"}`}>
+                            {row.firstAid}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span className={`font-bold ${row.nearMisses > 0 ? "text-blue-400" : "text-slate-300"}`}>
+                            {row.nearMisses}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span className={`font-bold ${row.hazardId > 0 ? "text-blue-600" : "text-slate-300"}`}>
+                            {row.hazardId}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {row.resetByName ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 bg-slate-50/50">
+                  <p className="text-xs text-slate-500">
+                    Halaman {histPage + 1} dari {totalPages} · {histTotal} total entri
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      disabled={histPage === 0}
+                      onClick={() => setHistPage(p => p - 1)}
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </Button>
+                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                      const pg = totalPages <= 5
+                        ? i
+                        : histPage < 3
+                          ? i
+                          : histPage > totalPages - 4
+                            ? totalPages - 5 + i
+                            : histPage - 2 + i;
+                      return (
+                        <Button
+                          key={pg}
+                          variant={pg === histPage ? "default" : "outline"}
+                          size="sm"
+                          className="h-7 w-7 p-0 text-xs"
+                          onClick={() => setHistPage(pg)}
+                        >
+                          {pg + 1}
+                        </Button>
+                      );
+                    })}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      disabled={histPage >= totalPages - 1}
+                      onClick={() => setHistPage(p => p + 1)}
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Reset Modal */}
       {showResetModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -248,6 +453,10 @@ export default function LaggingIndicatorsPage() {
               Counter jam aman dihitung otomatis dari waktu reset sampai sekarang.
               Non LTI Days = total jam ÷ 24.
             </p>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+              Status saat ini (Hari Aman: <strong>{data?.nonLtiDays?.toLocaleString() ?? 0}</strong> hari,
+              Safe Hours: <strong>{data?.safeHours?.toLocaleString() ?? 0}</strong> jam) akan tersimpan ke riwayat sebelum direset.
+            </div>
             <div className="space-y-3">
               <div>
                 <Label className="text-sm">Waktu Reset (Tanggal &amp; Jam)</Label>

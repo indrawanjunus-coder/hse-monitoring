@@ -31,5 +31,23 @@ export const nonLtiSettingsTable = pgTable("non_lti_settings", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+export const safeHoursResetHistoryTable = pgTable("safe_hours_reset_history", {
+  id: serial("id").primaryKey(),
+  companyId: integer("company_id").notNull().references(() => companiesTable.id),
+  resetAt: timestamp("reset_at").notNull().defaultNow(),
+  resetDate: text("reset_date").notNull(),
+  baseValue: integer("base_value").notNull().default(0),
+  nonLtiDays: integer("non_lti_days").notNull().default(0),
+  safeHours: integer("safe_hours").notNull().default(0),
+  fatality: integer("fatality").notNull().default(0),
+  lti: integer("lti").notNull().default(0),
+  mti: integer("mti").notNull().default(0),
+  firstAid: integer("first_aid").notNull().default(0),
+  nearMisses: integer("near_misses").notNull().default(0),
+  hazardId: integer("hazard_id").notNull().default(0),
+  resetByName: text("reset_by_name"),
+});
+
 export type LaggingIndicator = typeof laggingIndicatorsTable.$inferSelect;
 export type NonLtiSettings = typeof nonLtiSettingsTable.$inferSelect;
+export type SafeHoursResetHistory = typeof safeHoursResetHistoryTable.$inferSelect;

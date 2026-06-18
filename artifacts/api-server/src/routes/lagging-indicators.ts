@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, laggingIndicatorsTable, nonLtiSettingsTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, laggingIndicatorsTable, nonLtiSettingsTable, safeHoursResetHistoryTable } from "@workspace/db";
+import { eq, and, desc, count } from "drizzle-orm";
 import { authMiddleware } from "../lib/auth";
 import type { NonLtiSettings } from "@workspace/db";
 
@@ -192,7 +192,31 @@ router.put("/non-lti-reset", async (req, res) => {
     .from(nonLtiSettingsTable)
     .where(eq(nonLtiSettingsTable.companyId, cid));
 
+  // ── Snapshot current state into history before overwriting ──
   if (existing) {
+    const { safeHours, nonLtiDays } = calcSafeHoursAndDays(existing);
+    const currentYear = new Date().getFullYear();
+    const [indicator] = await db
+      .select()
+      .from(laggingIndicatorsTable)
+      .where(and(eq(laggingIndicatorsTable.companyId, cid), eq(laggingIndicatorsTable.year, currentYear)));
+
+    await db.insert(safeHoursResetHistoryTable).values({
+      companyId: cid,
+      resetAt: new Date(),
+      resetDate: existing.resetDate,
+      baseValue: existing.baseValue,
+      nonLtiDays,
+      safeHours,
+      fatality:   indicator?.fatality   ?? 0,
+      lti:        indicator?.lti        ?? 0,
+      mti:        indicator?.mti        ?? 0,
+      firstAid:   indicator?.firstAid   ?? 0,
+      nearMisses: indicator?.nearMisses ?? 0,
+      hazardId:   indicator?.hazardId   ?? 0,
+      resetByName: req.user!.name ?? null,
+    });
+
     await db
       .update(nonLtiSettingsTable)
       .set({ resetDate, baseValue, updatedAt: new Date() })
@@ -202,6 +226,30 @@ router.put("/non-lti-reset", async (req, res) => {
   }
 
   res.json({ ok: true });
+});
+
+// GET /lagging-indicators/reset-history?limit=20&offset=0
+router.get("/reset-history", async (req, res) => {
+  const cid = req.user!.companyId;
+  if (!cid) { res.status(403).json({ error: "Akses ditolak" }); return; }
+
+  const limit  = Math.min(Math.max(parseInt(req.query.limit  as string) || 20, 1), 100);
+  const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
+
+  const rows = await db
+    .select()
+    .from(safeHoursResetHistoryTable)
+    .where(eq(safeHoursResetHistoryTable.companyId, cid))
+    .orderBy(desc(safeHoursResetHistoryTable.resetAt))
+    .limit(limit)
+    .offset(offset);
+
+  const [{ total }] = await db
+    .select({ total: count() })
+    .from(safeHoursResetHistoryTable)
+    .where(eq(safeHoursResetHistoryTable.companyId, cid));
+
+  res.json({ total: Number(total), rows });
 });
 
 export default router;
