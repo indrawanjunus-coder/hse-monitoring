@@ -185,14 +185,12 @@ export default function DepartmentReportPage() {
 
   const exportExcel = () => {
     if (!data) return;
-    const header = ["Departemen", "Hazard Submit", "Insiden Submit", "Total Submit", "Target Hazard (Periode)", "Target/Minggu", "Pencapaian (%)", "Status"];
+    const header = ["Departemen", "Hazard Submit", "Insiden Submit", "Total Submit", "Pencapaian (%)", "Status"];
     const rows = filteredRows.map(r => [
       r.departmentName,
       r.hazards,
       r.incidents,
       r.hazards + r.incidents,
-      r.deptTarget > 0 ? r.deptTarget : "—",
-      data.weeklyTarget > 0 ? (data.weeklyTarget / Math.max(1, data.rows.length)).toFixed(1) : "—",
       r.achievement != null ? r.achievement.toFixed(1) + "%" : "—",
       STATUS_META[r.status].label,
     ]);
@@ -201,15 +199,15 @@ export default function DepartmentReportPage() {
       filteredHazards,
       filteredIncidents,
       filteredHazards + filteredIncidents,
-      data.periodTarget > 0 ? data.periodTarget.toFixed(1) : "—",
-      data.weeklyTarget > 0 ? data.weeklyTarget.toFixed(1) : "—",
       data.summary.avgAchievement != null ? data.summary.avgAchievement.toFixed(1) + "%" : "—",
       `${data.summary.compliant}/${data.rows.length} sesuai`,
     ];
     const metaRows = [
       [`Periode: ${applied.label}`],
       [`Minggu dalam periode: ${data.period.weeks.toFixed(1)}`],
-      [`Target mingguan hazard (total): ${data.weeklyTarget > 0 ? data.weeklyTarget : "—"}`],
+      [`Target Hazard Global (Periode): ${data.periodTarget > 0 ? data.periodTarget.toFixed(0) : "—"}`],
+      [`Target Hazard Global (Per Minggu): ${data.weeklyTarget > 0 ? data.weeklyTarget.toFixed(0) : "—"}`],
+      [`Realisasi Hazard Total: ${filteredHazards}`],
       [],
     ];
     const ws = XLSX.utils.aoa_to_sheet([...metaRows, header, ...rows, footer]);
@@ -314,9 +312,56 @@ export default function DepartmentReportPage() {
         <div className="text-center text-sm text-muted-foreground py-12">Memuat data...</div>
       ) : data && (
         <>
+          {/* Global Target Banner */}
+          {(data.weeklyTarget > 0 || data.periodTarget > 0) && (
+            <Card className="border-amber-200 bg-amber-50">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex flex-wrap items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-5 h-5 text-amber-600" />
+                    <span className="text-sm font-semibold text-amber-800">Target Hazard Global ({applied.label})</span>
+                  </div>
+                  <div className="flex flex-wrap gap-6">
+                    <div className="text-center">
+                      <div className="text-2xl font-black text-amber-700">
+                        {data.periodTarget > 0 ? data.periodTarget.toFixed(0) : "—"}
+                      </div>
+                      <div className="text-xs text-amber-600">Target Periode</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-black text-amber-700">
+                        {data.weeklyTarget > 0 ? data.weeklyTarget.toFixed(0) : "—"}
+                      </div>
+                      <div className="text-xs text-amber-600">Target/Minggu</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-black text-blue-700">{filteredHazards}</div>
+                      <div className="text-xs text-blue-600">Realisasi Hazard</div>
+                    </div>
+                    <div className="text-center">
+                      {data.periodTarget > 0 ? (
+                        <>
+                          <div className={`text-2xl font-black ${filteredHazards >= data.periodTarget ? "text-green-600" : "text-red-600"}`}>
+                            {((filteredHazards / data.periodTarget) * 100).toFixed(0)}%
+                          </div>
+                          <div className="text-xs text-slate-500">Pencapaian</div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-2xl font-black text-slate-400">—</div>
+                          <div className="text-xs text-slate-400">Pencapaian</div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            <Card className="col-span-1">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <Card>
               <CardContent className="pt-5 text-center">
                 <Building2 className="w-5 h-5 mx-auto mb-1 text-slate-500" />
                 <div className="text-3xl font-black text-slate-800">{filteredRows.length}</div>
@@ -344,15 +389,6 @@ export default function DepartmentReportPage() {
                   {filteredRows.filter(r => r.status === "compliant").length}
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">Sesuai Target</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="pt-5 text-center">
-                <Target className="w-5 h-5 mx-auto mb-1 text-amber-500" />
-                <div className="text-3xl font-black text-amber-700">
-                  {filteredRows.filter(r => r.status === "partial").length}
-                </div>
-                <div className="text-xs text-slate-500 mt-0.5">Sebagian</div>
               </CardContent>
             </Card>
             <Card>
@@ -405,8 +441,6 @@ export default function DepartmentReportPage() {
                       <th className="text-center px-4 py-3 text-xs font-semibold text-blue-600">Hazard</th>
                       <th className="text-center px-4 py-3 text-xs font-semibold text-red-600">Insiden</th>
                       <th className="text-center px-4 py-3 text-xs font-semibold text-slate-600">Total</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-amber-600">Target Hazard</th>
-                      <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500">Target/Minggu</th>
                       <th className="px-4 py-3 text-xs font-semibold text-slate-600">Pencapaian</th>
                       <th className="text-center px-4 py-3 text-xs font-semibold text-slate-600">Status</th>
                     </tr>
@@ -422,12 +456,6 @@ export default function DepartmentReportPage() {
                             <span className={`font-bold ${row.incidents > 0 ? "text-red-600" : "text-slate-300"}`}>{row.incidents}</span>
                           </td>
                           <td className="px-4 py-3 text-center font-semibold text-slate-700">{row.hazards + row.incidents}</td>
-                          <td className="px-4 py-3 text-center text-amber-700 font-medium">
-                            {row.deptTarget > 0 ? row.deptTarget.toFixed(1) : "—"}
-                          </td>
-                          <td className="px-4 py-3 text-center text-slate-500 text-xs">
-                            {data.weeklyTarget > 0 ? (data.weeklyTarget / Math.max(1, data.rows.length)).toFixed(1) : "—"}
-                          </td>
                           <td className="px-4 py-3"><AchievementBar pct={row.achievement} /></td>
                           <td className="px-4 py-3 text-center">
                             <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${meta.cls}`}>
@@ -444,12 +472,6 @@ export default function DepartmentReportPage() {
                       <td className="px-4 py-3 text-center text-blue-700">{filteredHazards}</td>
                       <td className="px-4 py-3 text-center text-red-600">{filteredIncidents}</td>
                       <td className="px-4 py-3 text-center text-slate-700">{filteredHazards + filteredIncidents}</td>
-                      <td className="px-4 py-3 text-center text-amber-700">
-                        {data.periodTarget > 0 ? data.periodTarget.toFixed(1) : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-center text-slate-500 text-xs">
-                        {data.weeklyTarget > 0 ? data.weeklyTarget.toFixed(1) : "—"}
-                      </td>
                       <td className="px-4 py-3">
                         {sum?.avgAchievement != null && <AchievementBar pct={sum.avgAchievement} />}
                       </td>

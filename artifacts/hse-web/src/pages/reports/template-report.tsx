@@ -98,7 +98,7 @@ function AchievementBar({ pct }: { pct: number | null }) {
 function TemplateListView({ onSelect }: { onSelect: (id: number) => void }) {
   const { data, isLoading } = useQuery<TemplateListResponse>({
     queryKey: ["report-templates-overview"],
-    queryFn: () => api.get(`/reports/templates?from=2020-01-01&to=${defaultTo}`),
+    queryFn: () => api.get(`/reports/templates?from=2020-01-01&to=${new Date().toISOString().slice(0, 10)}`),
     staleTime: 60_000,
   });
 
